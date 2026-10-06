@@ -13,11 +13,13 @@ export type OuterAutorouterOptions = {
 };
 
 /** A local, actual-four-layer router; the two inner ground pours remain reserved. */
-export async function outerAutorouter(input: SimpleRouteJson, options: OuterAutorouterOptions = {}): Promise<GenericLocalAutorouter & {
+export type OuterRoutingAdapter = GenericLocalAutorouter & {
   solver: Pipeline;
   getOutputSimplifiedPcbTraces(): SimplifiedPcbTrace[];
   getOutputSimpleRouteJson(): SimpleRouteJson | undefined;
-}> {
+};
+
+export function createOuterAutorouter(input: SimpleRouteJson, options: OuterAutorouterOptions = {}): OuterRoutingAdapter {
   const original = JSON.stringify(input);
   const prepared = structuredClone(input);
   prepared.connections = outerSignalConnections(prepared, options.groundNetIds);
@@ -25,9 +27,11 @@ export async function outerAutorouter(input: SimpleRouteJson, options: OuterAuto
   prepared.allowJumpers = false;
   prepared.minViaPadDiameter ??= prepared.min_via_pad_diameter ?? prepared.minViaDiameter ?? 0.3;
   prepared.minViaHoleDiameter ??= prepared.min_via_hole_diameter ?? 0.15;
-  const solver = new SOLVERS.AutoroutingPipelineSolver9_PreloadedTraceGraph(compactRoutingInput(prepared) as ConstructorParameters<typeof SOLVERS.AutoroutingPipelineSolver9_PreloadedTraceGraph>[0], {
+  const solverOptions: NonNullable<OuterAutorouterOptions["solverOptions"]> & { immutablePreloadedTraceIds: readonly string[] } = {
     ...options.solverOptions, cacheProvider: null,
-  });
+    immutablePreloadedTraceIds: (prepared.traces ?? []).map(trace => trace.pcb_trace_id),
+  };
+  const solver = new SOLVERS.AutoroutingPipelineSolver9_PreloadedTraceGraph(compactRoutingInput(prepared) as ConstructorParameters<typeof SOLVERS.AutoroutingPipelineSolver9_PreloadedTraceGraph>[0], solverOptions);
   const handlers: Record<string, ((event: AutorouterEvent) => void)[]> = {};
   const emit = (event: AutorouterEvent) => handlers[event.type]?.forEach(handler => handler(event));
   let traces: SimplifiedPcbTrace[] | undefined;
@@ -89,4 +93,9 @@ export async function outerAutorouter(input: SimpleRouteJson, options: OuterAuto
     },
   };
   return adapter;
+}
+
+/** Async phase callback sharing the same checked synchronous construction. */
+export async function outerAutorouter(input: SimpleRouteJson, options: OuterAutorouterOptions = {}): Promise<OuterRoutingAdapter> {
+  return createOuterAutorouter(input, options);
 }

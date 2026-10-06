@@ -15,6 +15,7 @@ jobs:
       - run: bun run typecheck
       - run: bun scripts/check-ddr-vendor.ts
       - run: bun run check:autorouter-vendor
+      - run: bun run check:fanout-vendor
       - run: bun run test:routing
       - run: bun run build --no-images
       - run: bun run audit:routed-board output/board.circuit.json

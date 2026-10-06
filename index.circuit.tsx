@@ -22,6 +22,7 @@ import { Display } from "./design/display";
 import { Indicators } from "./design/indicators";
 import type { AutoroutingPhaseProps, FanoutTracePath } from "@tscircuit/props";
 import { outerAutorouter } from "./design/outer-autorouter";
+import { lcdAutorouter } from "./design/lcd-router";
 
 // The builder supplies paths produced by ddr.circuit.tsx's bus_lanes phase.
 // New peripheral routing receives these paths as fixed copper obstacles.
@@ -122,7 +123,7 @@ export default function Board({
             name="LCD_BUS"
             phaseIndex={4}
             fanoutRoutingLayers={["top", "bottom"]}
-            {...phaseRouting("LCD_BUS", { autorouter: "default", algorithmFn: outerAutorouter })}
+            {...phaseRouting("LCD_BUS", { autorouter: "default", algorithmFn: lcdAutorouter })}
           />
           <autoroutingphase
             name="CONTROL_AND_BOOT"

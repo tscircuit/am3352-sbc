@@ -4,7 +4,7 @@
     "@tscircuit/checks": "0.0.240",
     "@tscircuit/circuit-json-util": "0.0.119",
     "@tscircuit/core": "0.0.2095",
-    "@tscircuit/fanout-solver": "0.0.78",
+    "@tscircuit/fanout-solver": "file:design/vendor/tscircuit-fanout-solver-0.0.79-c783a461.tgz",
     "@tscircuit/props": "0.0.689",
     "@types/bun": "1.4.2",
     "@types/react": "19.3.0",
@@ -47,7 +47,8 @@
     "test:routing": "bun test tests",
     "dev": "tsci dev",
     "start": "tsci dev",
-    "check:autorouter-vendor": "bun scripts/check-autorouter-vendor.ts"
+    "check:autorouter-vendor": "bun scripts/check-autorouter-vendor.ts",
+    "check:fanout-vendor": "bun scripts/check-fanout-vendor.ts"
   },
   "devDependencies": {
     "@tscircuit/bus-lanes-solver": "https://jscdn.tscircuit.com/@tscircuit/bus-lanes-solver/0.0.19.tgz",

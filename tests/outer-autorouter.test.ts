@@ -151,6 +151,7 @@ test("planning compacts repeated unused aliases while retaining original fixed c
   expect(router.input).toBe(native);
   expect(router.input.traces![0]).toBe(fixed);
   expect(JSON.stringify(router.solver.originalSrj.traces)).toBe(JSON.stringify([fixed]));
+  expect((router.solver.opts as { immutablePreloadedTraceIds?: readonly string[] }).immutablePreloadedTraceIds).toEqual(["fixed-power"]);
   expect(router.solver.originalSrj.obstacles[0]!.connectedTo).toEqual(["GROUND"]);
   expect(router.solver.originalSrj.obstacles[2]!.connectedTo).toEqual(["POWER", "pcb_port_power"]);
   expect(router.solver.originalSrj.obstacles[3]!.connectedTo).toEqual(["source_net_barrel", "pcb_plated_hole_barrel"]);

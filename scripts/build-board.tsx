@@ -7,8 +7,10 @@ import { join } from "node:path";
 import type { FanoutTracePath } from "@tscircuit/props";
 import Board from "../index.circuit";
 import { verifyAutorouterVendor } from "./check-autorouter-vendor";
+import { verifyFanoutVendor } from "./check-fanout-vendor";
 
 verifyAutorouterVendor();
+verifyFanoutVendor();
 
 const pairsOnly = process.argv.includes("--pairs-only");
 const powerOnly = process.argv.includes("--power-only");
