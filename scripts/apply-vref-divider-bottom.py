@@ -1,0 +1,11 @@
+from pathlib import Path
+import json,math
+root=Path(__file__).resolve().parent.parent
+p=json.loads((root/'output/vref-divider-bottom-proposal.json').read_text());assert p['found'];p=p['proposal'];assert p['rotation']==0
+placement=json.loads((root/'design/ram-placement.json').read_text());a=-math.radians(placement['rotation']);dx=p['center'][0]-placement['x'];dy=p['center'][1]-placement['y'];x=dx*math.cos(a)-dy*math.sin(a);y=dx*math.sin(a)+dy*math.cos(a)-27
+source=root/'design/processor-support.tsx';s=source.read_text();old='<Res name="R_VREF_L" a="DDR_VREF" b="GND" value="10k" {...ramPoint(-7,-31)} rotation={ramPlacement.rotation} />';assert old in s;s=s.replace(old,f'<Res name="R_VREF_L" a="DDR_VREF" b="GND" value="10k" {{...ramPoint({x:.8f},{y:.8f})}} layer="bottom" rotation={{(ramPlacement.rotation + 90) % 360}} />');source.write_text(s)
+escfile=root/'design/power-escapes.json';esc=json.loads(escfile.read_text());e=next(e for e in esc['traces'] if e['name']=='T_R_VREF_L_pin2');assert e['via']=='PG_VIA_219' and not e['waypoints'];e['layer']='bottom';escfile.write_text(json.dumps(esc,indent=2)+'\n')
+c=json.loads((root/'output/baseline.circuit.json').read_text());sc=next(e for e in c if e['type']=='source_component' and e['name']=='R_VREF_L');sp=next(e for e in c if e['type']=='source_port' and e['source_component_id']==sc['source_component_id'] and e['name']=='pin1');port=next(e for e in c if e['type']=='pcb_port' and e['source_port_id']==sp['source_port_id']);rf=root/'design/remaining-routes.json';rs=json.loads(rf.read_text());cf=root/'design/control-routes.json';cache=json.loads(cf.read_text());name='REMAINING_'+str(1+max(int(r['name'].split('_')[-1]) for r in rs));start=p['pin1'];end=p['vrefTarget'];width=.1
+rs.append({'name':name,'net':'DDR_VREF','from':'.R_VREF_L > .pin1','to':'net.DDR_VREF','width':width,'world':[[*start,3],[*end,3]],'waypoints':[],'toPoint':{'x':end[0]-p['center'][0],'y':end[1]-p['center'][1]}})
+cache.append({'name':name,'net':'DDR_VREF','from':'.R_VREF_L > .pin1','startPortId':port['pcb_port_id'],'endPortId':None,'route':[{'route_type':'wire','x':q[0],'y':q[1],'width':width,'layer':'bottom'} for q in [start,end]]})
+rf.write_text(json.dumps(rs,indent=2)+'\n');cf.write_text(json.dumps(cache,indent=2)+'\n');print({'added':name,'nativeValidationRequired':True})

@@ -1,0 +1,13 @@
+{
+  "pass": true,
+  "circuitSha256": "2075f982c3230a5b8f2194529baed00eada2d79f013c715f9d178fe502571f6b",
+  "records": 11002,
+  "exactCircuitJsonEqual": false,
+  "copperConnectivityAndErrorsEqual": true,
+  "excludedMetadata": [
+    "source_project_metadata",
+    "supplier_pin1_location_map",
+    "supplier_part_numbers",
+    "warnings"
+  ]
+}

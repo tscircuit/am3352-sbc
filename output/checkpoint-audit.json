@@ -1,0 +1,19 @@
+{
+  "stage": "DDR + power/ground escape checkpoint; cached peripheral routes may also be present",
+  "routeFileSha256": "21110a188e0b0772c5b9d2ea21e312b7dd4825397f6fbfaa630c5817b0c50e94",
+  "expectedPaths": 47,
+  "savedPaths": 47,
+  "integratedPaths": 750,
+  "preservedDdrPaths": 47,
+  "layerCount": 4,
+  "preservedExactly": true,
+  "ddrViasSpanAllLayers": true,
+  "timingErrors": 0,
+  "timingSignoff": false,
+  "unexpectedNativeErrors": 0,
+  "allowedIncompleteErrorCounts": {
+    "pcb_port_not_connected_error": 11,
+    "pcb_trace_missing_error": 0
+  },
+  "fabricationReady": false
+}

@@ -1,0 +1,30 @@
+import {readFileSync,writeFileSync} from 'node:fs';
+import {pairLengthReports,exteriorPairSpacingReports,type Trace,type SimpleRouteJson} from '@tscircuit/bus-lanes-solver';
+const native:SimpleRouteJson=JSON.parse(readFileSync('output/peripheral-signal-first.srj.json','utf8'));
+const escapes:Trace[]=JSON.parse(readFileSync('output/peripheral-signal-escapes.json','utf8')).escapes;
+const lanes:Trace[]=JSON.parse(readFileSync('output/hdmi-direct.progress.json','utf8')).completed;
+if(lanes.length!==native.connections.length)throw Error(`Incomplete peripheral candidate: ${lanes.length}/${native.connections.length}`);
+const near=(a:{x:number;y:number},b:{x:number;y:number})=>Math.hypot(a.x-b.x,a.y-b.y)<1e-7;
+const traces:Trace[]=lanes.map(lane=>{
+ const own=structuredClone(escapes.filter(t=>t.connection_name===lane.connection_name));
+ const prefix=own.find(t=>near(t.route.at(-1)!,lane.route[0]))!;
+ const suffix=own.find(t=>near(t.route.at(-1)!,lane.route.at(-1)!))!;
+ if(!prefix||!suffix)throw Error('Missing local escape');
+ const layer=(lane.route.find(p=>p.route_type==='wire') as any).layer;
+ for(const t of [prefix,suffix]){for(const p of t.route)if(p.route_type==='via')p.to_layer=layer;const p=t.route.at(-1)!;if(p.route_type==='wire')p.layer=layer}
+ const reverse=suffix.route.toReversed().map(p=>p.route_type==='via'?{...p,from_layer:p.to_layer,to_layer:p.from_layer}:p);
+ const offset=prefix.route.length-1;
+ return {...lane,coupledSection:lane.coupledSection?.map(i=>i+offset) as [number,number]|undefined,curvedSegments:lane.curvedSegments?.map(i=>i+offset),route:[...prefix.route.slice(0,-1),...lane.route,...reverse.slice(1)]};
+});
+const pairs=pairLengthReports(native,traces),coupling=exteriorPairSpacingReports(native,traces);
+const report={routed:traces.length,expected:native.connections.length,pairs,coupling,geometryPassed:pairs.every(p=>p.matched)&&coupling.every(p=>p.applicable&&p.matched),requiresNativeBoardAudit:true,requiresDecouplerRelocation:true,requiresPowerRegeneration:true};
+writeFileSync('output/peripheral-complete.report.json',JSON.stringify(report,null,2));writeFileSync('output/peripheral-complete.traces.json',JSON.stringify(traces));
+const cj:any[]=JSON.parse(readFileSync('output/peripheral-signal-first.audit.json','utf8'));
+const sources=new Map(cj.filter(e=>e.type==='source_trace').map(e=>[e.source_trace_id,e]));
+const ports=new Map(cj.filter(e=>e.type==='source_port').map(e=>[e.source_port_id,e]));
+const refs=new Map(cj.filter(e=>e.type==='source_component').map(e=>[e.source_component_id,e.name]));
+const paths=traces.map(t=>{const source=sources.get(t.connection_name!);const port=ports.get(source.connected_source_port_ids[0]);return {connection:`.${refs.get(port.source_component_id)} > .${port.name}`,route:t.route}});
+writeFileSync('output/peripheral-candidate.paths.json',JSON.stringify(paths));
+if(report.geometryPassed)writeFileSync('design/peripheral-routes.json',JSON.stringify(paths));
+console.log(JSON.stringify(report));
+if(!report.geometryPassed)process.exitCode=1;

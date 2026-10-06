@@ -1,0 +1,17 @@
+{
+  "before": {
+    "lengthMm": 82.39305065357323,
+    "traceResistanceOhmAt20C": 0.1845964278205075,
+    "lengthAt1mmWidthMm": 0
+  },
+  "after": {
+    "lengthMm": 82.39305065357327,
+    "traceResistanceOhmAt20C": 0.11431280197236393,
+    "lengthAt1mmWidthMm": 53.676734163617354
+  },
+  "minimumWidthMm": 0.5,
+  "maximumWidthMm": 1,
+  "requiredClearanceMm": 0.103,
+  "estimateExcludesViasConnectorsSwitchesAndTemperature": true,
+  "requiresNativeValidation": true
+}

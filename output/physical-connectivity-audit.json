@@ -1,0 +1,677 @@
+{
+  "circuitSha256": "2075f982c3230a5b8f2194529baed00eada2d79f013c715f9d178fe502571f6b",
+  "remainingNetworks": [
+    {
+      "net": "LCD_DATA0",
+      "components": 2,
+      "groups": [
+        [
+          ".U1 > .R1",
+          "existing copper"
+        ],
+        [
+          ".R_BOOT0 > .pin1",
+          ".U_HDMI > .DATA3",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper"
+        ]
+      ]
+    },
+    {
+      "net": "LCD_DATA1",
+      "components": 2,
+      "groups": [
+        [
+          ".U1 > .R2",
+          "existing copper"
+        ],
+        [
+          ".R_BOOT1 > .pin1",
+          ".U_HDMI > .DATA4",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper"
+        ]
+      ]
+    },
+    {
+      "net": "LCD_DATA10",
+      "components": 2,
+      "groups": [
+        [
+          ".U1 > .U3",
+          "existing copper"
+        ],
+        [
+          ".R_BOOT10 > .pin1",
+          ".U_HDMI > .DATA15",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper"
+        ]
+      ]
+    },
+    {
+      "net": "LCD_DATA11",
+      "components": 2,
+      "groups": [
+        [
+          ".U1 > .U4",
+          "existing copper"
+        ],
+        [
+          ".R_BOOT11 > .pin1",
+          ".U_HDMI > .DATA19",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper"
+        ]
+      ]
+    },
+    {
+      "net": "LCD_DATA14",
+      "components": 2,
+      "groups": [
+        [
+          ".U1 > .V4",
+          "existing copper"
+        ],
+        [
+          ".R_BOOT14 > .pin1",
+          ".U_HDMI > .DATA22",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper"
+        ]
+      ]
+    },
+    {
+      "net": "LCD_DATA15",
+      "components": 2,
+      "groups": [
+        [
+          ".U1 > .T5",
+          "existing copper"
+        ],
+        [
+          ".R_BOOT15 > .pin1",
+          ".U_HDMI > .DATA23",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper"
+        ]
+      ]
+    },
+    {
+      "net": "LCD_DATA2",
+      "components": 2,
+      "groups": [
+        [
+          ".U1 > .R3",
+          "existing copper"
+        ],
+        [
+          ".R_BOOT2 > .pin1",
+          ".U_HDMI > .DATA5",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper"
+        ]
+      ]
+    },
+    {
+      "net": "LCD_DATA3",
+      "components": 2,
+      "groups": [
+        [
+          ".U1 > .R4",
+          "existing copper"
+        ],
+        [
+          ".R_BOOT3 > .pin1",
+          ".U_HDMI > .DATA6",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper"
+        ]
+      ]
+    },
+    {
+      "net": "LCD_DATA4",
+      "components": 2,
+      "groups": [
+        [
+          ".U1 > .T1",
+          "existing copper"
+        ],
+        [
+          ".R_BOOT4 > .pin1",
+          ".U_HDMI > .DATA7",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper"
+        ]
+      ]
+    },
+    {
+      "net": "LCD_DATA5",
+      "components": 2,
+      "groups": [
+        [
+          ".U1 > .T2",
+          "existing copper"
+        ],
+        [
+          ".R_BOOT5 > .pin1",
+          ".U_HDMI > .DATA10",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper"
+        ]
+      ]
+    },
+    {
+      "net": "LCD_DATA6",
+      "components": 2,
+      "groups": [
+        [
+          ".U1 > .T3",
+          "existing copper"
+        ],
+        [
+          ".R_BOOT6 > .pin1",
+          ".U_HDMI > .DATA11",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper"
+        ]
+      ]
+    },
+    {
+      "net": "LCD_DATA7",
+      "components": 2,
+      "groups": [
+        [
+          ".U1 > .T4",
+          "existing copper"
+        ],
+        [
+          ".R_BOOT7 > .pin1",
+          ".U_HDMI > .DATA12",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper"
+        ]
+      ]
+    },
+    {
+      "net": "LCD_DATA8",
+      "components": 2,
+      "groups": [
+        [
+          ".U1 > .U1",
+          "existing copper"
+        ],
+        [
+          ".R_BOOT8 > .pin1",
+          ".U_HDMI > .DATA13",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper"
+        ]
+      ]
+    },
+    {
+      "net": "LCD_DATA9",
+      "components": 2,
+      "groups": [
+        [
+          ".U1 > .U2",
+          "existing copper"
+        ],
+        [
+          ".R_BOOT9 > .pin1",
+          ".U_HDMI > .DATA14",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper"
+        ]
+      ]
+    },
+    {
+      "net": "CAP_VDD_RTC",
+      "components": 2,
+      "groups": [
+        [
+          ".U1 > .D6",
+          "existing copper"
+        ],
+        [
+          ".C_CAP0 > .pin1",
+          "existing copper"
+        ]
+      ]
+    },
+    {
+      "net": "CAP_VDD_SRAM_CORE",
+      "components": 2,
+      "groups": [
+        [
+          ".U1 > .D9",
+          "existing copper"
+        ],
+        [
+          ".C_CAP1 > .pin1",
+          "existing copper"
+        ]
+      ]
+    },
+    {
+      "net": "EMU1",
+      "components": 2,
+      "groups": [
+        [
+          ".U1 > .B14",
+          "existing copper"
+        ],
+        [
+          ".R_CTRL6 > .pin1",
+          ".J_JTAG > .pin12",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper"
+        ]
+      ]
+    },
+    {
+      "net": "PMIC_POWER_EN",
+      "components": 2,
+      "groups": [
+        [
+          ".U1 > .C6",
+          "existing copper"
+        ],
+        [
+          ".U2 > .PWR_EN",
+          "existing copper"
+        ]
+      ]
+    },
+    {
+      "net": "PWRONRSTn",
+      "components": 2,
+      "groups": [
+        [
+          ".U1 > .B15",
+          "existing copper"
+        ],
+        [
+          ".U2 > .PGOOD",
+          ".R_CTRL2 > .pin1",
+          ".U_HDMI > .PD",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper"
+        ]
+      ]
+    },
+    {
+      "net": "USB1_DRVVBUS",
+      "components": 2,
+      "groups": [
+        [
+          ".U1 > .F15",
+          "existing copper"
+        ],
+        [
+          ".U_USB_PWR > .EN2",
+          ".R_USB_EN1 > .pin1",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper"
+        ]
+      ]
+    },
+    {
+      "net": "USB0_VBUS",
+      "components": 2,
+      "groups": [
+        [
+          ".U1 > .P15",
+          "existing copper"
+        ],
+        [
+          ".U_USB_PWR > .OUT1",
+          ".J_USB0 > .VBUS",
+          ".U_USB_ESD0 > .VBUS",
+          ".C_USB_BULK0 > .pin1",
+          ".C_USB_ESD0 > .pin1",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper",
+          "existing copper"
+        ]
+      ]
+    }
+  ],
+  "allViasThrough": true,
+  "nativeOnly": true
+}

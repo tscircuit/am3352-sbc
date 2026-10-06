@@ -1,0 +1,63 @@
+{
+  "pass": true,
+  "switchingNodes": [
+    {
+      "net": "SW1",
+      "from": ".U2 > .L1",
+      "paths": [
+        {
+          "to": ".L1 > .pin1",
+          "lengthMm": 2.152907064966857
+        }
+      ],
+      "maxLengthMm": 6.0,
+      "vias": 0,
+      "minimumWidthMm": 0.35,
+      "narrowExitLengthMm": 0,
+      "maxNarrowExitLengthMm": 1.5,
+      "layers": [
+        "top"
+      ],
+      "pass": true
+    },
+    {
+      "net": "SW2",
+      "from": ".U2 > .L2",
+      "paths": [
+        {
+          "to": ".L2 > .pin1",
+          "lengthMm": 2.6672495521020605
+        }
+      ],
+      "maxLengthMm": 6.0,
+      "vias": 0,
+      "minimumWidthMm": 0.35,
+      "narrowExitLengthMm": 0,
+      "maxNarrowExitLengthMm": 1.5,
+      "layers": [
+        "top"
+      ],
+      "pass": true
+    },
+    {
+      "net": "SW3",
+      "from": ".U2 > .L3",
+      "paths": [
+        {
+          "to": ".L3 > .pin1",
+          "lengthMm": 1.8294649420931952
+        }
+      ],
+      "maxLengthMm": 6.0,
+      "vias": 0,
+      "minimumWidthMm": 0.15,
+      "narrowExitLengthMm": 1.277196891233832,
+      "maxNarrowExitLengthMm": 1.5,
+      "layers": [
+        "top"
+      ],
+      "pass": true
+    }
+  ],
+  "method": "Native centerline graph; pad connections include Euclidean distance. Physical connectivity is independently audited."
+}

@@ -1,0 +1,59 @@
+{
+  "circuitSha256": "2075f982c3230a5b8f2194529baed00eada2d79f013c715f9d178fe502571f6b",
+  "incrementalAcceptancePass": true,
+  "checks": [
+    {
+      "check": "native",
+      "exitCode": 1
+    },
+    {
+      "check": "native-errors",
+      "exitCode": 0
+    },
+    {
+      "check": "export",
+      "exitCode": 0
+    },
+    {
+      "check": "physical",
+      "exitCode": 0
+    },
+    {
+      "check": "supply",
+      "exitCode": 0
+    },
+    {
+      "check": "clocks",
+      "exitCode": 0
+    },
+    {
+      "check": "switching",
+      "exitCode": 0
+    },
+    {
+      "check": "geometry",
+      "exitCode": 0
+    },
+    {
+      "check": "references",
+      "exitCode": 0
+    },
+    {
+      "check": "replay",
+      "exitCode": 0
+    },
+    {
+      "check": "ddr-preservation",
+      "exitCode": 0
+    },
+    {
+      "check": "pair-preservation",
+      "exitCode": 0
+    }
+  ],
+  "wholeBoardComplete": false,
+  "fabricationReady": false,
+  "rerunNotes": [
+    "Pair preservation passed after restoring the three unchanged frozen peripheral audit inputs omitted from the lightweight candidate copy."
+  ]
+}

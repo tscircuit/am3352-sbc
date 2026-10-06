@@ -1,0 +1,86 @@
+{
+  "pass": true,
+  "clocks": [
+    {
+      "net": "XTALIN",
+      "from": ".U1 > .V10",
+      "paths": [
+        {
+          "to": ".Y1 > .pin1",
+          "lengthMm": 8.731694242435662
+        },
+        {
+          "to": ".C_X1 > .pin1",
+          "lengthMm": 5.544830580463282
+        }
+      ],
+      "maxLengthMm": 10,
+      "vias": 0,
+      "layers": [
+        "top"
+      ],
+      "pass": true
+    },
+    {
+      "net": "XTALOUT",
+      "from": ".U1 > .U11",
+      "paths": [
+        {
+          "to": ".Y1 > .pin2",
+          "lengthMm": 6.790970127390386
+        },
+        {
+          "to": ".C_X2 > .pin1",
+          "lengthMm": 4.277486489090745
+        }
+      ],
+      "maxLengthMm": 10,
+      "vias": 0,
+      "layers": [
+        "top"
+      ],
+      "pass": true
+    },
+    {
+      "net": "RTC_XTALIN",
+      "from": ".U1 > .A6",
+      "paths": [
+        {
+          "to": ".Y2 > .pin1",
+          "lengthMm": 4.38704486913281
+        },
+        {
+          "to": ".C_RTCX1 > .pin1",
+          "lengthMm": 6.0126524478553005
+        }
+      ],
+      "maxLengthMm": 10,
+      "vias": 0,
+      "layers": [
+        "top"
+      ],
+      "pass": true
+    },
+    {
+      "net": "RTC_XTALOUT",
+      "from": ".U1 > .A4",
+      "paths": [
+        {
+          "to": ".Y2 > .pin2",
+          "lengthMm": 4.400478772121911
+        },
+        {
+          "to": ".C_RTCX2 > .pin1",
+          "lengthMm": 6.169687634862543
+        }
+      ],
+      "maxLengthMm": 10,
+      "vias": 0,
+      "layers": [
+        "top"
+      ],
+      "pass": true
+    }
+  ],
+  "method": "Native centerline graph; pad connections include Euclidean distance. Physical connectivity is independently audited."
+}

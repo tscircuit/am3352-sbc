@@ -1,0 +1,20 @@
+{
+  "pass": true,
+  "circuitSha256": "2075f982c3230a5b8f2194529baed00eada2d79f013c715f9d178fe502571f6b",
+  "requiredRails": [
+    "GND",
+    "DDR_1V5",
+    "V3V3",
+    "V1V8",
+    "VDD_CORE",
+    "VDD_MPU",
+    "A3V3",
+    "RTC_1V8",
+    "VIN_5V",
+    "SYS_5V"
+  ],
+  "missingRails": [],
+  "disconnectedRails": {},
+  "nativeSupplyPortErrors": [],
+  "scope": "Physical continuity only; not current capacity, decoupling-loop or signal-integrity signoff."
+}

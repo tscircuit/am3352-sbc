@@ -1,0 +1,26 @@
+import {readFile,writeFile} from "node:fs/promises";
+import {assertDdrConstraints,auditDdrGeometry} from "../design/ddr-compliance";
+const stem=process.argv[2];if(!stem)throw new Error("Pass output/ram-seeds/<candidate>");
+const result=JSON.parse(await readFile(`${stem}.json`,"utf8"));
+if(result.ramDqMap)throw new Error("Experimental DQ mapping must be explicitly integrated and verified before acceptance");
+if(!result.solved||(result.routeCount??result.traces)!==47)throw new Error("Candidate did not solve all DDR nets");
+const input=JSON.parse(await readFile(`${stem}.srj.json`,"utf8"));
+const routes=JSON.parse(await readFile(`${stem}.routes.json`,"utf8"));
+const cj:any[]=JSON.parse(await readFile("output/board-ddr.circuit.json","utf8"));
+const names=Object.fromEntries(cj.filter(e=>e.type==="source_trace").map(e=>[e.source_trace_id,e.name]));
+assertDdrConstraints(input,names);
+const timingAudit=auditDdrGeometry(input,routes,names);
+if(!timingAudit.pass)throw new Error(`DDR candidate rejected before changing the cache: ${timingAudit.failures.join("; ")}`);
+const pp=new Map(cj.filter(e=>e.type==="pcb_port").map(e=>[e.pcb_port_id,e]));
+const sp=new Map(cj.filter(e=>e.type==="source_port").map(e=>[e.source_port_id,e]));
+const sc=new Map(cj.filter(e=>e.type==="source_component").map(e=>[e.source_component_id,e.name]));
+const paths=routes.map((t:any)=>{
+ const c=input.connections.find((c:any)=>c.name===t.connection_name);
+ const a=t.route[0];const p=c.pointsToConnect.find((p:any)=>Math.hypot(p.x-a.x,p.y-a.y)<1e-6);
+ if(!p)throw new Error("Missing source terminal");
+ const port=sp.get(pp.get(p.pcb_port_id).source_port_id);
+ return {connection:`.${sc.get(port.source_component_id)} > .${port.name}`,route:t.route};
+});
+await writeFile("design/ddr-routes.json",JSON.stringify(paths,null,2)+"\n");
+await writeFile("design/ram-placement.json",JSON.stringify({x:result.x,y:result.y,rotation:result.rotation},null,2)+"\n");
+await writeFile("design/ddr-route-provenance.json",JSON.stringify({candidate:stem,solver:"bus_lanes",solverVersion:result.solverVersion??"0.0.11",connections:47,differentialPairsConstrained:input.differentialPairs.length,byteBusesConstrained:input.buses.filter((b:any)=>/^DDR_BYTE/.test(b.name)).length,addressClockBusConstrained:true,geometricTimingPassed:timingAudit.pass,physicalIntegrationVerified:false,timingSignoff:false},null,2)+"\n");

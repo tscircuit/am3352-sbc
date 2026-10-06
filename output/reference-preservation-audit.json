@@ -1,0 +1,18 @@
+{
+  "referenceChanges": [
+    {
+      "signalLayer": "inner1",
+      "referenceLayer": "top",
+      "additionalReferenceVoidAreaMm2": 0.0,
+      "pass": true
+    },
+    {
+      "signalLayer": "inner2",
+      "referenceLayer": "bottom",
+      "additionalReferenceVoidAreaMm2": 0.0,
+      "pass": true
+    }
+  ],
+  "pass": true,
+  "scope": "No added reference-plane voids within 0.1 mm of saved inner-layer signal centerlines; does not certify existing return paths."
+}
