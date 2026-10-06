@@ -6,7 +6,7 @@
       "name": "@tsci/tscircuit.am3552-sbc",
       "dependencies": {
         "@resvg/resvg-js": "2.6.2",
-        "@tscircuit/capacity-autorouter": "file:design/vendor/tscircuit-capacity-autorouter-0.0.958-243b2a5e.tgz",
+        "@tscircuit/capacity-autorouter": "file:design/vendor/tscircuit-capacity-autorouter-0.0.958-fa89cd01-f5348585.tgz",
         "@tscircuit/checks": "0.0.240",
         "@tscircuit/circuit-json-util": "0.0.119",
         "@tscircuit/core": "0.0.2095",
@@ -14,7 +14,7 @@
         "@tscircuit/props": "0.0.689",
         "@types/bun": "1.4.2",
         "@types/react": "19.3.0",
-        "circuit-json": "0.0.515",
+        "circuit-json": "0.0.516",
         "circuit-json-to-connectivity-map": "0.0.33",
         "circuit-to-svg": "0.0.438",
         "react": "19.2.4",
@@ -159,7 +159,7 @@
 
     "@tscircuit/cableprinter": ["@tscircuit/cableprinter@0.0.4", "", { "dependencies": { "zod": "^3.25.76" } }, "sha512-IEZw94xIZjou18UanFKYwRqZqPnT3weetzL2zcSU9sYa/YOQHpGVZ0uGzt/xuJDT5n7eol1xEW05Dci3zjSi2Q=="],
 
-    "@tscircuit/capacity-autorouter": ["@tscircuit/capacity-autorouter@design/vendor/tscircuit-capacity-autorouter-0.0.958-243b2a5e.tgz", { "dependencies": { "@tscircuit/pcb-trace-linter": "github:tscircuit/pcb-trace-linter#4c035f9d40ffb03ba547a08975b5e64b20371123", "fast-json-stable-stringify": "^2.1.0", "object-hash": "^3.0.0", "stack-svgs": "^0.0.1" } }, "sha512-fqtZLEFQYYgKsOGJTJIThV0VMV34+o/uGUOqGOXGDZTEBaYp3Wv1YgRqCR252Pxvu931WSo5DuNuu9ZmBWYCTA=="],
+    "@tscircuit/capacity-autorouter": ["@tscircuit/capacity-autorouter@design/vendor/tscircuit-capacity-autorouter-0.0.958-fa89cd01-f5348585.tgz", { "dependencies": { "circuit-json": "0.0.516", "object-hash": "3.0.0", "transformation-matrix": "3.1.0", "zod": "3.25.76" } }, "sha512-N0B/250YSQan+V8Erxgho//Ioc7ou+inOnah3lrDSasyhtmyi0gOhCLPX0nnDaBQAsha9dzhUDfaI/Y/mwB9yA=="],
 
     "@tscircuit/checks": ["@tscircuit/checks@0.0.240", "", { "dependencies": { "flatbush": "^4.6.2" }, "peerDependencies": { "@flatten-js/core": "*", "@tscircuit/circuit-json-util": "*", "@tscircuit/math-utils": "*", "circuit-json": "*", "circuit-json-to-connectivity-map": "*", "typescript": "^5.5.3" } }, "sha512-NuF1Rab0zcwi/Iu8732bPpVFkkcYpe6W8inuyL/JOch0pbyjTg62ORsUIsYGzDFMPuGpMm6B/CrryKDn7EN3WA=="],
 
@@ -277,7 +277,7 @@
 
     "chownr": ["chownr@1.1.4", "", {}, "sha512-jJ0bqzaylmJtVnNgzTeSOs8DPavpbYgEr/b0YL8/2GO3xJEhInFmhKMUnEJQjZumK7KXGFhUy89PrsJWlakBVg=="],
 
-    "circuit-json": ["circuit-json@0.0.515", "", { "peerDependencies": { "format-si-unit": "*" } }, "sha512-XPQJjojUzL1Ug7KHeXI4rk2G1mRkYAt9eWeyGT1BKzaTJyoy9KKJtwJG7Hx2kHTmdJupEhwNq1ValJeX1nR0xA=="],
+    "circuit-json": ["circuit-json@0.0.516", "", { "peerDependencies": { "format-si-unit": "*" } }, "sha512-4qRUQvCzUHU2FL+V+xp7AhGrsfsNMPoud4SNA8i9U/sWsGBUEKtpCYVZK3FG+daYUfx8X6o/+KMELdf1pvY88g=="],
 
     "circuit-json-to-bpc": ["circuit-json-to-bpc@0.0.13", "", { "peerDependencies": { "bpc-graph": "*", "circuit-json": "*", "typescript": "^5" } }, "sha512-3wSMtPa6tJkiBQN4tsm7f0Mb7Wp90X2c8dNbULoDVE4mGGoFqP1DXqBlyvvZZl+4SjqznzQQ0EioLe2SCQTOcg=="],
 
@@ -698,6 +698,8 @@
     "tscircuit/@tscircuit/props": ["@tscircuit/props@0.0.685", "", { "peerDependencies": { "circuit-json": "*", "react": "*", "zod": "*" } }, "sha512-K+efR7oGavEYLSkgtnNHLHgn/AD4We1P5UVl+CtCyxOA2QvvXxyBbM4NDiJB0dGad0/cQVD3br9nCtehR06mrw=="],
 
     "tscircuit/@tscircuit/solver-utils": ["@tscircuit/solver-utils@0.0.16", "", { "peerDependencies": { "graphics-debug": "*", "typescript": "^5" } }, "sha512-paeEsPt+NOrIdeEb1PQpoNGjl9bD5MfcDaBuhFkn7Hdsxez4cXhKUyxWj3WbJsZzq9nUDW3Utr/Dl3GD4UURZQ=="],
+
+    "tscircuit/circuit-json": ["circuit-json@0.0.515", "", { "peerDependencies": { "format-si-unit": "*" } }, "sha512-XPQJjojUzL1Ug7KHeXI4rk2G1mRkYAt9eWeyGT1BKzaTJyoy9KKJtwJG7Hx2kHTmdJupEhwNq1ValJeX1nR0xA=="],
 
     "tscircuit/circuit-json-to-pnp-csv": ["circuit-json-to-pnp-csv@0.0.16", "", { "dependencies": { "@tscircuit/circuit-json-util": "^0.0.113", "papaparse": "^5.4.1" }, "peerDependencies": { "@tscircuit/soup-util": "*", "circuit-json": "^0.0.489", "typescript": "^5.0.0" } }, "sha512-LTMg6Tumhmbu3vumeJMQsRWdMuJ+ijb+6pmM+av6WjJP6cgAv8ek0VV5P2+C2t9hWRExU7Rg49CkXou71aW7qw=="],
 
