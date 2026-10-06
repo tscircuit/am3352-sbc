@@ -23,6 +23,7 @@ import { Indicators } from "./design/indicators";
 import type { AutoroutingPhaseProps, FanoutTracePath } from "@tscircuit/props";
 import { outerAutorouter } from "./design/outer-autorouter";
 import { lcdAutorouter } from "./design/lcd-router";
+import { controlAutorouter } from "./design/control-router";
 import { groundPlaneAutorouter } from "./design/ground-plane-router";
 import { hydrateNativeFixedCopper } from "./design/native-fixed-copper";
 import type { SimpleRouteJson } from "@tscircuit/core";
@@ -141,7 +142,7 @@ export default function Board({
             name="CONTROL_AND_BOOT"
             phaseIndex={5}
             fanoutRoutingLayers={["top", "bottom"]}
-            {...phaseRouting("CONTROL_AND_BOOT", { autorouter: "default", algorithmFn: nativeAlgorithm(outerAutorouter) })}
+            {...phaseRouting("CONTROL_AND_BOOT", { autorouter: "default", algorithmFn: nativeAlgorithm(controlAutorouter) })}
           />
           <autoroutingphase name="POWER" phaseIndex={6} fanoutRoutingLayers={["top", "bottom"]} {...phaseRouting("POWER", { autorouter: "default", algorithmFn: nativeAlgorithm(outerAutorouter) })} />
           <autoroutingphase

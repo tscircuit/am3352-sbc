@@ -75,7 +75,8 @@ export async function lcdAutorouter(input: SimpleRouteJson, options: LcdAutorout
   if (options.maxSourceMilliseconds !== undefined && (!Number.isFinite(options.maxSourceMilliseconds) || options.maxSourceMilliseconds < 0))
     throw new Error("LCD source time budget must be a non-negative finite number");
   const original = JSON.stringify(input);
-  const prepared = compactRoutingInput({ ...structuredClone(input), connections: outerSignalConnections(input, options.groundNetIds) });
+  const nativeClone = structuredClone(input);
+  const prepared = compactRoutingInput({ ...nativeClone, connections: outerSignalConnections(nativeClone, options.groundNetIds) });
   // The public fanout package also accepts multilayer terminals and requires
   // named supplied traces. Retain the core's single-layer terminal records and
   // prove the narrower trace ownership contract without changing copper.

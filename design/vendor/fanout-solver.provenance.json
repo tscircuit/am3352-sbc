@@ -1,16 +1,16 @@
 {
   "repository": "https://github.com/tscircuit/fanout-solver",
   "baseCommit": "39adfeb68c9ade6ea30ce5bd9f06ac5f208146d7",
-  "sourceCommit": "c783a4618e54c7e99f63330c1599a2961d3cfd84",
+  "sourceCommit": "e3d476e99c02fcdf2cda08d39b64463d4299acb5",
   "packageVersion": "0.0.79",
-  "packageFile": "tscircuit-fanout-solver-0.0.79-c783a461.tgz",
-  "packageSha256": "1c554209750b65c502ec822b9435ca7ca5eb20ffb863031ca0121b8ea379ab79",
+  "packageFile": "tscircuit-fanout-solver-0.0.79-e3d476e.tgz",
+  "packageSha256": "b3925ea6df7a6270a71130dfbf6df9e0940cc6bc8a143adacf7d782bc742d601",
   "patchFile": "fanout-native-surface-prefixes.patch",
-  "patchSha256": "22d5a3c6aebe892238c296f9ed6bf52d0af7f362ea84f4bd0f925163d18a70f3",
+  "patchSha256": "ada4f3b475f64a7371b630b6851f625136d5ea371aefc0eab2eb6ab2d42f7fd9",
   "packageFiles": {
     "LICENSE": "f76b06ed513b8d3783cb23247904b21c0c73edba408b18627fa6a0def43f0ef3",
     "package.json": "06a8d935e8f8804d82681685c3396fb681ff2bca0faf3008feaaa003d5ca231e",
-    "README.md": "352452b9c7b16f2f24f1802422bfe5dae44e29d6dd16e94283f8853b2f883af5",
+    "README.md": "e55afa0c418c44b9188f14379683c96b2b8994286e7b9e739dd56185f09f9bb5",
     "lib/add-diagonal-grid-neighbors.ts": "d82f2f021f1a2457e5cee16cb8c23bff35749b35387d75101934a6fd1d79cfe1",
     "lib/add-via-layer-metadata.ts": "1948306a362760b9d25b42868cda725c26a6ff3955d02aaafa8db5ebd465a21b",
     "lib/aligned-opposite-approach.ts": "e51a1036145f6897f914740cc6f908f4d249b84ebcd7c8b73f94e2f2ee7e11ed",
@@ -32,10 +32,11 @@
     "lib/get-dogbone-side-variants.ts": "55ae0edf5ac40bfee116e8c838902f7db5f71f3f3fbe048216cd16aae19de9ab",
     "lib/get-free-boundary-tracks.ts": "229efd09173639a67524ac20702e23c2e8bed5a7d61c6e1b6fb216423788c4f9",
     "lib/get-multi-edge-bus-targets.ts": "87f2d78e300bc42b8575fb7d54efd744e418bee506083f2fa2f7da51c1936c3b",
+    "lib/get-native-source-copper-blockers.ts": "8dbb727489b2276e8ac5ededc51c882699905e1631465e86f29116666854a886",
     "lib/get-outward-source-pad-owner.ts": "56448583a24904610fb1ec4e8fbc6fe693135c7d063ff71a3eeb8dc4c96e64b9",
     "lib/get-routed-trace-copper.ts": "8206add3640a716983d383a7e7e70ac86820ec5d0b2c3c59151c50b27884d41b",
     "lib/get-via-channel-grid-phase.ts": "5c1e695790dac51720d5df6de696cd7ee5b3f5e44391eb91b7d4b8a485f2a7ea",
-    "lib/index.ts": "6ec0d3287b8d3dc9043573f842ce74787ecb29fee80ca31606b76351db6dacb4",
+    "lib/index.ts": "3cb28e61d8f544f82bba1f9f98d89c05baebfeee5f19f2718a2acbfeaf8090e6",
     "lib/layer-colors.ts": "1ee6ef9b28d2e24abec856eba30d0f67eee076ca249abb1b10b04747d465723e",
     "lib/layer-names.ts": "409e6acb0f88fe8ef628df4cf1b4f2e1ae5bf4c10c92d0c0f2d1a1d0ec43da6f",
     "lib/layer-routing-attempts.ts": "76a6943c42c164c99230257e71a053bd1048f8377e292092dcf046465c3b8870",
@@ -44,8 +45,9 @@
     "lib/match-component-dogbone-via-sites.ts": "2404241b8641e914fb146435dae8f985515caf1a14b2a39eb09383e1042820e4",
     "lib/merge-layered-boundary-targets.ts": "7e65f174297c301ee5914270fb50d5ca12af0279cf4a1b7d4c3c57e15272efad",
     "lib/multi-segment-tuning-windows.ts": "2027981f61d4b9fba9a678de17dbf4e314ca7843c56e65797c23ffc7939f23fe",
-    "lib/net-identity.ts": "87bf5cfd315ef57367651cf9864e44e9811a4ce1ac5191855cc4d8c09bae8948",
+    "lib/net-identity.ts": "ca63fbb0f167bbded006463fede3c697fcf32afd4ac371eaac11af7238586304",
     "lib/normalize-fanout-plan-corners.ts": "e4aade329d4a02ae75241da6a2d5c8f1c910e8088f834f7668b194ee124737ab",
+    "lib/normalize-fresh-source-corners.ts": "5d3153f37e47752296b84d44f7f00e04b8ad0ad068a649152bdba902268ece6f",
     "lib/normalize-fresh-source-folds.ts": "e1f1b11e434d6896d4d2809ed724042b7d51722f2fc386761451ebf7e2c5f6b6",
     "lib/normalize-layered-path.ts": "802a5fedc91511997c0b348084e9a459daee46ce1d8d2cad994680e06595661d",
     "lib/opposed-pair-source-escapes.ts": "f065ed8b6539654bc514103d79bd99f22c95749f98b7cb8b8f0c5df026413b92",
@@ -72,7 +74,7 @@
     "lib/route-layer-reserved-buses.ts": "4398a40e498caff1c7b98ed9dbe431d1c39f273bebf6677c330c1688ba79aa91",
     "lib/route-layer-reserved-source-escapes.ts": "0ac4eaf851aa49d5db6dbbfd58d6b1e5595ada5b4a9a2628a715ae03f8f56cab",
     "lib/route-left-crossbar-bus.ts": "548ae16ff6f1994aacd75017e091f8392d8f91d20178e6ceca9153b85aceead7",
-    "lib/route-mixed-surface-source-prefixes.ts": "2138a99aa6ea725a46b7d17a7c674f0e9c00677235b031311e3201107e392369",
+    "lib/route-mixed-surface-source-prefixes.ts": "98772856d4bf5fc579090c482f925c364048df5f693b2f742eafa652596eb41f",
     "lib/route-multi-edge-reserved-buses.ts": "442d3e26d07754758f94eca858fd57a717dbaf0f0ec24a6cabee1f1033a16c3c",
     "lib/route-opposite-bottom-crossbar-bus.ts": "820b8b307d0cdb6a2ad0a0592c1711c923ca3a84cd8c16dfedc5a7e5ed0c13a5",
     "lib/route-peripheral-buses.ts": "17e486d53df21f6ce5aa46efe92ca5e84308976e58fa30f1469b335d97d32850",
@@ -83,7 +85,7 @@
     "lib/route-reserved-via-buses.ts": "bdfe45137effbed2ff529517e06886cb65dc3a522a65b27ef868bd0a732085c5",
     "lib/route-segment-spatial-index.ts": "53fda7fecfc9eb12c82a3759847ebd57667abe39cdad8b99e57bed78c72fadbc",
     "lib/route-shallow-split-perimeter-bus.ts": "f5c12f23bd9d1afbe55bf67ba7f50df69de5499711cbe8f9dc5f8b034e308044",
-    "lib/route-single-layer-adaptive-exits.ts": "2b26e74b023283a8b30c3818cd8b50b6237cd6a7914fe521952d0903150f5834",
+    "lib/route-single-layer-adaptive-exits.ts": "6a82b85516fa64d018c94aa6ca4376ae6e7baa7e10e9265717e0feaa6cdb3bf7",
     "lib/route-single-layer-push-shove.ts": "f46a880d1f53fcdd420484261ee85bbaaaabb2cbcee25518f928efedd37e54c9",
     "lib/route-source-origin-buses.ts": "41b2a6f4bc472e058f9872ea5ad85f57dd97d8c0370267ea4878e31ffcc39aa5",
     "lib/route-split-perimeter-bus.ts": "5334e6a7ceb728309ae980bab04b056069f10d754322c595371a5c5103f1aed3",
@@ -92,6 +94,7 @@
     "lib/route-via-minimal-winding.ts": "1b90c8f446059cb4ee20502924a3ee910ef283e8727669afc2ea5fdb15659cdb",
     "lib/runtime-process.ts": "e906a5a0a79142a7407b6bb8cba030351ba3f140cd139d46d92290b9a1590a89",
     "lib/select-compatible-candidates.ts": "3cdd97dc5ae09c6b740f1ed4c5705b25792677c386d9271a44a121e3a29e7710",
+    "lib/select-critical-source-corridors.ts": "5b37c7da4e3020998c0be0ddf463dfefff98b5dd9924df7454cafd2ddd75d80f",
     "lib/shortcut-fanout-plans.ts": "9fa1ff444ea443bf0e9a966365ccf2e74f06353688de59ac96632d8d3d237733",
     "lib/shorten-bus-plans.ts": "45ce20fc4014a8cbb3a713639032217cfc2e4a9bafb9e76f6d36e0ae487b6628",
     "lib/should-use-adaptive-dense-plane-routing.ts": "77ad2df607692c624632bfea1a57c6ba731adac1b10d5a4b6f34af282beff6a0",
@@ -106,31 +109,87 @@
     "lib/types.ts": "e20cb2039f26f09d810ef8bf914587c29f26705914961f8c114974e35f82ffef",
     "lib/validate-fanout-solution.ts": "0d63d147e2694ea5995dcbe93655cd475aa408699a868a83eeae75a724bac114",
     "lib/validate-original-endpoint-connectivity.ts": "d99c502147a203b247a88a149d224f067e9c3d9c92566d6a5d2e8df006798ceb",
-    "lib/validate-routed-copper-drc.ts": "d862c4b1807ff2535393c5ae2a8e93e27c5f83a6ba2a52dd5f597f046b78920a",
+    "lib/validate-routed-copper-drc.ts": "c0526380c9227d74516409b3ecdebd985ebed1364f3097ca11b10ec59d11c401",
     "lib/visualize-simple-route-json.ts": "f64b4579a59a7ddf13e727689519ab19297725bc0c25ca988a11440727e065b4"
   },
   "sourcePublication": "local source patch; not published upstream",
   "validation": {
-    "focusedTests": {
-      "testCount": 25,
-      "assertionCount": 666,
-      "snapshotCount": 10,
-      "failed": 0
+    "focusedRegression": {
+      "testCount": 42,
+      "fileCount": 32,
+      "assertionCount": 937,
+      "snapshotCount": 15,
+      "failed": 0,
+      "logSha256": "78b304e02d2a0e33024407137f6f9e7bccb8c4c574dfba20250f16baff848475",
+      "postConsumerTypeGuardFocusedTest": {
+        "testCount": 1,
+        "assertionCount": 17,
+        "failed": 0,
+        "logSha256": "bb621b7cf25a73e37e3881608726b9c92a6f8b13c6d70a1e2b17b0f978d88919"
+      }
     },
     "strictLibraryTypecheck": "pass",
     "isolatedConsumerTypecheck": "pass",
     "isolatedConsumerPublicApiTest": {
-      "testCount": 2,
-      "assertionCount": 16,
-      "failed": 0
+      "testCount": 4,
+      "assertionCount": 44,
+      "snapshotCount": 1,
+      "failed": 0,
+      "logSha256": "295faba445c21706199e7189754c029caa0119ace58a35cd469b892bfada9b65"
+    },
+    "nativeProofOwnershipReaudit": {
+      "file": "/workspace/work/fanout-review/native-owner-proof-re-audit.json",
+      "sha256": "b11bb08a04109f0f0d8a7229075e9d6131f49dde89f9606ad4d8b11207aacdcf",
+      "scope": "Native ownership correction validation only; no new route generation, no board output",
+      "accepted": true,
+      "newRoutingComputed": false,
+      "changedGraphFilesSinceCold20": [
+        "net-identity.ts",
+        "validate-routed-copper-drc.ts"
+      ],
+      "changedGraphFilesSinceCold59": [
+        "net-identity.ts",
+        "route-mixed-surface-source-prefixes.ts",
+        "validate-routed-copper-drc.ts"
+      ],
+      "cohortSuppliedTraceRecords": 0,
+      "obstacleOwnerComparisons": 294512,
+      "connectionOwnerComparisons": 3881,
+      "allNativeOwnerExemptionsIdenticalToColdProofs": true,
+      "coldGeometryUnchangedAndDrcValid": true,
+      "proofReuseJustification": "Only ownership/checker changed after e018. Both accepted cold cohorts have no supplied trace records, so their new owner seeding/conflict branch is empty; every actual native owner exemption is byte-equivalent. The accepted critical routing body remains unchanged."
+    },
+    "native511OwnershipBaseline": {
+      "file": "/workspace/work/control-router/native-511-control-input.json",
+      "inputSha256": "77ad53a5848c0882bcb348bb858c1850a795f5c0b76d68ff5bad2aa23ceb3380",
+      "suppliedTraceCount": 511,
+      "drc": {
+        "valid": true,
+        "checkedTraceCount": 511,
+        "checkedSegmentCount": 803,
+        "checkedViaCount": 79,
+        "issues": []
+      },
+      "elapsedMs": 2278.6742139999997,
+      "inputUnchanged": true
     },
     "nativeSourcePrefixCount": 20,
-    "nativeSourcePrefixProofSha256": "69e8c1ec70f54629705a0a683387558b2d235c11924d38b63d1b365e83ca78a5",
+    "nativeSourcePrefixProofSha256": "cf7bffe928f2297be3f1c1a47600d125cbc9419e86ee522955e875613274b0c7",
     "nativeGatePass": true,
     "fixedGeometryPreserved": true,
-    "newFullSpanBarrels": 6,
-    "nativeSourcePrefixEvidenceSourceCommit": "c783a4618e54c7e99f63330c1599a2961d3cfd84",
-    "currentSealedPackageColdProof": "pass"
+    "newFullSpanBarrels": 4,
+    "nativeSourcePrefixEvidenceSourceCommit": "e3d476e99c02fcdf2cda08d39b64463d4299acb5",
+    "currentSealedPackageColdProof": "pass",
+    "nativeGeometryIdenticalToFrozenFinalProof": true,
+    "publicCpu59Proof": {
+      "sha256": "409a629b6e1ddefe6ddd45f2a1c8b9e8e32c9299376afbca7591357f157b31f6",
+      "accepted": true,
+      "sourceCount": 59,
+      "topCount": 41,
+      "bottomCount": 18,
+      "newActualBarrels": 18,
+      "scope": "Original370 baseline source-only generic benchmark; final CONTROL reuses physicalLCD and only routes remaining CPU sources"
+    }
   },
-  "scope": "Cold source-prefix planning only. Final carrier and whole-board routing acceptance are required separately."
+  "scope": "Original370 baseline LCD20 source prefixes only; complete destinations and final511+DDR47+24+LCD+CONTROL native board require fresh all-phase proof"
 }
