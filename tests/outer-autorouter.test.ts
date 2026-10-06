@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { Circuit, type SimpleRouteJson, type SimplifiedPcbTrace } from "@tscircuit/core";
 import { createElement as h } from "react";
 import { outerAutorouter } from "../design/outer-autorouter";
-import { filterUnchangedPreloadedTraces, outerSignalConnections, PHYSICAL_STACK, validateOuterRoutes, type OuterRoutingConnection } from "../design/outer-route-validation";
+import { filterUnchangedPreloadedTraces, fixedConnectionComponents, outerSignalConnections, PHYSICAL_STACK, validateOuterRoutes, type OuterRoutingConnection } from "../design/outer-route-validation";
 
 function input(): SimpleRouteJson & { connections: OuterRoutingConnection[] } {
   return {
@@ -123,6 +123,62 @@ test("multipoint acceptance checks physical connectivity rather than one route p
   expect(validateOuterRoutes(native, [trunk, branch])).toHaveLength(2);
   const detached = track("DATA", [{ x: 3, y: 1 }, { x: 3, y: 2 }], "detached");
   expect(() => validateOuterRoutes(native, [trunk, detached])).toThrow("partially routed");
+});
+
+test("fixed terminal components reuse native multipoint copper and report its actual extent", () => {
+  const native = input();
+  native.connections[0].pointsToConnect.push({ x: 3, y: 2, layer: "top" });
+  native.obstacles.push(...native.connections[0].pointsToConnect.map((point, index) => ({
+    type: "rect" as const, shape: "circle" as const, center: point, width: .3, height: .3, layers: [point.layer],
+    connectedTo: ["DATA"], circuitJsonMetadata: { pcb_smtpad_id: `pad_${index}`, pcb_port_id: `port_${index}` },
+  })));
+  native.traces = [track("DATA", [{ x: -3, y: 0 }, { x: 3, y: 0 }], "native-lcd-trunk")];
+  const original = JSON.stringify(native);
+  const [report] = fixedConnectionComponents(native);
+  expect(report!.groups).toEqual([[0, 1], [2]]);
+  expect(report!.uncontactedTerminals).toEqual([]);
+  expect(report!.components[0]).toMatchObject({ traceIds: ["native-lcd-trunk"], layers: ["top"],
+    traceBounds: { minX: -3.05, maxX: 3.05, minY: -.05, maxY: .05 } });
+  expect(report!.components[1]!.traceIds).toEqual([]);
+  expect(report!.components[1]!.traceBounds).toBeUndefined();
+  expect(JSON.stringify(native)).toBe(original);
+});
+
+test("fixed fragments join by copper contact while detached and raster-only claims do not", () => {
+  const native = input();
+  const trunk = track("DATA", [{ x: -3, y: 0 }, { x: 1, y: 0 }], "native-prefix");
+  const carrier = track("DATA", [{ x: 0, y: .043 }, { x: 0, y: 2 }, { x: 3, y: 2 }, { x: 3, y: 0 }], "native-carrier");
+  native.traces = [trunk, carrier];
+  expect(fixedConnectionComponents(native)[0]!.groups).toEqual([[0, 1]]);
+  expect(fixedConnectionComponents(native)[0]!.components[0]!.traceIds).toEqual(["native-prefix", "native-carrier"]);
+  carrier.route[0] = { route_type: "wire", x: 0, y: .101, layer: "top", width: .1 };
+  expect(fixedConnectionComponents(native)[0]!.groups).toEqual([[0], [1]]);
+  native.obstacles.push({ type: "rect", center: { x: 0, y: 0 }, width: 6.1, height: .4, layers: ["top"], connectedTo: ["DATA"] });
+  expect(fixedConnectionComponents(native)[0]!.groups).toEqual([[0], [1]]);
+  const detached = input();
+  detached.traces = [track("DATA", [{ x: -2, y: 0 }, { x: 2, y: 0 }])];
+  expect(fixedConnectionComponents(detached)[0]!.uncontactedTerminals).toEqual([0, 1]);
+});
+
+test("fixed component contact respects manufactured layers and native circular pad shape", () => {
+  const native = input();
+  native.connections[0].pointsToConnect = [{ x: -3, y: 0, layer: "top" }, { x: 3, y: 0, layer: "bottom" }];
+  native.traces = [{ type: "pcb_trace", pcb_trace_id: "native-barrel-path", connection_name: "DATA", route: [
+    { route_type: "wire", x: -3, y: 0, layer: "top", width: .1 },
+    { route_type: "wire", x: 0, y: 0, layer: "top", width: .1 },
+    { route_type: "via", x: 0, y: 0, from_layer: "top", to_layer: "bottom", layers: [...PHYSICAL_STACK], via_diameter: .3, via_hole_diameter: .15 },
+    { route_type: "wire", x: 0, y: 0, layer: "bottom", width: .1 },
+    { route_type: "wire", x: 3, y: 0, layer: "bottom", width: .1 },
+  ] }];
+  expect(fixedConnectionComponents(native)[0]!.groups).toEqual([[0, 1]]);
+  native.connections[0].pointsToConnect[1]!.layer = "top";
+  expect(fixedConnectionComponents(native)[0]!.uncontactedTerminals).toEqual([1]);
+  const pad = input();
+  pad.connections[0].pointsToConnect = [{ x: 0, y: 0, layer: "top" }, { x: .49, y: .49, layer: "top" }];
+  pad.obstacles.push({ type: "rect", shape: "circle", center: { x: 0, y: 0 }, width: 1, height: 1,
+    layers: ["top"], connectedTo: ["DATA"], circuitJsonMetadata: { pcb_smtpad_id: "round-pad" } });
+  expect(fixedConnectionComponents(pad)[0]!.groups).toEqual([[0]]);
+  expect(fixedConnectionComponents(pad)[0]!.uncontactedTerminals).toEqual([1]);
 });
 
 test("preloaded replacement records cannot change fixed geometry or ownership", () => {

@@ -187,6 +187,88 @@ function copperDistance(a: Copper, b: Copper, contact = false): number {
 }
 function layersOverlap(a: Copper, b: Copper): boolean { return a.layers.some(layer => b.layers.includes(layer)); }
 
+function physicalComponents(graph: Copper[]) {
+  const parents = graph.map((_, index) => index);
+  const root = (index: number): number => {
+    while (parents[index] !== index) { parents[index] = parents[parents[index]]; index = parents[index]; }
+    return index;
+  };
+  for (let i = 0; i < graph.length; i++) for (let j = i + 1; j < graph.length; j++) {
+    const a = graph[i], b = graph[j];
+    if (a.owner === b.owner && layersOverlap(a, b) && copperDistance(a, b, true) <= EPSILON) parents[root(j)] = root(i);
+  }
+  return { root };
+}
+
+function conductiveObstacles(input: SimpleRouteJson, names: Names): Copper[] {
+  return input.obstacles.filter(obstacle => obstacle.connectedTo.length > 0 && !obstacle.isNonPlatedHole).map(obstacle => ({
+    a: obstacle.center, b: obstacle.center, radius: 0, layers: obstacle.layers,
+    owner: names.root(obstacle.connectedTo[0]), traceId: obstacle.obstacleId ?? "native-pad", fixed: true, obstacle,
+  }));
+}
+
+function terminalContact(graph: Copper[], owner: string, terminal: SimpleRouteJson["connections"][number]["pointsToConnect"][number]): number {
+  const multi = terminal as unknown as { layers?: string[] };
+  const layers = multi.layers ?? [terminal.layer];
+  return graph.findIndex(piece => piece.owner === owner && piece.layers.some(layer => layers.includes(layer)) &&
+    (piece.obstacle ? obstacleDistance(terminal, terminal, piece.obstacle, true) <= EPSILON : pointSegment(terminal, piece.a, piece.b) <= piece.radius + EPSILON));
+}
+
+export interface FixedConnectionComponent {
+  terminalIndices: number[];
+  traceIds: string[];
+  layers: string[];
+  /** Extent of actual supplied trace copper; excludes conductive pad bounds. */
+  traceBounds?: { minX: number; maxX: number; minY: number; maxY: number };
+}
+
+/** Report native terminals already joined by actual immutable copper.
+ * Anonymous trace reservation rectangles are routing obstacles, not proof of
+ * contact; only native conductive pads/barrels/pours and exact traces count. */
+export function fixedConnectionComponents(input: SimpleRouteJson): {
+  connectionName: string;
+  groups: number[][];
+  uncontactedTerminals: number[];
+  components: FixedConnectionComponent[];
+}[] {
+  const { names, owner } = ownership(input, []);
+  const ground = outerGroundOwners(input);
+  const fixed = (input.traces ?? []).flatMap(trace => traceCopper(trace, owner(trace), true, input, ground.has(owner(trace)), names));
+  const native = conductiveObstacles(input, names).filter(piece => piece.obstacle!.isCopperPour ||
+    !!piece.obstacle!.circuitJsonMetadata?.pcb_smtpad_id || !!piece.obstacle!.circuitJsonMetadata?.pcb_port_id ||
+    !!piece.obstacle!.circuitJsonMetadata?.pcb_via_id || !!piece.obstacle!.circuitJsonMetadata?.pcb_plated_hole_id);
+  const graph = [...fixed, ...native];
+  const { root } = physicalComponents(graph);
+  const members = new Map<number, Copper[]>();
+  for (const [index, piece] of graph.entries()) {
+    const component = root(index);
+    const list = members.get(component) ?? [];
+    list.push(piece); members.set(component, list);
+  }
+  return input.connections.map(connection => {
+    const indices = new Map<number, number[]>(), uncontactedTerminals: number[] = [];
+    for (const [index, terminal] of connection.pointsToConnect.entries()) {
+      const contact = terminalContact(graph, names.root(connection.name), terminal);
+      if (contact < 0) { uncontactedTerminals.push(index); continue; }
+      const component = root(contact), list = indices.get(component) ?? [];
+      list.push(index); indices.set(component, list);
+    }
+    const components = [...indices].map(([component, terminalIndices]): FixedConnectionComponent => {
+      const pieces = members.get(component)!;
+      const tracePieces = pieces.filter(piece => !piece.obstacle);
+      const traceBounds = tracePieces.length ? {
+        minX: Math.min(...tracePieces.map(piece => Math.min(piece.a.x, piece.b.x) - piece.radius)),
+        maxX: Math.max(...tracePieces.map(piece => Math.max(piece.a.x, piece.b.x) + piece.radius)),
+        minY: Math.min(...tracePieces.map(piece => Math.min(piece.a.y, piece.b.y) - piece.radius)),
+        maxY: Math.max(...tracePieces.map(piece => Math.max(piece.a.y, piece.b.y) + piece.radius)),
+      } : undefined;
+      return { terminalIndices, traceIds: [...new Set(tracePieces.map(piece => piece.traceId))],
+        layers: [...new Set(pieces.flatMap(piece => piece.layers))], traceBounds };
+    });
+    return { connectionName: connection.name, groups: components.map(component => component.terminalIndices), uncontactedTerminals, components };
+  });
+}
+
 function assertOnBoard(copper: Copper, input: SimpleRouteJson) {
   const clearance = input.minBoardEdgeClearance ?? 0;
   const radius = copper.radius + clearance;
@@ -352,26 +434,14 @@ export function validateOuterRoutes(input: SimpleRouteJson, returned: Simplified
       throw new Error(`Copper collision between ${a.traceId} and ${b.traceId}`);
   }
   // Native pads and planes can connect separate branches of the same net.
-  const conductiveObstacles: Copper[] = input.obstacles.filter(obstacle => obstacle.connectedTo.length > 0 && !obstacle.isNonPlatedHole).map(obstacle => ({
-    a: obstacle.center, b: obstacle.center, radius: 0, layers: obstacle.layers,
-    owner: names.root(obstacle.connectedTo[0]), traceId: obstacle.obstacleId ?? "native-pad", fixed: true, obstacle,
-  }));
-  const graph = [...copper, ...conductiveObstacles];
-  const parents = graph.map((_, index) => index);
-  const root = (index: number): number => { while (parents[index] !== index) { parents[index] = parents[parents[index]]; index = parents[index]; } return index; };
-  for (let i = 0; i < graph.length; i++) for (let j = i + 1; j < graph.length; j++) {
-    const a = graph[i], b = graph[j];
-    if (a.owner === b.owner && layersOverlap(a, b) && copperDistance(a, b, true) <= EPSILON) parents[root(j)] = root(i);
-  }
+  const graph = [...copper, ...conductiveObstacles(input, names)];
+  const { root } = physicalComponents(graph);
   for (const connection of input.connections) {
     if (connection.pointsToConnect.length < 2) continue;
     const electricalOwner = names.root(connection.name);
     let component: number | undefined;
     for (const terminal of connection.pointsToConnect) {
-      const multi = terminal as unknown as { layers?: string[] };
-      const layers = multi.layers ?? [terminal.layer];
-      const contact = graph.findIndex(piece => piece.owner === electricalOwner && piece.layers.some(layer => layers.includes(layer)) &&
-        (piece.obstacle ? obstacleDistance(terminal, terminal, piece.obstacle, true) <= EPSILON : pointSegment(terminal, piece.a, piece.b) <= piece.radius + EPSILON));
+      const contact = terminalContact(graph, electricalOwner, terminal);
       if (contact < 0) throw new Error(`Connection ${connection.name} has an unrouted native terminal`);
       if (component !== undefined && root(contact) !== component) throw new Error(`Connection ${connection.name} is only partially routed`);
       component = root(contact);
