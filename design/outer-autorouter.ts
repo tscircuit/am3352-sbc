@@ -1,6 +1,7 @@
 import { SOLVERS, type AutorouterEvent, type GenericLocalAutorouter, type SimpleRouteJson, type SimplifiedPcbTrace } from "@tscircuit/core";
 import { filterUnchangedPreloadedTraces, outerSignalConnections, validateOuterRoutes } from "./outer-route-validation";
 import { compactRoutingInput } from "./compact-routing-input";
+import { collapseRedundantViaVisits } from "./collapse-redundant-via-visits";
 
 type Pipeline = InstanceType<typeof SOLVERS.AutoroutingPipelineSolver9_PreloadedTraceGraph>;
 export type OuterAutorouterOptions = {
@@ -57,7 +58,10 @@ export function createOuterAutorouter(input: SimpleRouteJson, options: OuterAuto
     const outputIds = new Set((output.traces ?? []).map(trace => trace.__replaces_pcb_trace_id ?? trace.pcb_trace_id));
     if ((input.traces ?? []).some(trace => !outputIds.has(trace.pcb_trace_id)))
       throw new Error("Autorouter dropped a supplied trace");
-    traces = validateOuterRoutes(input, solver.getOutputSimplifiedPcbTraces() as SimplifiedPcbTrace[], options.groundNetIds);
+    const validated = validateOuterRoutes(input, solver.getOutputSimplifiedPcbTraces() as SimplifiedPcbTrace[], options.groundNetIds);
+    const cleaned = validated.map(collapseRedundantViaVisits);
+    traces = cleaned.some((trace, index) => trace !== validated[index])
+      ? validateOuterRoutes(input, cleaned, options.groundNetIds) : validated;
     return traces;
   };
   const adapter: GenericLocalAutorouter & { solver: Pipeline; getOutputSimplifiedPcbTraces(): SimplifiedPcbTrace[]; getOutputSimpleRouteJson(): SimpleRouteJson | undefined } = {
