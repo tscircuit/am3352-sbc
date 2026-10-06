@@ -1,6 +1,7 @@
 import type { Obstacle, SimpleRouteJson, SimplifiedPcbTrace } from "@tscircuit/core";
 
 export const PHYSICAL_STACK = ["top", "inner1", "inner2", "bottom"] as const;
+export type OuterRoutingConnection = SimpleRouteJson["connections"][number] & { allowedLayers?: string[] };
 const OUTER = new Set<string>(["top", "bottom"]);
 const EPSILON = 1e-6;
 type Point = { x: number; y: number };
@@ -89,6 +90,18 @@ export function outerGroundOwners(input: SimpleRouteJson, extraGroundNames: stri
   if (!ground.size) throw new Error("Both inner layers require native pour reservations for the same ground net");
   for (const name of extraGroundNames) ground.add(names.root(name));
   return ground;
+}
+
+/** Signal layer constraints retain the native physical stack and ground owners. */
+export function outerSignalConnections(input: SimpleRouteJson, extraGroundNames: string[] = []): OuterRoutingConnection[] {
+  const ground = outerGroundOwners(input, extraGroundNames);
+  const { names } = ownership(input, []);
+  return input.connections.map(connection => {
+    if (ground.has(names.root(connection.name))) return connection;
+    const allowedLayers = ((connection as OuterRoutingConnection).allowedLayers ?? ["top", "bottom"]).filter(layer => OUTER.has(layer));
+    if (!allowedLayers.length) throw new Error(`Signal ${connection.name} has no permitted outer copper layer`);
+    return { ...connection, allowedLayers };
+  });
 }
 
 function finitePoint(point: Point): boolean { return Number.isFinite(point.x) && Number.isFinite(point.y); }

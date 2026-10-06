@@ -1,5 +1,5 @@
 import { SOLVERS, type AutorouterEvent, type GenericLocalAutorouter, type SimpleRouteJson, type SimplifiedPcbTrace } from "@tscircuit/core";
-import { filterUnchangedPreloadedTraces, outerGroundOwners, validateOuterRoutes } from "./outer-route-validation";
+import { filterUnchangedPreloadedTraces, outerSignalConnections, validateOuterRoutes } from "./outer-route-validation";
 import { compactRoutingInput } from "./compact-routing-input";
 
 type Pipeline = InstanceType<typeof SOLVERS.AutoroutingPipelineSolver9_PreloadedTraceGraph>;
@@ -18,9 +18,9 @@ export async function outerAutorouter(input: SimpleRouteJson, options: OuterAuto
   getOutputSimplifiedPcbTraces(): SimplifiedPcbTrace[];
   getOutputSimpleRouteJson(): SimpleRouteJson | undefined;
 }> {
-  outerGroundOwners(input, options.groundNetIds);
   const original = JSON.stringify(input);
   const prepared = structuredClone(input);
+  prepared.connections = outerSignalConnections(prepared, options.groundNetIds);
   prepared.allowBlindAndBuriedVias = false;
   prepared.allowJumpers = false;
   prepared.minViaPadDiameter ??= prepared.min_via_pad_diameter ?? prepared.minViaDiameter ?? 0.3;

@@ -2,9 +2,9 @@ import { expect, test } from "bun:test";
 import { Circuit, type SimpleRouteJson, type SimplifiedPcbTrace } from "@tscircuit/core";
 import { createElement as h } from "react";
 import { outerAutorouter } from "../design/outer-autorouter";
-import { filterUnchangedPreloadedTraces, PHYSICAL_STACK, validateOuterRoutes } from "../design/outer-route-validation";
+import { filterUnchangedPreloadedTraces, outerSignalConnections, PHYSICAL_STACK, validateOuterRoutes, type OuterRoutingConnection } from "../design/outer-route-validation";
 
-function input(): SimpleRouteJson {
+function input(): SimpleRouteJson & { connections: OuterRoutingConnection[] } {
   return {
     layerCount: 4, allowBlindAndBuriedVias: false, minTraceWidth: 0.1,
     minViaPadDiameter: 0.3, minViaHoleDiameter: 0.15, defaultObstacleMargin: 0.1,
@@ -52,11 +52,27 @@ test("actual four-layer public pipeline routes across a top wall while retaining
     if (point.route_type === "via") expect(point.layers).toEqual([...PHYSICAL_STACK]);
   }
   expect(router.solver.originalSrj.layerCount).toBe(4);
+  expect((router.solver.originalSrj.connections[0]! as OuterRoutingConnection).allowedLayers).toEqual(["top", "bottom"]);
   for (const reservation of native.obstacles.filter(obstacle => obstacle.isCopperPour))
     expect(router.solver.originalSrj.obstacles).toContainEqual(expect.objectContaining(reservation));
   expect(router.getOutputSimpleRouteJson()?.layerCount).toBe(4);
   expect(JSON.stringify(native)).toBe(original);
 }, 30000);
+
+test("outer signal restrictions preserve ground plane access and narrower source intent", () => {
+  const native = input();
+  native.connections[0]!.allowedLayers = ["top", "inner1"];
+  native.connections.push({ name: "GROUND", allowedLayers: ["inner1", "inner2"], pointsToConnect: [
+    { x: -3, y: 3, layer: "inner1" }, { x: 3, y: 3, layer: "inner2" },
+  ] });
+  const original = JSON.stringify(native);
+  const planned = outerSignalConnections(native);
+  expect(planned[0]!.allowedLayers).toEqual(["top"]);
+  expect(planned[1]!.allowedLayers).toEqual(["inner1", "inner2"]);
+  expect(JSON.stringify(native)).toBe(original);
+  native.connections[0]!.allowedLayers = ["inner1"];
+  expect(() => outerSignalConnections(native)).toThrow("Signal DATA has no permitted outer copper layer");
+});
 
 test("native unbroken ground planes produce signal antipads and full manufactured vias", async () => {
   const circuit = new Circuit();
