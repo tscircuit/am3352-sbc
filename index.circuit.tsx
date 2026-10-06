@@ -23,6 +23,7 @@ import { Indicators } from "./design/indicators";
 import type { AutoroutingPhaseProps, FanoutTracePath } from "@tscircuit/props";
 import { outerAutorouter } from "./design/outer-autorouter";
 import { lcdAutorouter } from "./design/lcd-router";
+import { groundPlaneAutorouter } from "./design/ground-plane-router";
 
 // The builder supplies paths produced by ddr.circuit.tsx's bus_lanes phase.
 // New peripheral routing receives these paths as fixed copper obstacles.
@@ -135,7 +136,7 @@ export default function Board({
           <autoroutingphase
             name="GROUND"
             phaseIndex={7}
-            {...phaseRouting("GROUND", { autorouter: "fanout" })}
+            {...phaseRouting("GROUND", { autorouter: "default", algorithmFn: groundPlaneAutorouter })}
             fanoutPourNetMap={{ inner1: ["GND"] }}
           />
           </>}
