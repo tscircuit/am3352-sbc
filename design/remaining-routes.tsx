@@ -5,6 +5,7 @@ import sourceNets from './source-net-names.json';
 import { phaseForNet } from './nets';
 
 type PathPoint = {x:number;y:number;via?:boolean;
+  layer?:'top'|'inner1'|'inner2'|'bottom';
   fromLayer?:'top'|'inner1'|'inner2'|'bottom';
   toLayer?:'top'|'inner1'|'inner2'|'bottom'};
 type SavedRoute = {name:string;net:string;from:string;to:string;width:number;
@@ -12,6 +13,12 @@ type SavedRoute = {name:string;net:string;from:string;to:string;width:number;
 const routes = savedRoutes as SavedRoute[];
 const cachedRouteNames = new Set(controlRoutes.map(r=>r.name));
 const cachedNetNames = new Set(controlRoutes.map(r=>r.net));
+// Retain authored outer copper from the imported board. Control replay paths
+// and authored paths that use an inner layer still receive fresh routing.
+const outerLayers = new Set(['top', 'bottom']);
+const authoredOuterRouteNames = new Set(routes.filter(route => !cachedRouteNames.has(route.name) &&
+  route.waypoints.every(point => [point.layer, point.fromLayer, point.toLayer].every(layer => layer === undefined || outerLayers.has(layer))))
+  .map(route => route.name));
 // These nets never appeared in the original control-route cache. Declare their
 // phases even when a fixed pad escape clears the trace's individual phase.
 // Preserve their original creation order so native copper owners stay stable.
@@ -30,7 +37,7 @@ export function RemainingRoutes({routeFresh = false, routingEnabled = true}: {ro
     thickness={route.width}
     routingPhaseIndex={routeFresh ? phase(route.net) : routingEnabled && cachedRouteNames.has(route.name) ? 2 : undefined}
     pcbPathRelativeTo={route.from}
-    pcbPath={routeFresh || cachedRouteNames.has(route.name) ? undefined : [route.from,
+    pcbPath={(routeFresh && !authoredOuterRouteNames.has(route.name)) || cachedRouteNames.has(route.name) ? undefined : [route.from,
       ...route.waypoints.flatMap(p => p.via ? [{x:p.x,y:p.y}, p, {x:p.x,y:p.y}] : [p]),
       route.toPoint ?? route.to]}
   />)}</>;
