@@ -171,6 +171,15 @@ test("fixed component contact respects manufactured layers and native circular p
     { route_type: "wire", x: 3, y: 0, layer: "bottom", width: .1 },
   ] }];
   expect(fixedConnectionComponents(native)[0]!.groups).toEqual([[0, 1]]);
+  const barrel = native.traces[0]!.route[2];
+  if (barrel?.route_type !== "via") throw new Error("Missing native test barrel");
+  barrel.layers = ["bottom", "inner2", "inner1", "top"];
+  const nativeBytes = JSON.stringify(native);
+  expect(fixedConnectionComponents(native)[0]!.groups).toEqual([[0, 1]]);
+  expect(JSON.stringify(native)).toBe(nativeBytes);
+  barrel.layers = ["top", "inner1", "inner1", "bottom"];
+  expect(() => fixedConnectionComponents(native)).toThrow("manufactured through via");
+  barrel.layers = ["bottom", "inner2", "inner1", "top"];
   native.connections[0].pointsToConnect[1]!.layer = "top";
   expect(fixedConnectionComponents(native)[0]!.uncontactedTerminals).toEqual([1]);
   const pad = input();

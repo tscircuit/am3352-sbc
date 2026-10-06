@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "scope": "Authenticated reconstruction of the actual native routing event input; not routed-board acceptance or candidate copper.",
+  "acceptedBoard": false,
+  "registrySource": {
+    "url": "https://tscircuit.com/astra/am3352-sbc",
+    "version": "0.1.19"
+  },
+  "sourceSha256": {
+    "design/native-fixed-copper.ts": "de456cc02d3067d18695e1a3faa9f79f71e61abd22682c275cb2aca44c3d9040",
+    "scripts/native-electrical-ownership.ts": "a97804c0c38708e68e05cb2a75fc4adbed3c62e90a3863e9e19a601244b28b60",
+    "tests/native-fixed-copper.test.tsx": "0cc62daa30d2a8aa5c824aaf79d570ce5534114a3c6626a22be221528bb67613"
+  },
+  "nativeCaptures": [
+    {
+      "capture": "canonical-original-proof.json",
+      "phaseSha256": "fb560cf7cb1abe77ecba506254b8d1fff62905bb7b510399b1059b91a74fefa9",
+      "nativeSha256": "12afb854c9899b9f96826424aa73e3a0455a58aec420893bb5faebe470365e0e",
+      "nativeTraceCount": 511,
+      "addedTraceCount": 0,
+      "preservedPreloadCount": 511,
+      "removedTraceProxyCount": 0,
+      "addedNativeViaObstacleCount": 79,
+      "authenticatedShapeRefinementCount": 63,
+      "nativeBarrelCount": 398,
+      "baselinePass": true,
+      "protectedPhaseFieldsUnchanged": true,
+      "preloadBytesUnchanged": true,
+      "originalUnchanged": true,
+      "nativeUnchanged": true,
+      "idempotent": true
+    },
+    {
+      "capture": "canonical-newpose-proof.json",
+      "phaseSha256": "6b238ef22dc4df0065c93b56e110ed4940c7f53a6ba99553bfa2772aca8323b0",
+      "nativeSha256": "19061647af454cc351742276a6e50100d9670592fee838eeeb11ae4c896ba940",
+      "nativeTraceCount": 511,
+      "addedTraceCount": 0,
+      "preservedPreloadCount": 511,
+      "removedTraceProxyCount": 0,
+      "addedNativeViaObstacleCount": 79,
+      "authenticatedShapeRefinementCount": 63,
+      "nativeBarrelCount": 398,
+      "baselinePass": true,
+      "protectedPhaseFieldsUnchanged": true,
+      "preloadBytesUnchanged": true,
+      "originalUnchanged": true,
+      "nativeUnchanged": true,
+      "idempotent": true
+    },
+    {
+      "capture": "raster-newpose-proof.json",
+      "phaseSha256": "869973eefeb828d5c4b67b6fc736557750c6e741392abbca9788032d3afabfe1",
+      "nativeSha256": "3a3e564043ae77f96345634db3af9d37b794fe66abd4bcd56182bb6b18dbcaea",
+      "nativeTraceCount": 511,
+      "addedTraceCount": 511,
+      "preservedPreloadCount": 0,
+      "removedTraceProxyCount": 6556,
+      "addedNativeViaObstacleCount": 79,
+      "authenticatedShapeRefinementCount": 63,
+      "nativeBarrelCount": 398,
+      "baselinePass": true,
+      "protectedPhaseFieldsUnchanged": true,
+      "preloadBytesUnchanged": true,
+      "originalUnchanged": true,
+      "nativeUnchanged": true,
+      "idempotent": true
+    }
+  ],
+  "productionPhaseFactory": {
+    "scope": "Production Board phase factory input verification; routing not started",
+    "snapshotCalls": 1,
+    "nativeInputUnchanged": true,
+    "nativeSnapshotUnchanged": true,
+    "original47ConnectionsUnchanged": true,
+    "original511PreloadsUnchanged": true,
+    "suppliedTraces": 511,
+    "nativeBarrels": 398,
+    "physicalLayers": 4,
+    "routingStarted": false,
+    "missingProviderFailsClosed": true
+  },
+  "verification": {
+    "focusedHelperTests": 7,
+    "focusedHelperAssertions": 42,
+    "combinedNativeInputAndPhysicalComponentTests": 23,
+    "combinedAssertions": 159,
+    "strictTypeScriptPass": true
+  },
+  "finalBoardAcceptanceRequires": "All original native terminals, timing, clearance, manufactured drills and emitted ground/power polygons must pass the complete post-render board audit."
+}

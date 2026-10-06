@@ -308,7 +308,7 @@ function traceCopper(trace: SimplifiedPcbTrace, owner: string, fixed: boolean, i
         layers: [point.layer], owner, traceId: trace.pcb_trace_id, fixed });
     } else if (point.route_type === "via") {
       const layers = point.layers ?? (fixed ? [...PHYSICAL_STACK] : []);
-      if (!finitePoint(point) || layers.length !== 4 || PHYSICAL_STACK.some((layer, i) => layers[i] !== layer) ||
+      if (!finitePoint(point) || layers.length !== 4 || new Set(layers).size !== 4 || PHYSICAL_STACK.some(layer => !layers.includes(layer)) ||
         !PHYSICAL_STACK.includes(point.from_layer as typeof PHYSICAL_STACK[number]) || !PHYSICAL_STACK.includes(point.to_layer as typeof PHYSICAL_STACK[number]) ||
         point.from_layer === point.to_layer || (!isGround && (!OUTER.has(point.from_layer) || !OUTER.has(point.to_layer))) ||
         !Number.isFinite(point.via_diameter ?? 0.3) || (point.via_diameter ?? 0.3) < (input.min_via_pad_diameter ?? input.minViaPadDiameter ?? input.minViaDiameter ?? 0.3) - EPSILON ||

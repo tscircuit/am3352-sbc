@@ -98,6 +98,7 @@ circuit.add(
     peripheralRoutes={[]}
     placementOnly={placementOnly}
     freshRouting={process.argv.includes("--fresh") ? true : undefined}
+    nativeCircuitJson={() => circuit.getCircuitJson()}
   />,
 );
 await circuit.renderUntilSettled();

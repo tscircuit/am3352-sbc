@@ -24,6 +24,9 @@ import type { AutoroutingPhaseProps, FanoutTracePath } from "@tscircuit/props";
 import { outerAutorouter } from "./design/outer-autorouter";
 import { lcdAutorouter } from "./design/lcd-router";
 import { groundPlaneAutorouter } from "./design/ground-plane-router";
+import { hydrateNativeFixedCopper } from "./design/native-fixed-copper";
+import type { SimpleRouteJson } from "@tscircuit/core";
+import type { AnyCircuitElement } from "circuit-json";
 
 // The builder supplies paths produced by ddr.circuit.tsx's bus_lanes phase.
 // New peripheral routing receives these paths as fixed copper obstacles.
@@ -34,6 +37,7 @@ export default function Board({
   solveDdr = false,
   placementOnly = false,
   freshRouting = Object.keys(savedOuterRoutes.phases).length === 0,
+  nativeCircuitJson,
 }: {
   ddrRoutes?: FanoutTracePath[];
   routePeripherals?: boolean;
@@ -41,13 +45,20 @@ export default function Board({
   solveDdr?: boolean;
   placementOnly?: boolean;
   freshRouting?: boolean;
+  /** Native snapshot from this board's current routing event. */
+  nativeCircuitJson?: () => AnyCircuitElement[];
 } = {}) {
   const cached: Record<string, FanoutTracePath[]> = freshRouting ? {} : savedOuterRoutes.phases as Record<string, FanoutTracePath[]>;
   const pairRoutes = peripheralRoutes.length ? peripheralRoutes : routePeripherals ? cached.USB_AND_TMDS ?? [] : [];
   const phaseRouting = (name: string, fallback: Pick<AutoroutingPhaseProps, "autorouter" | "algorithmFn">) =>
-    cached[name]?.length
+    cached[name]?.length || (name === "GROUND" && Object.hasOwn(cached, name))
       ? { autorouter: "fanout" as const, connections: [], pcbTracePaths: cached[name] }
       : fallback;
+  const nativeAlgorithm = (algorithm: NonNullable<AutoroutingPhaseProps["algorithmFn"]>) => async (input: SimpleRouteJson) => {
+    if (!nativeCircuitJson) throw new Error("Fresh board routing requires the current native snapshot; use the board build script.");
+    const { input: fixed } = hydrateNativeFixedCopper(input, nativeCircuitJson());
+    return algorithm(fixed);
+  };
   return (
     <board pcbStyle={{viaHoleDiameter:0.15,viaPadDiameter:0.3}}
       width={100}
@@ -91,7 +102,7 @@ export default function Board({
         }
         fanoutPourNetMap={planeNetMap}
         autorouter={ddrRoutes.length ? "fanout" : "bus_lanes"}
-        algorithmFn={ddrRoutes.length ? undefined : ddrBusLanes}
+        algorithmFn={ddrRoutes.length ? undefined : nativeAlgorithm(ddrBusLanes)}
         pcbTracePaths={
           ddrRoutes.length || !(routePeripherals || solveDdr)
             ? ddrRoutes
@@ -115,7 +126,7 @@ export default function Board({
             phaseIndex={3}
             fanoutRoutingLayers={["top", "bottom"]}
             autorouter={pairRoutes.length ? "fanout" : "bus_lanes"}
-            algorithmFn={pairRoutes.length ? undefined : peripheralBusLanes}
+            algorithmFn={pairRoutes.length ? undefined : nativeAlgorithm(peripheralBusLanes)}
             pcbTracePaths={pairRoutes.length ? pairRoutes : undefined}
             connections={pairRoutes.length ? [] : undefined}
           />
@@ -124,19 +135,19 @@ export default function Board({
             name="LCD_BUS"
             phaseIndex={4}
             fanoutRoutingLayers={["top", "bottom"]}
-            {...phaseRouting("LCD_BUS", { autorouter: "default", algorithmFn: lcdAutorouter })}
+            {...phaseRouting("LCD_BUS", { autorouter: "default", algorithmFn: nativeAlgorithm(lcdAutorouter) })}
           />
           <autoroutingphase
             name="CONTROL_AND_BOOT"
             phaseIndex={5}
             fanoutRoutingLayers={["top", "bottom"]}
-            {...phaseRouting("CONTROL_AND_BOOT", { autorouter: "default", algorithmFn: outerAutorouter })}
+            {...phaseRouting("CONTROL_AND_BOOT", { autorouter: "default", algorithmFn: nativeAlgorithm(outerAutorouter) })}
           />
-          <autoroutingphase name="POWER" phaseIndex={6} fanoutRoutingLayers={["top", "bottom"]} {...phaseRouting("POWER", { autorouter: "default", algorithmFn: outerAutorouter })} />
+          <autoroutingphase name="POWER" phaseIndex={6} fanoutRoutingLayers={["top", "bottom"]} {...phaseRouting("POWER", { autorouter: "default", algorithmFn: nativeAlgorithm(outerAutorouter) })} />
           <autoroutingphase
             name="GROUND"
             phaseIndex={7}
-            {...phaseRouting("GROUND", { autorouter: "default", algorithmFn: groundPlaneAutorouter })}
+            {...phaseRouting("GROUND", { autorouter: "default", algorithmFn: nativeAlgorithm(groundPlaneAutorouter) })}
             fanoutPourNetMap={{ inner1: ["GND"] }}
           />
           </>}
