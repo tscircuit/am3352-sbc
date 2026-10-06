@@ -25,6 +25,8 @@ export function createOuterAutorouter(input: SimpleRouteJson, options: OuterAuto
   prepared.connections = outerSignalConnections(prepared, options.groundNetIds);
   prepared.allowBlindAndBuriedVias = false;
   prepared.allowJumpers = false;
+  // Every planning stage uses the native declared copper clearance.
+  prepared.defaultObstacleMargin ??= prepared.minTraceToPadEdgeClearance ?? 0.1;
   prepared.minViaPadDiameter ??= prepared.min_via_pad_diameter ?? prepared.minViaDiameter ?? 0.3;
   prepared.minViaHoleDiameter ??= prepared.min_via_hole_diameter ?? 0.15;
   const solverOptions: NonNullable<OuterAutorouterOptions["solverOptions"]> & { immutablePreloadedTraceIds: readonly string[] } = {

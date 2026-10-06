@@ -37,6 +37,8 @@ function crossing(name = "DATA"): SimplifiedPcbTrace {
 
 test("actual four-layer public pipeline routes across a top wall while retaining inner reservations", async () => {
   const native = input();
+  native.minTraceToPadEdgeClearance = 0.1;
+  delete native.defaultObstacleMargin;
   native.obstacles.push({ type: "rect", layers: ["top"], center: { x: 0, y: 0 }, width: 0.5, height: 10, connectedTo: [] });
   const original = JSON.stringify(native);
   const router = await outerAutorouter(native, { solverOptions: { capacityDepth: 5, effort: 0.1 }, maxIterations: 100000 });
@@ -52,6 +54,7 @@ test("actual four-layer public pipeline routes across a top wall while retaining
     if (point.route_type === "via") expect(point.layers).toEqual([...PHYSICAL_STACK]);
   }
   expect(router.solver.originalSrj.layerCount).toBe(4);
+  expect(router.solver.originalSrj.defaultObstacleMargin).toBe(0.1);
   expect((router.solver.originalSrj.connections[0]! as OuterRoutingConnection).allowedLayers).toEqual(["top", "bottom"]);
   for (const reservation of native.obstacles.filter(obstacle => obstacle.isCopperPour))
     expect(router.solver.originalSrj.obstacles).toContainEqual(expect.objectContaining(reservation));
