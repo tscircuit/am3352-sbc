@@ -1,14 +1,41 @@
-import {Circuit} from "@tscircuit/core";
-import {writeFileSync} from "node:fs";
+import { Circuit } from "@tscircuit/core";
+import { createHash } from "node:crypto";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import Board from "../index.circuit";
-import {compactRoutingInput} from '../design/compact-routing-input';
-const circuit=new Circuit();circuit.schematicDisabled=true;
-circuit.on("autorouting:start", event=>{
- writeFileSync("output/ddr-current.srj.json",JSON.stringify(compactRoutingInput(event.simpleRouteJson as any)));
- writeFileSync("output/ddr-current.circuit.json",JSON.stringify(circuit.getCircuitJson()));
- console.log(`Exported ${event.simpleRouteJson.connections.length} DDR connections with current supply copper`);
- process.exit(0);
+import { compactRoutingInput } from "../design/compact-routing-input";
+
+const outputArgument = process.argv.find(argument => argument.startsWith("--output-dir="));
+const outputDirectory = resolve(outputArgument?.slice("--output-dir=".length) ?? "work/ddr-routing/native");
+mkdirSync(outputDirectory, { recursive: true });
+const circuit = new Circuit();
+circuit.schematicDisabled = true;
+circuit.on("autorouting:start", event => {
+  if (event.phaseName !== "DDR_FIRST") return;
+  if (event.simpleRouteJson.connections.length !== 47)
+    throw new Error(`Native DDR phase has ${event.simpleRouteJson.connections.length} connections; expected47`);
+  const input = compactRoutingInput(structuredClone(event.simpleRouteJson) as any);
+  const native = circuit.getCircuitJson();
+  const inputJson = JSON.stringify(input);
+  const nativeJson = JSON.stringify(native);
+  writeFileSync(resolve(outputDirectory, "input.simple-route.json"), inputJson);
+  writeFileSync(resolve(outputDirectory, "native.circuit.json"), nativeJson);
+  writeFileSync(resolve(outputDirectory, "capture.json"), JSON.stringify({
+    phase: event.phaseName,
+    inputSha256: createHash("sha256").update(inputJson).digest("hex"),
+    nativeSha256: createHash("sha256").update(nativeJson).digest("hex"),
+    connections: input.connections.length,
+    physicalLayerCount: input.layerCount,
+    suppliedTraces: input.traces?.length ?? 0,
+    suppliedVias: native.filter(element => element.type === "pcb_via").length,
+    obstacles: input.obstacles.length,
+    buses: input.buses?.map((bus: any) => ({ name: bus.name ?? bus.busId, members: bus.connectionNames.length, maxLengthSkew: bus.maxLengthSkew, allowedLayers: bus.allowedLayers })),
+    savedDdrCopperLoaded: false,
+    note: "Fresh native pre-routing input. This capture is diagnostic input, not a routed artifact.",
+  }, null, 2) + "\n");
+  console.log(JSON.stringify({ outputDirectory, connections: input.connections.length, physicalLayerCount: input.layerCount, suppliedTraces: input.traces?.length ?? 0, nativeVias: native.filter(element => element.type === "pcb_via").length }));
+  process.exit(0);
 });
-circuit.add(<Board ddrRoutes={[]} solveDdr />);
+circuit.add(<Board ddrRoutes={[]} peripheralRoutes={[]} solveDdr />);
 await circuit.renderUntilSettled();
-throw new Error("No routing input was emitted");
+throw new Error("No native DDR routing input was emitted");

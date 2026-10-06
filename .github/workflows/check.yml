@@ -1,0 +1,20 @@
+name: Check routed board
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun scripts/check-ddr-vendor.ts
+      - run: bun run check:autorouter-vendor
+      - run: bun run test:routing
+      - run: bun run build --no-images
+      - run: bun run audit:routed-board output/board.circuit.json

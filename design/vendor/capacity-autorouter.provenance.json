@@ -1,0 +1,12 @@
+{
+  "repository": "https://github.com/tscircuit/tscircuit-autorouter",
+  "sourceCommit": "243b2a5e3a2c3ce3b875e8cd00f9b8b003156326",
+  "pullRequest": "https://github.com/tscircuit/tscircuit-autorouter/pull/2881",
+  "packageVersion": "0.0.958",
+  "buildCommand": "bun run build && npm pack --ignore-scripts",
+  "packageFile": "tscircuit-capacity-autorouter-0.0.958-243b2a5e.tgz",
+  "packageSha256": "4cdb3983d07252467aad8bab33b66e40aeb97572dd22b2af0f2dcb5aabb9e3de",
+  "bundleSha256": "7545aeb26fd0661ea57fa9d4e56abe7b46a91b9fc4bf05a889bcd63c8c726a34",
+  "declarationsSha256": "b5465cf6defa1b4c02712923a7cddc19bcd6f9e339c3f4431e378d45645f4dc9",
+  "purpose": "Native four-layer outer routing with inner ground reservations, physical endpoint ownership and manufactured via clearance"
+}

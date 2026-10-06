@@ -1,0 +1,9 @@
+{
+  "hardware": "AM3352 single-board computer",
+  "source": "https://tscircuit.com/astra/am3352-sbc",
+  "sourceVersion": "0.1.19",
+  "cloneCommand": "tscircuit clone https://tscircuit.com/astra/am3352-sbc",
+  "sourceImportCommit": "837245bceb6ac898fd5451507d6b2b8024095fe7",
+  "repository": "https://github.com/tscircuit/am3552-sbc",
+  "repositoryNameNote": "The repository name follows the requested am3552-sbc spelling; the processor and circuit are AM3352."
+}

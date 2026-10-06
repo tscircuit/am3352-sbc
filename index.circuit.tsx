@@ -1,5 +1,3 @@
-import savedControlRoutes from "./design/control-routes.json";
-import { replayControlRoutes } from "./design/control-route-replay";
 import { RemainingRoutes } from "./design/remaining-routes";
 import { peripheralBusLanes } from "./design/peripheral-router";
 import { ddrBusLanes } from "./design/bus-lanes";
@@ -7,7 +5,7 @@ import { PowerPlanes, planeNetMap } from "./design/power-planes";
 import {ramPlacement} from "./design/ram-placement";
 import { PowerEscapes } from "./design/power-escapes";
 import savedDdrRoutes from "./design/ddr-routes.json";
-import savedPeripheralRoutes from "./design/peripheral-routes.json";
+import savedOuterRoutes from "./design/accepted-outer-routes.json";
 import { PeripheralRoutingContext } from "./design/nets";
 import { AM3352 } from "./components/am3352";
 import { W631GG6MB_12 } from "./components/ddr3";
@@ -22,28 +20,38 @@ import { PdPower } from "./design/pd-power";
 import { UsbPorts } from "./design/usb";
 import { Display } from "./design/display";
 import { Indicators } from "./design/indicators";
-import type { FanoutTracePath } from "@tscircuit/props";
+import type { AutoroutingPhaseProps, FanoutTracePath } from "@tscircuit/props";
+import { outerAutorouter } from "./design/outer-autorouter";
 
 // The builder supplies paths produced by ddr.circuit.tsx's bus_lanes phase.
 // New peripheral routing receives these paths as fixed copper obstacles.
 export default function Board({
   ddrRoutes = savedDdrRoutes as FanoutTracePath[],
-  routePeripherals = false,
-  peripheralRoutes = savedPeripheralRoutes as FanoutTracePath[],
+  routePeripherals = true,
+  peripheralRoutes = [],
   solveDdr = false,
   placementOnly = false,
+  freshRouting = Object.keys(savedOuterRoutes.phases).length === 0,
 }: {
   ddrRoutes?: FanoutTracePath[];
   routePeripherals?: boolean;
   peripheralRoutes?: FanoutTracePath[];
   solveDdr?: boolean;
   placementOnly?: boolean;
+  freshRouting?: boolean;
 } = {}) {
+  const cached: Record<string, FanoutTracePath[]> = freshRouting ? {} : savedOuterRoutes.phases as Record<string, FanoutTracePath[]>;
+  const pairRoutes = peripheralRoutes.length ? peripheralRoutes : routePeripherals ? cached.USB_AND_TMDS ?? [] : [];
+  const phaseRouting = (name: string, fallback: Pick<AutoroutingPhaseProps, "autorouter" | "algorithmFn">) =>
+    cached[name]?.length
+      ? { autorouter: "fanout" as const, connections: [], pcbTracePaths: cached[name] }
+      : fallback;
   return (
     <board pcbStyle={{viaHoleDiameter:0.15,viaPadDiameter:0.3}}
       width={100}
       height={80}
       layers={4}
+      allowBlindAndBuriedVias={false}
       thickness={1.6}
       minTraceWidth={0.1}
       minTraceToPadEdgeClearance={0.1}
@@ -51,11 +59,11 @@ export default function Board({
       minViaHoleDiameter={0.15}
       autorouterEffortLevel="10x"
       routingDisabled={placementOnly}
-      routeRemaining={false}
+      routeRemaining={!placementOnly && (routePeripherals || solveDdr)}
       schematicDisabled
       schAutoLayoutEnabled={false}
       schTraceAutoLabelEnabled
-      title="AM3352 SBC / DDR-first engineering draft"
+      title="AM3352 SBC / outer signals, inner ground"
       solderMaskColor="green"
     >
       <AM3352 name="U1" noSchematicRepresentation pcbX={0} pcbY={0} />
@@ -75,6 +83,7 @@ export default function Board({
       <autoroutingphase
         name="DDR_FIRST"
         phaseIndex={1}
+        fanoutRoutingLayers={["top", "bottom"]}
         connections={
           ddrRoutes.length || !(routePeripherals || solveDdr) ? [] : undefined
         }
@@ -87,7 +96,7 @@ export default function Board({
             : undefined
         }
       />
-      <PeripheralRoutingContext.Provider value={routePeripherals ? true : peripheralRoutes.length ? [3] : false}>
+      <PeripheralRoutingContext.Provider value={routePeripherals ? true : pairRoutes.length ? [3] : false}>
         <ProcessorSupport />
         <PdPower />
         <UsbPorts />
@@ -95,36 +104,38 @@ export default function Board({
         <Indicators />
       </PeripheralRoutingContext.Provider>
       <PowerPlanes />
-      <RemainingRoutes />
-      <autoroutingphase name="CONTROL_REPLAY" phaseIndex={2} connections={[...new Set(savedControlRoutes.map(r=>r.from))]} autorouter="default" algorithmFn={replayControlRoutes} />
+      <RemainingRoutes routeFresh routingEnabled={routePeripherals} />
       <PowerEscapes />
-      {(routePeripherals || peripheralRoutes.length > 0) && (
+      {(routePeripherals || pairRoutes.length > 0) && (
         <>
           <autoroutingphase
             name="USB_AND_TMDS"
             phaseIndex={3}
-            autorouter={peripheralRoutes.length ? "fanout" : "bus_lanes"}
-            algorithmFn={peripheralRoutes.length ? undefined : peripheralBusLanes}
-            pcbTracePaths={peripheralRoutes.length ? peripheralRoutes : undefined}
-            connections={peripheralRoutes.length ? [] : undefined}
+            fanoutRoutingLayers={["top", "bottom"]}
+            autorouter={pairRoutes.length ? "fanout" : "bus_lanes"}
+            algorithmFn={pairRoutes.length ? undefined : peripheralBusLanes}
+            pcbTracePaths={pairRoutes.length ? pairRoutes : undefined}
+            connections={pairRoutes.length ? [] : undefined}
           />
           {routePeripherals && <>
           <autoroutingphase
             name="LCD_BUS"
             phaseIndex={4}
-            autorouter="default"
+            fanoutRoutingLayers={["top", "bottom"]}
+            {...phaseRouting("LCD_BUS", { autorouter: "default", algorithmFn: outerAutorouter })}
           />
           <autoroutingphase
             name="CONTROL_AND_BOOT"
             phaseIndex={5}
-            autorouter="default"
+            fanoutRoutingLayers={["top", "bottom"]}
+            {...phaseRouting("CONTROL_AND_BOOT", { autorouter: "default", algorithmFn: outerAutorouter })}
           />
-          <autoroutingphase name="POWER" phaseIndex={6} autorouter="default" />
+          <autoroutingphase name="POWER" phaseIndex={6} fanoutRoutingLayers={["top", "bottom"]} {...phaseRouting("POWER", { autorouter: "default", algorithmFn: outerAutorouter })} />
           <autoroutingphase
             name="GROUND"
             phaseIndex={7}
-            autorouter="fanout"
-            fanoutPourNetMap={{ bottom: ["GND"] }}
+            {...phaseRouting("GROUND", { autorouter: "fanout" })}
+            fanoutPourNetMap={{ inner1: ["GND"] }}
           />
           </>}
         </>
@@ -135,7 +146,7 @@ export default function Board({
         )),
       )}
       <silkscreentext
-        text="AM3352 / DDR FIRST"
+        text="AM3352 / TOP-BOTTOM SIGNALS"
         pcbX={0}
         pcbY={-38}
         fontSize={1}

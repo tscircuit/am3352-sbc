@@ -1,21 +1,23 @@
 {
   "dependencies": {
     "@resvg/resvg-js": "2.6.2",
-    "@tscircuit/checks": "0.0.239",
+    "@tscircuit/checks": "0.0.240",
     "@tscircuit/circuit-json-util": "0.0.119",
-    "@tscircuit/core": "0.0.2079",
-    "@tscircuit/props": "0.0.685",
+    "@tscircuit/core": "0.0.2095",
+    "@tscircuit/fanout-solver": "0.0.78",
+    "@tscircuit/props": "0.0.689",
     "@types/bun": "1.4.2",
     "@types/react": "19.3.0",
-    "bun": "1.4.2",
     "circuit-json": "0.0.515",
+    "circuit-json-to-connectivity-map": "0.0.33",
     "circuit-to-svg": "0.0.438",
     "react": "19.2.4",
     "three": "0.179.1",
-    "tscircuit": "0.0.2744",
-    "typescript": "5.9.3"
+    "tscircuit": "0.0.2745",
+    "typescript": "5.9.3",
+    "@tscircuit/capacity-autorouter": "file:design/vendor/tscircuit-capacity-autorouter-0.0.958-243b2a5e.tgz"
   },
-  "name": "@tsci/astra.am3352-sbc",
+  "name": "@tsci/tscircuit.am3552-sbc",
   "version": "0.1.19",
   "private": true,
   "type": "module",
@@ -39,8 +41,13 @@
     "route:ddr-compliant": "bun scripts/check-solver-release.ts && bun scripts/export-ddr-input.tsx && bun scripts/route-compliant-ddr.ts",
     "test:ddr-constraints": "bun test tests/ddr-compliance.test.ts",
     "check:solver-release": "bun scripts/check-solver-release.ts",
+    "route:ddr-outer": "bun scripts/check-ddr-vendor.ts && bun scripts/export-ddr-input.tsx && bun scripts/route-outer-ddr.ts --write-routes=design/ddr-routes.json",
+    "audit:routed-board": "bun scripts/audit-routed-board.ts",
+    "cache:routing": "bun scripts/cache-outer-routes.ts",
+    "test:routing": "bun test tests",
     "dev": "tsci dev",
-    "start": "tsci dev"
+    "start": "tsci dev",
+    "check:autorouter-vendor": "bun scripts/check-autorouter-vendor.ts"
   },
   "devDependencies": {
     "@tscircuit/bus-lanes-solver": "https://jscdn.tscircuit.com/@tscircuit/bus-lanes-solver/0.0.19.tgz",

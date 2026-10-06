@@ -7,7 +7,7 @@ import { sharedNets } from "./ddr-netlist";
 export const DDR_RULES = {
   source: "https://www.ti.com/lit/ds/symlink/am3352.pdf",
   revision: "SPRS717L",
-  signalLayers: ["inner1", "inner2"] as const,
+  signalLayers: ["top", "bottom"] as const,
   byteSkewMm: 0.635,
   addressClockSkewMm: 0.635, // 25 mil A1+A2 skew, conservative for one load
   pairSkewMm: 0.127,
