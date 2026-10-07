@@ -46,3 +46,14 @@ phases. The full build deliberately rejects the inherited inner-layer DDR paths.
 Failed and partial attempts stay in `work/`; only a complete audited board can
 replace the published routing output. `bun run cache:routing` records a
 successful build for native phase replay.
+
+PCB visual regression tests replay the saved DDR checkpoint on all four copper
+layers. `bun run test:pcb` compares the rendered images with the committed
+baselines. After changing placement or accepted routes, run
+`bun run snapshot:pcb`, inspect the PNGs under `tests/__snapshots__/`, and commit
+both the SVG and PNG files. CI uploads magenta-highlighted diff images when a
+snapshot changes. The initial baselines show the inherited checkpoint, whose DDR still fails
+Top/Bottom routing acceptance. Visual snapshots document geometry; DDR routing
+acceptance and complete-board signoff remain mandatory separate checks.
+See [the PCB snapshot gallery](docs/pcb-snapshots/README.md) for the images and
+the DDR regeneration result.

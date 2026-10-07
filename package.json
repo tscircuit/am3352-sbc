@@ -48,10 +48,15 @@
     "dev": "tsci dev",
     "start": "tsci dev",
     "check:autorouter-vendor": "bun scripts/check-autorouter-vendor.ts",
-    "check:fanout-vendor": "bun scripts/check-fanout-vendor.ts"
+    "check:fanout-vendor": "bun scripts/check-fanout-vendor.ts",
+    "test:pcb": "bun test tests/pcb-snapshot.test.tsx",
+    "snapshot:pcb": "BUN_UPDATE_SNAPSHOTS=1 bun test tests/pcb-snapshot.test.tsx",
+    "snapshot:pcb-diff": "bun run test:pcb && bun scripts/render-pcb-comparison.ts"
   },
   "devDependencies": {
     "@tscircuit/bus-lanes-solver": "https://jscdn.tscircuit.com/@tscircuit/bus-lanes-solver/0.0.19.tgz",
+    "@tscircuit/image-utils": "0.0.8",
+    "bun-match-svg": "0.0.17",
     "circuit-json-to-pnp-csv": "0.0.18"
   }
 }

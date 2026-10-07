@@ -1,0 +1,82 @@
+{
+  "status": "blocked",
+  "nativeFixedBaselineIssues": 0,
+  "savedDdrChanged": false,
+  "attempts": [
+    {
+      "strategy": "Standard native paired-prefix",
+      "elapsedMs": 2663709,
+      "sourceCommit": "aa214adb66403c6be14acd5fea29432702fb97f5",
+      "inputSha256": "4452500fafb93463146985690846316ca4d2675696905d6ee7aeedf78e10c972",
+      "nativeCircuitSha256": "12afb854c9899b9f96826424aa73e3a0455a58aec420893bb5faebe470365e0e",
+      "solver": {
+        "solved": false,
+        "failed": true,
+        "phase": "failed",
+        "iterations": 3499586,
+        "error": "Negotiated lane search exhausted without a complete route",
+        "failureCode": "no_planar_route"
+      },
+      "acceptancePassed": false,
+      "routesPromoted": false,
+      "solverOptions": {
+        "maxSearchIterations": 2000000,
+        "maxLaneIterations": 1000000,
+        "strictSurfacePairPrefixes": true,
+        "maxTimedSurfaceVias": 4
+      }
+    },
+    {
+      "strategy": "Alternative ordering",
+      "elapsedMs": 1800067,
+      "sourceCommit": "aa214adb66403c6be14acd5fea29432702fb97f5",
+      "inputSha256": "49578fcf0cb073b68cce3d0c361e01eba5fe1bb2553ffad15e38d9d9ec2e3f3d",
+      "nativeCircuitSha256": "12afb854c9899b9f96826424aa73e3a0455a58aec420893bb5faebe470365e0e",
+      "solver": {
+        "solved": false,
+        "failed": false,
+        "phase": "lanes_route",
+        "iterations": 2616544,
+        "error": null,
+        "failureCode": "search_budget_exhausted"
+      },
+      "acceptancePassed": false,
+      "routesPromoted": false,
+      "solverOptions": {
+        "maxSearchIterations": 2000000,
+        "maxLaneIterations": 1000000,
+        "strictSurfacePairPrefixes": false,
+        "maxTimedSurfaceVias": 4
+      }
+    },
+    {
+      "strategy": "Bounded routing window",
+      "elapsedMs": 1200291,
+      "sourceCommit": "aa214adb66403c6be14acd5fea29432702fb97f5",
+      "inputSha256": "49578fcf0cb073b68cce3d0c361e01eba5fe1bb2553ffad15e38d9d9ec2e3f3d",
+      "nativeCircuitSha256": "12afb854c9899b9f96826424aa73e3a0455a58aec420893bb5faebe470365e0e",
+      "solver": {
+        "solved": false,
+        "failed": false,
+        "phase": "route_shared_layers",
+        "iterations": 1610298,
+        "error": null,
+        "failureCode": "search_budget_exhausted"
+      },
+      "acceptancePassed": false,
+      "routesPromoted": false,
+      "solverOptions": {
+        "searchBounds": {
+          "minX": -24.1,
+          "maxX": 11.600000000000001,
+          "minY": -40,
+          "maxY": 4.4
+        },
+        "maxSearchIterations": 2000000,
+        "maxLaneIterations": 1000000,
+        "strictSurfacePairPrefixes": false,
+        "maxTimedSurfaceVias": 4
+      }
+    }
+  ]
+}
