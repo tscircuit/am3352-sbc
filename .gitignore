@@ -2,3 +2,6 @@ node_modules/
 .tsci/
 .cache/
 work/
+
+# Visual mismatch diagnostics are uploaded by CI, not committed.
+tests/__snapshots__/*.diff.png

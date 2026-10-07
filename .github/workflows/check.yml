@@ -24,6 +24,12 @@ jobs:
       - run: bun run check:autorouter-vendor
       - run: bun run check:fanout-vendor
       - run: bun run test:routing
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: pcb-snapshot-diffs
+          path: tests/__snapshots__/*.diff.png
+          if-no-files-found: ignore
       - run: bun run build:placement
   full-board-signoff:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_board_signoff }}
