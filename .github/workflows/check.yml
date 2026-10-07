@@ -1,8 +1,15 @@
-name: Check routed board
+name: Check partial routing
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      full_board_signoff:
+        description: Build and audit the complete routed board
+        required: false
+        default: false
+        type: boolean
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -17,5 +24,16 @@ jobs:
       - run: bun run check:autorouter-vendor
       - run: bun run check:fanout-vendor
       - run: bun run test:routing
+      - run: bun run build:placement
+  full-board-signoff:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_board_signoff }}
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
       - run: bun run build --no-images
       - run: bun run audit:routed-board output/board.circuit.json
