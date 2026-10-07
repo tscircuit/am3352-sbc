@@ -279,6 +279,7 @@ export declare class BusLanesSolver extends BaseSolver {
 	phase: string;
 	failureCode: string | null;
 	traces: Trace[];
+	private minimumOriginalTuningCandidates;
 	private widths;
 	private fixed;
 	private orders;
@@ -302,7 +303,7 @@ export declare class BusLanesSolver extends BaseSolver {
 	constructor(input: SimpleRouteJson, options?: SolverOptions, terminalLayers?: ReadonlyMap<string, string[]>);
 	/** Rematch freshly computed carrier geometry after a pipeline refinement.
 	 * The ordinary output validator still checks every endpoint and copper edge. */
-	static forRefinement(input: SimpleRouteJson, traces: Trace[], options?: SolverOptions): BusLanesSolver;
+	static forRefinement(input: SimpleRouteJson, traces: Trace[], options?: SolverOptions, minimumOriginalTuningCandidates?: number): BusLanesSolver;
 	/** Accept already matched candidates through the ordinary output validator. */
 	static forValidation(input: SimpleRouteJson, traces: Trace[], options?: SolverOptions): BusLanesSolver;
 	getConstructorParams(): (SimpleRouteJson | SolverOptions)[];
@@ -418,6 +419,7 @@ export declare class BusLanesPipelineSolver extends BaseSolver {
 	tryFinalAcceptance(): void;
 	private childOptions;
 	private finishPackageCoupling;
+	private matchPackageApproaches;
 	private prepare;
 	_step(): void;
 	visualize(): GraphicsObject;

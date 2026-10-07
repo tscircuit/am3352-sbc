@@ -126,13 +126,23 @@ test("requires captured native via pads and barrel layers to match the original 
   }
 });
 
-test("rejects copper self-contact bypassing a candidate route, including an untimed signal", () => {
-  const value = fixture();
-  value.traces[0].route = [wire(-2,0),wire(0,0),wire(0,1),wire(-1,1),wire(-1,-1),wire(1,-1),wire(1,0),wire(2,0)];
-  const report = auditDdrPhysicalGeometry(value.input,value.traces);
-  expect(report.pass).toBe(false);
-  expect(report.issues.some(issue => issue.code === "self-short")).toBe(true);
-});
+const selfContactRoutes = {
+  crossing: [[-2,0],[0,0],[0,1],[-1,1],[-1,-1],[1,-1],[1,0],[2,0]],
+  touching: [[-2,0],[0,0],[0,1],[-1,1],[-1,0.1],[1,0.1],[1,0],[2,0]],
+  retracing: [[-2,0],[0,0],[0,0],[-1,0],[2,0]],
+};
+for (const layer of ["top","bottom"])
+  for (const [kind,points] of Object.entries(selfContactRoutes))
+    test(`rejects ${layer} ${kind} copper in the approval audit, including an untimed signal`, () => {
+      const value = fixture();
+      value.input.connections[0].pointsToConnect = [wire(-2,0,layer),wire(2,0,layer)];
+      value.traces[0].route = points.map(([x,y]) => wire(x,y,layer));
+      const before = structuredClone(value);
+      const report = auditDdrPhysicalGeometry(value.input,value.traces);
+      expect(report.pass).toBe(false);
+      expect(report.issues.some(issue => issue.code === "self-short")).toBe(true);
+      expect(value).toEqual(before);
+    });
 
 test("accepts smooth sampled curves and rejects a sharp joined turn hidden behind repeated points", () => {
   const smooth = fixture();

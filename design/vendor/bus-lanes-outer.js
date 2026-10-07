@@ -34,9 +34,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// node_modules/svgson/dist/svgson.umd.js
+// ../bus-lanes-solver/node_modules/svgson/dist/svgson.umd.js
 var require_svgson_umd = __commonJS({
-  "node_modules/svgson/dist/svgson.umd.js"(exports, module) {
+  "../bus-lanes-solver/node_modules/svgson/dist/svgson.umd.js"(exports, module) {
     "use strict";
     (function(global2, factory) {
       typeof exports === "object" && typeof module !== "undefined" ? module.exports = factory() : typeof define === "function" && define.amd ? define(factory) : (global2 = typeof globalThis !== "undefined" ? globalThis : global2 || self, global2.svgson = factory());
@@ -794,9 +794,9 @@ var require_svgson_umd = __commonJS({
   }
 });
 
-// node_modules/object-hash/dist/object_hash.js
+// ../bus-lanes-solver/node_modules/object-hash/dist/object_hash.js
 var require_object_hash = __commonJS({
-  "node_modules/object-hash/dist/object_hash.js"(exports, module) {
+  "../bus-lanes-solver/node_modules/object-hash/dist/object_hash.js"(exports, module) {
     "use strict";
     !(function(e2) {
       var t48;
@@ -1585,9 +1585,9 @@ var require_object_hash = __commonJS({
   }
 });
 
-// node_modules/heap/lib/heap.js
+// ../bus-lanes-solver/node_modules/heap/lib/heap.js
 var require_heap = __commonJS({
-  "node_modules/heap/lib/heap.js"(exports, module) {
+  "../bus-lanes-solver/node_modules/heap/lib/heap.js"(exports, module) {
     "use strict";
     (function() {
       var Heap2, defaultCmp, floor, heapify, heappop, heappush, heappushpop, heapreplace, insort, min, nlargest, nsmallest, updateItem, _siftdown, _siftup;
@@ -1861,9 +1861,9 @@ var require_heap = __commonJS({
   }
 });
 
-// node_modules/heap/index.js
+// ../bus-lanes-solver/node_modules/heap/index.js
 var require_heap2 = __commonJS({
-  "node_modules/heap/index.js"(exports, module) {
+  "../bus-lanes-solver/node_modules/heap/index.js"(exports, module) {
     "use strict";
     module.exports = require_heap();
   }
@@ -2626,7 +2626,7 @@ function tuneLengths(input, traces, targets) {
     const connection = input.connections.find(
       (c2) => c2.name === t48.connection_name
     );
-    const terminalViaCopperIsClear = t48.coupledSection ? (_path) => true : createTerminalViaClearanceChecker(input, t48);
+    const terminalViaCopperIsClear = createTerminalViaClearanceChecker(input, t48);
     const width = t48.route[0].width;
     const fixedLength = fixedRouteLength(input, connection.name);
     const delta = targets.get(connection.name) - length(t48.route) - fixedLength;
@@ -2738,12 +2738,18 @@ function tuneLengths(input, traces, targets) {
   return result;
 }
 function tuningPathIsSelfClear(path, required) {
+  path = path.filter(
+    (point5, index2) => !index2 || distance(point5, path[index2 - 1]) > 1e-12
+  );
   const cumulative = [0];
   const turning = [0];
   const unsafeBends = [0];
   for (let i2 = 1; i2 < path.length - 1; i2++) {
     const a2 = { x: path[i2].x - path[i2 - 1].x, y: path[i2].y - path[i2 - 1].y };
     const b2 = { x: path[i2 + 1].x - path[i2].x, y: path[i2 + 1].y - path[i2].y };
+    const scale2 = Math.hypot(a2.x, a2.y) * Math.hypot(b2.x, b2.y);
+    if (a2.x * b2.x + a2.y * b2.y < 0 && Math.abs(a2.x * b2.y - a2.y * b2.x) <= 1e-9 * scale2)
+      return false;
     const angle = Math.abs(
       Math.atan2(a2.x * b2.y - a2.y * b2.x, a2.x * b2.x + a2.y * b2.y)
     );
@@ -2993,6 +2999,51 @@ function sharedPairSpacingReports(input, traces) {
       matched: !required || sharedCopperMm.every((n2) => n2 > 0) && max + maxSamplingErrorMm <= maxAllowedEdgeGapMm
     };
   });
+}
+
+// lib/terminal-via-tuning-segment.ts
+function terminalViaTuningSegment(input, trace, index2, bank) {
+  const originalA = trace.route[index2], originalB = trace.route[index2 + 1], a2 = bank?.start ?? originalA, b2 = bank?.end ?? originalB, span = distance(a2, b2), width = trace.route[0].width;
+  if (span < 0.01) return null;
+  const vias = (input.traces ?? []).filter((fixed) => fixed.connection_name === trace.connection_name).flatMap(
+    (fixed) => fixed.route.filter((point5) => point5.route_type === "via")
+  );
+  const ux2 = (b2.x - a2.x) / span, uy2 = (b2.y - a2.y) / span;
+  let firstViaLead = 0, lastViaLead = 0;
+  for (const via of vias) {
+    const reach = ((via.via_diameter ?? input.minViaPadDiameter ?? 0.6) + width) / 2 + 1e-6;
+    const firstInside = distance(a2, via) <= reach, lastInside = distance(b2, via) <= reach;
+    if (firstInside && lastInside) return null;
+    if (!firstInside && !lastInside && pointSegmentDistanceToPoints(via, a2, b2) <= reach)
+      return null;
+    const exitDistance = (point5, dx2, dy2) => {
+      const x2 = point5.x - via.x, y2 = point5.y - via.y, projection = x2 * dx2 + y2 * dy2;
+      return -projection + Math.sqrt(projection * projection + reach * reach - x2 * x2 - y2 * y2);
+    };
+    if (firstInside)
+      firstViaLead = Math.max(firstViaLead, exitDistance(a2, ux2, uy2));
+    if (lastInside)
+      lastViaLead = Math.max(lastViaLead, exitDistance(b2, -ux2, -uy2));
+  }
+  const turns = (p2, q2, r2) => {
+    const first = distance(p2, q2), second = distance(q2, r2);
+    return first > 1e-8 && second > 1e-8 && ((q2.x - p2.x) * (r2.x - q2.x) + (q2.y - p2.y) * (r2.y - q2.y)) / (first * second) < 1 - 1e-9;
+  };
+  const cornerLead = width / 4, firstLead = Math.max(
+    firstViaLead,
+    distance(a2, originalA) < 1e-8 && index2 > 0 && turns(trace.route[index2 - 1], a2, b2) ? cornerLead : 0
+  ), lastLead = Math.max(
+    lastViaLead,
+    distance(b2, originalB) < 1e-8 && index2 + 2 < trace.route.length && turns(a2, b2, trace.route[index2 + 2]) ? cornerLead : 0
+  );
+  if (span - firstLead - lastLead < 0.01) return null;
+  return {
+    a: firstLead ? { x: a2.x + ux2 * firstLead, y: a2.y + uy2 * firstLead } : a2,
+    b: lastLead ? { x: b2.x - ux2 * lastLead, y: b2.y - uy2 * lastLead } : b2,
+    span: span - firstLead - lastLead,
+    firstLead,
+    lastLead
+  };
 }
 
 // lib/folded-tuning.ts
@@ -3271,7 +3322,7 @@ var IncompleteLengthTuningError = class extends Error {
   unfinished;
 };
 function tuneSmoothLengths(input, traces, targets, options = {}) {
-  let attempted = 0;
+  const attempted = [0, 0];
   let allowFolded = false;
   const fixed = fixedCopper(input);
   function* candidates(t48, scene, fractionOfDeficit = 1) {
@@ -3311,111 +3362,124 @@ function tuneSmoothLengths(input, traces, targets, options = {}) {
       return { i: i2, span, openSides };
     }).sort((a2, b2) => b2.openSides - a2.openSides || b2.span - a2.span);
     const folded = allowFolded;
-    let attemptedFolded = 0;
-    for (const compact of folded ? [false] : [false, true])
-      for (const { i: i2 } of segments) {
-        if (t48.curvedSegments?.includes(i2 + 1)) continue;
-        if (t48.coupledSection && i2 >= t48.coupledSection[0] && i2 < t48.coupledSection[1])
-          continue;
-        const a2 = t48.route[i2], b2 = t48.route[i2 + 1], span = distance(a2, b2);
-        if (span < 0.01) continue;
-        const ux2 = (b2.x - a2.x) / span, uy2 = (b2.y - a2.y) / span;
-        const maximumTeeth = Math.floor(span * 0.9 / pitch);
-        const preferredTeeth = Math.min(
-          maximumTeeth,
-          options.packMeanders ? maximumTeeth : Math.max(2, Math.ceil(delta / (12 * width)))
-        );
-        const counts = Array.from(
-          { length: maximumTeeth },
-          (_2, i3) => i3 + 1
-        ).sort(
-          (a3, b3) => Math.abs(a3 - preferredTeeth) - Math.abs(b3 - preferredTeeth) || b3 - a3
-        );
-        function* placements() {
-          if (folded) {
-            for (const teeth of [1, 2, 3])
-              for (const fraction of [0.9, 0.65, 0.4])
-                for (const position2 of [0.5, 0, 1])
-                  yield { teeth, fraction, position: position2 };
-            return;
-          }
-          for (const teeth of counts) {
-            if (!compact) {
-              for (const fraction of [0.9, 0.65, 0.4])
-                for (const phase of [0.5, 0, 1])
-                  yield {
-                    teeth,
-                    fraction,
-                    position: 0.05 + 0.9 * phase
-                  };
-            } else {
-              for (const fraction of [0.9, 0.65, 0.4])
-                for (const position2 of [0, 1])
-                  yield { teeth, fraction, position: position2 };
-              for (const fraction of [0.25, 0.15, 0.1])
-                for (const position2 of [0.5, 0.05, 0.95, 0, 1])
-                  yield { teeth, fraction, position: position2 };
+    tuningMode: for (const protectTerminal of [false, true]) {
+      let attemptedFolded = 0;
+      for (const compact of folded ? [false] : [false, true])
+        for (const { i: i2 } of segments) {
+          if (t48.curvedSegments?.includes(i2 + 1)) continue;
+          if (t48.coupledSection && i2 >= t48.coupledSection[0] && i2 < t48.coupledSection[1])
+            continue;
+          const a2 = t48.route[i2], b2 = t48.route[i2 + 1], span = distance(a2, b2);
+          if (span < 0.01) continue;
+          const ux2 = (b2.x - a2.x) / span, uy2 = (b2.y - a2.y) / span;
+          const maximumTeeth = protectTerminal ? Math.max(1, Math.floor(span * 0.9 / pitch)) : Math.floor(span * 0.9 / pitch);
+          const preferredTeeth = Math.min(
+            maximumTeeth,
+            options.packMeanders ? maximumTeeth : Math.max(2, Math.ceil(delta / (12 * width)))
+          );
+          const counts = Array.from(
+            { length: maximumTeeth },
+            (_2, i3) => i3 + 1
+          ).sort(
+            (a3, b3) => Math.abs(a3 - preferredTeeth) - Math.abs(b3 - preferredTeeth) || b3 - a3
+          );
+          function* placements() {
+            if (folded) {
+              for (const teeth of [1, 2, 3])
+                for (const fraction of [0.9, 0.65, 0.4])
+                  for (const position2 of [0.5, 0, 1])
+                    yield { teeth, fraction, position: position2 };
+              return;
+            }
+            for (const teeth of counts) {
+              if (!compact) {
+                for (const fraction of [0.9, 0.65, 0.4])
+                  for (const phase of [0.5, 0, 1])
+                    yield {
+                      teeth,
+                      fraction,
+                      position: 0.05 + 0.9 * phase
+                    };
+              } else {
+                for (const fraction of [0.9, 0.65, 0.4])
+                  for (const position2 of [0, 1])
+                    yield { teeth, fraction, position: position2 };
+                for (const fraction of [0.25, 0.15, 0.1])
+                  for (const position2 of [0.5, 0.05, 0.95, 0, 1])
+                    yield { teeth, fraction, position: position2 };
+              }
             }
           }
-        }
-        for (const { teeth, fraction, position: position2 } of placements()) {
-          const w2 = span * fraction / teeth;
-          if (!folded && w2 < pitch) continue;
-          for (const side of [1, -1])
-            for (const createLobes of folded ? [foldedTuningLobes] : [roundedTuningLobes, smoothTuningLobes]) {
-              const offset = span * (1 - fraction) * position2;
-              const start = { x: a2.x + ux2 * offset, y: a2.y + uy2 * offset };
-              const end = {
-                x: start.x + ux2 * span * fraction,
-                y: start.y + uy2 * span * fraction
-              };
-              if (folded) {
-                if (++attemptedFolded > Math.min(1024, options.maxCandidates ?? 1024))
-                  return;
+          for (const { teeth, fraction, position: position2 } of placements()) {
+            const w2 = span * fraction / teeth;
+            for (const side of [1, -1])
+              for (const createLobes of folded ? [foldedTuningLobes] : [roundedTuningLobes, smoothTuningLobes]) {
+                if (!folded && w2 < pitch && (!protectTerminal || createLobes !== smoothTuningLobes))
+                  continue;
+                const offset = span * (1 - fraction) * position2;
+                const start = { x: a2.x + ux2 * offset, y: a2.y + uy2 * offset };
+                const end = {
+                  x: start.x + ux2 * span * fraction,
+                  y: start.y + uy2 * span * fraction
+                };
+                const usable = protectTerminal ? terminalViaTuningSegment(input, t48, i2, { start, end }) : { a: start, b: end, firstLead: 0, lastLead: 0 };
+                if (!usable) continue;
+                if (protectTerminal && !usable.firstLead && !usable.lastLead && w2 >= pitch)
+                  continue;
+                if (folded) {
+                  if (++attemptedFolded > Math.min(1024, options.maxCandidates ?? 1024))
+                    continue tuningMode;
+                }
+                if (!folded && ++attempted[Number(protectTerminal)] > (options.maxCandidates ?? Infinity))
+                  continue tuningMode;
+                const lobes = createLobes(
+                  usable.a,
+                  usable.b,
+                  delta,
+                  teeth,
+                  side,
+                  Math.max(width * 1.2, clearance)
+                );
+                if (!lobes || regions.length && !regions.some(
+                  (r2) => lobes.every((p2) => pointInBox(p2, r2.copper))
+                ))
+                  continue;
+                const bump = [
+                  a2,
+                  ...usable.firstLead ? [start, usable.a] : [],
+                  ...lobes,
+                  ...usable.lastLead ? [usable.b, end] : [],
+                  b2
+                ];
+                if (!scene.pathVisible(bump)) continue;
+                const next = (t48.coupledSection ? (points) => points : simplify)([...t48.route.slice(0, i2), ...bump, ...t48.route.slice(i2 + 2)]);
+                if (Math.abs(
+                  length(next) + fixedLength - (currentLength + delta)
+                ) > 1e-6)
+                  continue;
+                if (!options.allowProvisionalLandConflicts && !terminalViaCopperIsClear(next) || !tuningPathIsSelfClear(next, returnSpacing))
+                  continue;
+                const candidate = {
+                  ...t48,
+                  coupledSection: t48.coupledSection ? t48.coupledSection.map(
+                    (v2) => v2 > i2 ? v2 + next.length - t48.route.length : v2
+                  ) : void 0,
+                  curvedSegments: next.slice(1).flatMap((p2, i3) => {
+                    const dx2 = Math.abs(p2.x - next[i3].x), dy2 = Math.abs(p2.y - next[i3].y);
+                    return Math.min(dx2, dy2) > 1e-8 && Math.abs(dx2 - dy2) > 1e-8 ? [i3 + 1] : [];
+                  }),
+                  route: next.map((p2) => ({
+                    ...p2,
+                    route_type: "wire",
+                    layer: connection.pointsToConnect[0].layer,
+                    width
+                  }))
+                };
+                if (routeAnglesAreConventional([candidate])) yield candidate;
               }
-              if (!folded && ++attempted > (options.maxCandidates ?? Infinity)) {
-                if (options.packMeanders) return;
-                throw Error("Smooth tuning candidate budget exhausted");
-              }
-              const lobes = createLobes(
-                start,
-                end,
-                delta,
-                teeth,
-                side,
-                Math.max(width * 1.2, clearance)
-              );
-              if (!lobes || regions.length && !regions.some(
-                (r2) => lobes.every((p2) => pointInBox(p2, r2.copper))
-              ))
-                continue;
-              const bump = [a2, ...lobes, b2];
-              if (!scene.pathVisible(bump)) continue;
-              const next = (t48.coupledSection ? (points) => points : simplify)([...t48.route.slice(0, i2), ...bump, ...t48.route.slice(i2 + 2)]);
-              if (Math.abs(length(next) + fixedLength - (currentLength + delta)) > 1e-6)
-                continue;
-              if (!terminalViaCopperIsClear(next) || !tuningPathIsSelfClear(next, returnSpacing))
-                continue;
-              const candidate = {
-                ...t48,
-                coupledSection: t48.coupledSection ? t48.coupledSection.map(
-                  (v2) => v2 > i2 ? v2 + next.length - t48.route.length : v2
-                ) : void 0,
-                curvedSegments: next.slice(1).flatMap((p2, i3) => {
-                  const dx2 = Math.abs(p2.x - next[i3].x), dy2 = Math.abs(p2.y - next[i3].y);
-                  return Math.min(dx2, dy2) > 1e-8 && Math.abs(dx2 - dy2) > 1e-8 ? [i3 + 1] : [];
-                }),
-                route: next.map((p2) => ({
-                  ...p2,
-                  route_type: "wire",
-                  layer: connection.pointsToConnect[0].layer,
-                  width
-                }))
-              };
-              if (routeAnglesAreConventional([candidate])) yield candidate;
-            }
+          }
         }
-      }
+    }
   }
   const result = [...traces];
   const deficits = traces.map(
@@ -5431,7 +5495,10 @@ function* routeCoupledPair(input, pair, fixed, negotiation) {
                   pairInput,
                   shaped,
                   minimumLengthTargets(pairInput, shaped),
-                  { maxCandidates: 512 }
+                  {
+                    maxCandidates: 512,
+                    allowProvisionalLandConflicts: negotiation?.allowProvisionalLandConflicts
+                  }
                 );
                 const regions = packageApproachRegions(
                   pairInput,
@@ -5478,7 +5545,11 @@ function* routeCoupledPair(input, pair, fixed, negotiation) {
                     pairInput,
                     shaped,
                     minimumLengthTargets(pairInput, shaped),
-                    { maxCandidates: 512, packageOnlyPairTuning: true }
+                    {
+                      maxCandidates: 512,
+                      packageOnlyPairTuning: true,
+                      allowProvisionalLandConflicts: negotiation?.allowProvisionalLandConflicts
+                    }
                   );
                 }
                 if (routeAnglesAreConventional(tuned) && sharedPairSpacingReports(pairInput, tuned).every(
@@ -9534,6 +9605,9 @@ function tuneCoupledLengths(input, traces, options = {}) {
     );
     const rails = indices.map((i2) => result[i2]);
     if (rails.some((t48) => !t48.coupledSection)) continue;
+    const viaClearance = rails.map(
+      (rail) => createTerminalViaClearanceChecker(input, rail)
+    );
     const targets = minimumLengthTargets(input, result);
     const deficit = Math.max(
       ...rails.map((t48) => targets.get(t48.connection_name) - total(t48))
@@ -9652,7 +9726,7 @@ function tuneCoupledLengths(input, traces, options = {}) {
                 ),
                 width,
                 copper
-              ).pathVisible(t48.route) || !tuningPathIsSelfClear(t48.route, width + clearance) || total(t48) < targets.get(t48.connection_name) - 1e-6
+              ).pathVisible(t48.route) || !tuningPathIsSelfClear(t48.route, width + clearance) || !viaClearance[k2](t48.route) || total(t48) < targets.get(t48.connection_name) - 1e-6
             ))
               continue;
             if (Math.abs(total(candidate[0]) - total(candidate[1])) > pair.lengthTolerance + 1e-6)
@@ -9749,7 +9823,7 @@ function pairCouplingReports(input, traces) {
   });
 }
 
-// node_modules/@tscircuit/alphabet/dist/index.js
+// ../bus-lanes-solver/node_modules/@tscircuit/alphabet/dist/index.js
 var svgAlphabet = {
   "0": "M0.301025 0.257813 L0.206593 0.283385 L0.122042 0.361307 L0.075923 0.474441 L0.064942 0.642221 L0.091296 0.78289 L0.159376 0.899463 L0.257104 0.961214 L0.344948 0.961214 L0.442678 0.899463 L0.510757 0.78289 L0.537111 0.642221 L0.526131 0.474441 L0.480012 0.361307 L0.39546 0.283385 L0.301025 0.257813",
   "1": "M0.220426 0.40845 L0.381626 0.270996 L0.381626 0.948966",
@@ -9853,10 +9927,10 @@ for (const letter in svgAlphabet) {
   }
 }
 
-// node_modules/iobuffer/lib/text.js
+// ../bus-lanes-solver/node_modules/iobuffer/lib/text.js
 var encoder = new TextEncoder();
 
-// node_modules/iobuffer/lib/iobuffer.js
+// ../bus-lanes-solver/node_modules/iobuffer/lib/iobuffer.js
 var defaultByteLength = 1024 * 8;
 var hostBigEndian = (() => {
   const array = new Uint8Array(4);
@@ -9876,7 +9950,7 @@ var typedArrays = {
   float64: globalThis.Float64Array
 };
 
-// node_modules/fast-png/lib/helpers/crc.js
+// ../bus-lanes-solver/node_modules/fast-png/lib/helpers/crc.js
 var crcTable = [];
 for (let n2 = 0; n2 < 256; n2++) {
   let c2 = n2;
@@ -9890,33 +9964,33 @@ for (let n2 = 0; n2 < 256; n2++) {
   crcTable[n2] = c2;
 }
 
-// node_modules/fast-png/lib/helpers/decode_interlace_adam7.js
+// ../bus-lanes-solver/node_modules/fast-png/lib/helpers/decode_interlace_adam7.js
 var uint16 = new Uint16Array([255]);
 var uint8 = new Uint8Array(uint16.buffer);
 var osIsLittleEndian = uint8[0] === 255;
 
-// node_modules/fast-png/lib/helpers/decode_interlace_null.js
+// ../bus-lanes-solver/node_modules/fast-png/lib/helpers/decode_interlace_null.js
 var uint162 = new Uint16Array([255]);
 var uint82 = new Uint8Array(uint162.buffer);
 var osIsLittleEndian2 = uint82[0] === 255;
 var empty = new Uint8Array(0);
 
-// node_modules/fast-png/lib/helpers/signature.js
+// ../bus-lanes-solver/node_modules/fast-png/lib/helpers/signature.js
 var pngSignature = Uint8Array.of(137, 80, 78, 71, 13, 10, 26, 10);
 
-// node_modules/fast-png/lib/helpers/text.js
+// ../bus-lanes-solver/node_modules/fast-png/lib/helpers/text.js
 var latin1Decoder = new TextDecoder("latin1");
 
-// node_modules/transformation-matrix/src/rotate.js
+// ../bus-lanes-solver/node_modules/transformation-matrix/src/rotate.js
 var { cos, sin, PI } = Math;
 
-// node_modules/transformation-matrix/src/skew.js
+// ../bus-lanes-solver/node_modules/transformation-matrix/src/skew.js
 var { tan } = Math;
 
-// node_modules/graphics-debug/dist/chunk-WDTSQY35.js
+// ../bus-lanes-solver/node_modules/graphics-debug/dist/chunk-WDTSQY35.js
 var import_svgson = __toESM(require_svgson_umd(), 1);
 
-// node_modules/@tscircuit/solver-utils/dist/index.js
+// ../bus-lanes-solver/node_modules/@tscircuit/solver-utils/dist/index.js
 var BaseSolver = class {
   MAX_ITERATIONS = 1e5;
   solved = false;
@@ -10211,6 +10285,7 @@ var BusLanesSolver = class _BusLanesSolver extends BaseSolver {
   phase = "validate";
   failureCode = null;
   traces = [];
+  minimumOriginalTuningCandidates = 0;
   widths = /* @__PURE__ */ new Map();
   fixed = [];
   orders = [];
@@ -10233,8 +10308,9 @@ var BusLanesSolver = class _BusLanesSolver extends BaseSolver {
   lengthStats;
   /** Rematch freshly computed carrier geometry after a pipeline refinement.
    * The ordinary output validator still checks every endpoint and copper edge. */
-  static forRefinement(input, traces, options = {}) {
+  static forRefinement(input, traces, options = {}, minimumOriginalTuningCandidates = 0) {
     const solver = new _BusLanesSolver(input, options);
+    solver.minimumOriginalTuningCandidates = minimumOriginalTuningCandidates;
     solver.initialize();
     if (solver.failed) return solver;
     if (solver.search instanceof GridVisibilitySearch) solver.search.cancel();
@@ -10721,9 +10797,14 @@ var BusLanesSolver = class _BusLanesSolver extends BaseSolver {
             this.traces = this.options.smoothTuning && candidate.some((t48) => t48.coupledSection) ? tuneCoupledLengths(input, candidate, {
               // Narrow banks need more curve period/offset combinations.
               // Keep that extra bounded work local to packed candidates.
-              maxCandidates: corridor === original ? input.buses?.some(
-                (bus) => bus.maxLength !== void 0
-              ) ? 65536 : 512 : demandPackedCorridors.has(corridor) ? 65536 : 16384,
+              // Via-safe clipped leads also need room in the original
+              // search before a wider, longer corridor is considered.
+              maxCandidates: corridor === original ? Math.max(
+                this.minimumOriginalTuningCandidates,
+                input.buses?.some(
+                  (bus) => bus.maxLength !== void 0
+                ) ? 65536 : input.allowedLayers?.length === 2 ? 512 : 4096
+              ) : demandPackedCorridors.has(corridor) ? 65536 : 16384,
               packMeanders: quickOriginal || compactCorridors.has(corridor)
             }) : (this.options.smoothTuning ? tuneSmoothLengths : tuneLengths)(
               input,
@@ -10917,324 +10998,7 @@ var BusLanesSolver = class _BusLanesSolver extends BaseSolver {
   }
 };
 
-// lib/retarget-generated-escape.ts
-function retargetGeneratedEscape(trace, carrierLayer) {
-  const viaIndex = trace.route.findIndex((point5) => point5.route_type === "via");
-  if (viaIndex < 0) {
-    if (trace.route.some(
-      (point5) => point5.route_type !== "wire" || point5.layer !== carrierLayer
-    ))
-      throw Error("Surface escape does not support the selected carrier layer");
-    return trace;
-  }
-  const viaCount = trace.route.filter(
-    (point5) => point5.route_type === "via"
-  ).length;
-  if (viaCount > 1) {
-    if (!multiViaApproachIsContinuous(trace))
-      throw Error(
-        "Multi-via generated escape requires explicit continuous manufactured handoffs"
-      );
-    if (trace.route.at(-1).layer !== carrierLayer)
-      throw Error("Multi-via generated escape cannot change its carrier layer");
-    return trace;
-  }
-  const via = trace.route[viaIndex];
-  const handoff = trace.route[viaIndex - 1];
-  if (handoff?.route_type !== "wire" || handoff.layer !== via.from_layer || Math.hypot(handoff.x - via.x, handoff.y - via.y) > 1e-8)
-    throw Error(
-      "Generated escape requires one explicit native-layer via handoff"
-    );
-  if (!via.layers && carrierLayer !== via.from_layer && carrierLayer !== via.to_layer)
-    throw Error(
-      "Generated escape needs an explicit span to change carrier layers"
-    );
-  if (via.layers && !via.layers.includes(carrierLayer))
-    throw Error("Generated escape does not span the selected carrier layer");
-  if (carrierLayer === via.from_layer)
-    return { ...trace, route: trace.route.slice(0, viaIndex) };
-  return {
-    ...trace,
-    route: trace.route.map(
-      (point5, index2) => point5.route_type === "via" ? { ...point5, to_layer: carrierLayer } : index2 > viaIndex ? { ...point5, layer: carrierLayer } : point5
-    )
-  };
-}
-function multiViaApproachIsContinuous(trace) {
-  if (trace.route[0]?.route_type !== "wire" || trace.route.at(-1)?.route_type !== "wire")
-    return false;
-  for (const [index2, point5] of trace.route.entries()) {
-    if (!Number.isFinite(point5.x) || !Number.isFinite(point5.y)) return false;
-    if (point5.route_type === "wire") {
-      if (!point5.layer || !Number.isFinite(point5.width) || point5.width <= 0)
-        return false;
-      const previous = trace.route[index2 - 1];
-      if (previous?.route_type === "wire" && previous.layer !== point5.layer)
-        return false;
-      continue;
-    }
-    const before = trace.route[index2 - 1], after = trace.route[index2 + 1];
-    if (before?.route_type !== "wire" || after?.route_type !== "wire" || !point5.from_layer || !point5.to_layer || point5.from_layer === point5.to_layer || before.layer !== point5.from_layer || after.layer !== point5.to_layer || Math.hypot(before.x - point5.x, before.y - point5.y) > 1e-8 || Math.hypot(after.x - point5.x, after.y - point5.y) > 1e-8 || !Array.isArray(point5.layers) || point5.layers.length < 2 || point5.layers.some((layer) => typeof layer !== "string" || !layer) || new Set(point5.layers).size !== point5.layers.length || !point5.layers.includes(point5.from_layer) || !point5.layers.includes(point5.to_layer) || !Number.isFinite(point5.via_diameter) || !Number.isFinite(point5.via_hole_diameter) || point5.via_diameter <= 0 || point5.via_hole_diameter <= 0 || point5.via_hole_diameter > point5.via_diameter)
-      return false;
-  }
-  return true;
-}
-
-// lib/join-signal-escapes.ts
-function joinSignalEscapes(lane, escapes) {
-  const prefix = escapes.find(
-    (trace) => distance(trace.route.at(-1), lane.route[0]) < 1e-8
-  );
-  const suffix = escapes.find(
-    (trace) => trace !== prefix && distance(trace.route.at(-1), lane.route.at(-1)) < 1e-8
-  );
-  const reversed = suffix?.route.toReversed().map(
-    (point5) => point5.route_type === "via" ? { ...point5, from_layer: point5.to_layer, to_layer: point5.from_layer } : point5
-  ) ?? [];
-  const offset = (prefix?.route.length ?? 1) - 1;
-  const suffixOffset = offset + lane.route.length - 1;
-  const curvedSegments = [
-    ...prefix?.curvedSegments ?? [],
-    ...lane.curvedSegments?.map((index2) => index2 + offset) ?? [],
-    ...suffix?.curvedSegments?.map(
-      (index2) => suffixOffset + suffix.route.length - index2
-    ) ?? []
-  ].sort((a2, b2) => a2 - b2);
-  return {
-    ...lane,
-    coupledSection: lane.coupledSection?.map((index2) => index2 + offset),
-    curvedSegments: curvedSegments.length ? curvedSegments : void 0,
-    route: [
-      ...prefix?.route.slice(0, -1) ?? [],
-      ...lane.route,
-      ...reversed.slice(1)
-    ]
-  };
-}
-
-// lib/exterior-pair-spacing.ts
-function exteriorIntervals(a2, b2, boxes) {
-  const inside3 = [];
-  for (const box3 of boxes) {
-    let lo = 0, hi = 1;
-    for (const [axis, min, max] of [
-      ["x", box3.minX, box3.maxX],
-      ["y", box3.minY, box3.maxY]
-    ]) {
-      const delta = b2[axis] - a2[axis];
-      if (Math.abs(delta) < 1e-15) {
-        if (a2[axis] < min || a2[axis] > max) {
-          lo = 1;
-          hi = 0;
-          break;
-        }
-      } else {
-        const p2 = (min - a2[axis]) / delta, q2 = (max - a2[axis]) / delta;
-        lo = Math.max(lo, Math.min(p2, q2));
-        hi = Math.min(hi, Math.max(p2, q2));
-      }
-    }
-    if (lo < hi) inside3.push([lo, hi]);
-  }
-  inside3.sort((a3, b3) => a3[0] - b3[0]);
-  const outside = [];
-  let end = 0;
-  for (const [lo, hi] of inside3) {
-    if (lo > end) outside.push([end, lo]);
-    end = Math.max(end, hi);
-  }
-  if (end < 1) outside.push([end, 1]);
-  return outside;
-}
-function exteriorPairSpacingReports(input, traces) {
-  const localDogbones = traces.flatMap((t48) => {
-    const vias = t48.route.flatMap((p2, i2) => p2.route_type === "via" ? [i2] : []);
-    return vias.length === 2 ? [
-      { ...t48, route: t48.route.slice(0, vias[0] + 2) },
-      { ...t48, route: t48.route.slice(vias[1] - 1).toReversed() }
-    ] : [];
-  });
-  return (input.differentialPairs ?? []).map((pair) => {
-    const rails = pair.connectionNames.map(
-      (name) => traces.find(
-        (t48) => t48.connection_name === name || t48.source_trace_id === name
-      )
-    );
-    const width = Math.max(
-      ...rails.flatMap(
-        (t48) => t48?.route.flatMap((p2) => p2.route_type === "wire" ? [p2.width] : []) ?? []
-      )
-    );
-    const clearance = input.minTraceToPadEdgeClearance ?? input.defaultObstacleMargin ?? 0.075;
-    const gap = pair.traceGap ?? clearance;
-    const regions = packageApproachRegions(
-      { ...input, traces: [...input.traces ?? [], ...localDogbones] },
-      width + gap / 2 + clearance
-    );
-    const fields = [0, 1].flatMap((end) => {
-      const r2 = regions.find(
-        (r3) => rails.every(
-          (t48) => t48?.route.length && pointInBox(end ? t48.route.at(-1) : t48.route[0], r3.copper)
-        )
-      );
-      return r2 ? [r2.copper] : [];
-    });
-    const applicable = (pair.traceGap !== void 0 || pair.maxUncoupledLength !== void 0) && fields.length === 2 && rails.every((t48) => t48?.route.length);
-    const base = { connectionNames: pair.connectionNames, applicable };
-    if (!applicable)
-      return {
-        ...base,
-        matched: true,
-        maxExteriorEdgeGapMm: null,
-        maxSamplingErrorMm: null,
-        separatedExteriorLengthMm: null
-      };
-    const segments = (trace) => trace.route.slice(1).flatMap((b2, i2) => {
-      const a2 = trace.route[i2];
-      return a2.route_type === "wire" && b2.route_type === "wire" && a2.layer === b2.layer ? [{ a: a2, b: b2, radius: a2.width / 2, layer: a2.layer, owners: [] }] : [];
-    });
-    let max = -Infinity, error = 0, separated = 0;
-    const maxAllowed = (width + gap) / Math.cos(Math.PI / 8) - width + 2e-3;
-    for (let side = 0; side < 2; side++) {
-      const mate = segments(rails[1 - side]);
-      const indexes = new Map(
-        [...new Set(mate.map((s2) => s2.layer))].map((layer) => [
-          layer,
-          new CopperIndex(mate.filter((s2) => s2.layer === layer))
-        ])
-      );
-      for (const { a: a2, b: b2 } of segments(rails[side])) {
-        const span = distance(a2, b2);
-        for (const [lo, hi] of exteriorIntervals(a2, b2, fields)) {
-          const count = Math.max(1, Math.ceil((hi - lo) * span / 2e-3));
-          const step = (hi - lo) * span / count;
-          error = Math.max(error, step / 2);
-          for (let k2 = 0; k2 < count; k2++) {
-            const t48 = lo + (hi - lo) * (k2 + 0.5) / count;
-            const p2 = { x: a2.x + (b2.x - a2.x) * t48, y: a2.y + (b2.y - a2.y) * t48 };
-            const spacing = (indexes.get(a2.layer)?.distanceToPoint(
-              p2,
-              (s2) => pointSegmentDistanceToPoints(p2, s2.a, s2.b) - s2.radius
-            ) ?? Infinity) - a2.width / 2;
-            max = Math.max(max, spacing);
-            if (spacing + step / 2 > maxAllowed) separated += step;
-          }
-        }
-      }
-    }
-    return {
-      ...base,
-      matched: separated === 0,
-      maxExteriorEdgeGapMm: max === -Infinity ? null : max,
-      maxSamplingErrorMm: error,
-      separatedExteriorLengthMm: separated
-    };
-  });
-}
-
-// lib/tune-generated-pair-escapes.ts
-function* tuneGeneratedPairEscapes(input, traces, generatedEscapes, options) {
-  const targets = minimumLengthTargets(input, traces);
-  const paired = new Set(
-    input.differentialPairs?.flatMap((p2) => p2.connectionNames)
-  );
-  const generatedIds = new Set(generatedEscapes.map((t48) => t48.pcb_trace_id));
-  let local = input;
-  let escapes = generatedEscapes;
-  let changed = false;
-  for (const carrier of traces) {
-    const name = carrier.connection_name;
-    if (!paired.has(name) || !carrier.coupledSection) continue;
-    if ((targets.get(name) ?? 0) <= length(carrier.route) + fixedRouteLength(local, name) + 1e-7)
-      continue;
-    for (const escape of local.traces ?? []) {
-      if (!generatedIds.has(escape.pcb_trace_id) || escape.connection_name !== name)
-        continue;
-      const viaIndex = escape.route.findIndex((p2) => p2.route_type === "via");
-      if (viaIndex < 2 || escape.route.filter((p2) => p2.route_type === "via").length !== 1)
-        continue;
-      const pad = escape.route[0];
-      const via = escape.route[viaIndex];
-      if (pad.route_type !== "wire" || pad.layer !== "top" || via.route_type !== "via" || via.from_layer !== "top")
-        continue;
-      const top = escape.route.slice(0, viaIndex);
-      if (top.some((p2) => p2.route_type !== "wire" || p2.layer !== "top") || distance(top.at(-1), via) > 1e-8)
-        continue;
-      const owner = input.obstacles.find(
-        (o2) => o2.componentId && distance(o2.center, pad) < 1e-4
-      );
-      if (!owner) continue;
-      const pitch = Math.min(
-        ...input.obstacles.filter((o2) => o2.componentId === owner.componentId).map((o2) => distance(o2.center, pad)).filter((d2) => d2 > 1e-4)
-      );
-      if (!Number.isFinite(pitch)) continue;
-      const surfaceLimit = Math.min(2, 2.5 * pitch);
-      const connection = input.connections.find((c2) => c2.name === name);
-      const stubInput = {
-        ...local,
-        connections: local.connections.map(
-          (c2) => c2.name === name ? { ...connection, pointsToConnect: [pad, top.at(-1)] } : c2
-        ),
-        traces: [
-          ...(local.traces ?? []).filter((t48) => t48 !== escape),
-          {
-            ...escape,
-            pcb_trace_id: `${escape.pcb_trace_id}_held_barrel`,
-            route: escape.route.slice(viaIndex)
-          },
-          ...traces
-        ]
-      };
-      const stub = { ...escape, route: top };
-      try {
-        const tuned = tuneSmoothLengths(
-          stubInput,
-          [stub],
-          /* @__PURE__ */ new Map([[name, targets.get(name)]]),
-          { maxCandidates: 4096, packMeanders: true }
-        )[0];
-        const clearance = input.minTraceToPadEdgeClearance ?? input.defaultObstacleMargin ?? 0.075;
-        if (length(tuned.route) > surfaceLimit + 1e-8 || !routeAnglesAreConventional([tuned]) || !tuningPathIsSelfClear(tuned.route, pad.width + clearance) || !createTerminalViaClearanceChecker(stubInput, stub, {
-          preserveExistingApproach: false
-        })(tuned.route))
-          continue;
-        const replacement = {
-          ...escape,
-          route: [...tuned.route, ...escape.route.slice(viaIndex)],
-          curvedSegments: tuned.curvedSegments
-        };
-        local = {
-          ...local,
-          traces: local.traces.map((t48) => t48 === escape ? replacement : t48)
-        };
-        escapes = escapes.map(
-          (t48) => t48.pcb_trace_id === escape.pcb_trace_id ? replacement : t48
-        );
-        changed = true;
-        break;
-      } catch {
-      }
-      yield;
-    }
-  }
-  if (!changed) return null;
-  const validator = BusLanesSolver.forValidation(local, traces, options);
-  try {
-    while (!validator.solved && !validator.failed) {
-      validator.step();
-      yield;
-    }
-    const coupling = exteriorPairSpacingReports(local, traces);
-    if (validator.solved && coupling.length === (input.differentialPairs?.length ?? 0) && coupling.every((p2) => p2.applicable && p2.matched)) {
-      return { input: local, traces, escapes };
-    }
-  } finally {
-    if (!validator.solved && !validator.failed) validator.tryFinalAcceptance();
-  }
-  return null;
-}
-
-// node_modules/@tscircuit/fanout-solver/lib/geometry.ts
+// ../bus-lanes-solver/node_modules/@tscircuit/fanout-solver/lib/geometry.ts
 var EPSILON = 1e-9;
 function obstacleIsCircular(obstacle) {
   return obstacle.shape === "circle";
@@ -11359,7 +11123,7 @@ function segmentsAreClear(first, second, clearance) {
   ) >= requiredDistance - EPSILON;
 }
 
-// node_modules/@tscircuit/fanout-solver/lib/net-identity.ts
+// ../bus-lanes-solver/node_modules/@tscircuit/fanout-solver/lib/net-identity.ts
 var identityCache = /* @__PURE__ */ new WeakMap();
 function getConnectionNetKey(connection) {
   return connection.netConnectionName ?? connection.rootConnectionName ?? connection.name;
@@ -11480,7 +11244,7 @@ function obstacleSharesElectricalNet(srj, obstacle, connectionName) {
   return false;
 }
 
-// node_modules/@tscircuit/fanout-solver/lib/layer-names.ts
+// ../bus-lanes-solver/node_modules/@tscircuit/fanout-solver/lib/layer-names.ts
 function getCopperLayerNames(layerCount) {
   if (!Number.isInteger(layerCount) || layerCount < 1) {
     throw new Error(
@@ -11532,7 +11296,7 @@ function getRouteViaSpanLayers(params) {
   return [...layers];
 }
 
-// node_modules/@tscircuit/fanout-solver/lib/validate-routed-copper-drc.ts
+// ../bus-lanes-solver/node_modules/@tscircuit/fanout-solver/lib/validate-routed-copper-drc.ts
 var EPSILON2 = 1e-6;
 function segmentIsLegalTerminalBodyEscape(params) {
   const { inputSrj, segment: segment3, bodyObstacle, connectionName } = params;
@@ -11872,7 +11636,7 @@ function validateRoutedCopperDrc(params) {
   };
 }
 
-// node_modules/@tscircuit/fanout-solver/lib/fanout-exit-position.ts
+// ../bus-lanes-solver/node_modules/@tscircuit/fanout-solver/lib/fanout-exit-position.ts
 var FANOUT_EXIT_POSITION_CONFIGS = {
   topside_left: {
     direction: "left",
@@ -11944,7 +11708,7 @@ function getFanoutExitPositionConfig(exitPosition) {
   return config;
 }
 
-// node_modules/@tscircuit/fanout-solver/lib/boundary-exit.ts
+// ../bus-lanes-solver/node_modules/@tscircuit/fanout-solver/lib/boundary-exit.ts
 function borderTargetIncludesEdge(preferredExit, exitEdge) {
   return preferredExit === exitEdge || preferredExit.includes(exitEdge);
 }
@@ -11957,7 +11721,7 @@ function getCornerBandSide(exitEdge, preferredExit) {
   return preferredExit.endsWith("-right") ? "maximum" : "minimum";
 }
 
-// node_modules/@tscircuit/fanout-solver/lib/match-component-dogbone-via-sites.ts
+// ../bus-lanes-solver/node_modules/@tscircuit/fanout-solver/lib/match-component-dogbone-via-sites.ts
 var EPSILON3 = 1e-9;
 var DEFAULT_MAXIMUM_SEARCH_STATES = 1e5;
 function assertGeometryRules(rules) {
@@ -12418,7 +12182,7 @@ function getComponentDogboneViaSiteCandidates(preparedBuses, rules) {
   );
 }
 
-// node_modules/@tscircuit/capacity-autorouter/dist/index.js
+// ../bus-lanes-solver/node_modules/@tscircuit/capacity-autorouter/dist/index.js
 var import_object_hash = __toESM(require_object_hash(), 1);
 var import_object_hash2 = __toESM(require_object_hash(), 1);
 var import_object_hash3 = __toESM(require_object_hash(), 1);
@@ -24861,10 +24625,10 @@ xW.register(class extends wt {
   }
 });
 
-// node_modules/@tscircuit/fanout-solver/node_modules/graphics-debug/dist/chunk-ZJJUR6DP.js
+// ../bus-lanes-solver/node_modules/@tscircuit/fanout-solver/node_modules/graphics-debug/dist/chunk-ZJJUR6DP.js
 var import_svgson2 = __toESM(require_svgson_umd(), 1);
 
-// node_modules/@tscircuit/fanout-solver/lib/prepare-buses.ts
+// ../bus-lanes-solver/node_modules/@tscircuit/fanout-solver/lib/prepare-buses.ts
 var FANOUT_BORDER_TARGETS = /* @__PURE__ */ new Set([
   "left",
   "right",
@@ -25838,19 +25602,19 @@ function prepareFanoutBuses(srj, options) {
   return buses;
 }
 
-// node_modules/@tscircuit/fanout-solver/lib/match-angularly-ordered-local-vias.ts
+// ../bus-lanes-solver/node_modules/@tscircuit/fanout-solver/lib/match-angularly-ordered-local-vias.ts
 var TAU = Math.PI * 2;
 
-// node_modules/@tscircuit/fanout-solver/lib/route-single-layer-adaptive-exits.ts
+// ../bus-lanes-solver/node_modules/@tscircuit/fanout-solver/lib/route-single-layer-adaptive-exits.ts
 var FANOUT_FLOW_DEBUG_ENABLED = globalThis.process?.env?.FANOUT_FLOW_DEBUG === "1";
 
-// node_modules/@tscircuit/fanout-solver/lib/runtime-process.ts
+// ../bus-lanes-solver/node_modules/@tscircuit/fanout-solver/lib/runtime-process.ts
 var getRuntimeProcess = (runtime) => runtime.process ?? { env: {} };
 
-// node_modules/@tscircuit/fanout-solver/lib/fanout-solver.ts
+// ../bus-lanes-solver/node_modules/@tscircuit/fanout-solver/lib/fanout-solver.ts
 var process2 = getRuntimeProcess(globalThis);
 
-// node_modules/@tscircuit/fanout-solver/lib/fit-local-via-grid.ts
+// ../bus-lanes-solver/node_modules/@tscircuit/fanout-solver/lib/fit-local-via-grid.ts
 function fitLocalViaGrid(coordinates, tolerance) {
   if (coordinates.length < 2) return null;
   const measured = (coordinates.at(-1) - coordinates[0]) / (coordinates.length - 1);
@@ -25865,7 +25629,7 @@ function fitLocalViaGrid(coordinates, tolerance) {
   return { coordinates: fitted, pitch };
 }
 
-// node_modules/@tscircuit/fanout-solver/lib/route-local-signal-dogbones.ts
+// ../bus-lanes-solver/node_modules/@tscircuit/fanout-solver/lib/route-local-signal-dogbones.ts
 function routeLocalSignalDogbones(input, options) {
   const connections = structuredClone(input.connections);
   const endpoints = [];
@@ -26117,853 +25881,7 @@ function routeLocalSignalDogbones(input, options) {
   return { connections, traces };
 }
 
-// lib/alternate-signal-dogbones.ts
-function routeAlternateSignalDogbones(input, options, attempt) {
-  try {
-    return routeVariant(input, options, attempt);
-  } catch (error) {
-    if (!(error instanceof Error) || error.message !== "No collision-free local dogbone assignment")
-      throw error;
-    const targets = new Map(options.targetLayers);
-    const nativeLayer = (name) => {
-      const connection = input.connections.find((c2) => c2.name === name);
-      if (!connection || connection.pointsToConnect.length !== 2) return;
-      const layer = connection.pointsToConnect[0].layer;
-      if (!connection.pointsToConnect.every((point5) => point5.layer === layer) || !input.allowedLayers?.includes(layer) || (input.buses ?? []).some(
-        (bus) => bus.connectionNames.includes(name) && bus.allowedLayers && !bus.allowedLayers.includes(layer)
-      ))
-        return;
-      return layer;
-    };
-    let changed = false;
-    for (const connection of input.connections) {
-      const layer = nativeLayer(connection.name);
-      if (!layer || targets.get(connection.name) === layer) continue;
-      const single = {
-        ...input,
-        connections: [connection],
-        buses: [],
-        differentialPairs: []
-      };
-      let possible = false;
-      for (let quadrant = 0; quadrant < 4 && !possible; quadrant++) {
-        try {
-          routeVariant(single, options, quadrant);
-          possible = true;
-        } catch {
-        }
-      }
-      if (possible) continue;
-      targets.set(connection.name, layer);
-      changed = true;
-    }
-    if (!changed) throw error;
-    for (const pair of input.differentialPairs ?? []) {
-      const [a2, b2] = pair.connectionNames;
-      if (targets.get(a2) === targets.get(b2)) continue;
-      const layer = nativeLayer(a2);
-      if (!layer || nativeLayer(b2) !== layer) throw error;
-      targets.set(a2, layer);
-      targets.set(b2, layer);
-    }
-    return routeVariant(input, { ...options, targetLayers: targets }, attempt);
-  }
-}
-function routeVariant(input, options, attempt) {
-  const delta = input.connections.reduce(
-    (s2, c2) => ({
-      x: s2.x + c2.pointsToConnect[1].x - c2.pointsToConnect[0].x,
-      y: s2.y + c2.pointsToConnect[1].y - c2.pointsToConnect[0].y
-    }),
-    { x: 0, y: 0 }
-  );
-  const base = Math.abs(delta.x) > Math.abs(delta.y) ? delta.x > 0 ? 3 : 1 : 0;
-  const busNames = new Set(
-    (input.buses ?? []).flatMap((b2) => b2.connectionNames)
-  );
-  const backward = backwardFacingPackageTerminals({
-    ...input,
-    connections: input.connections.filter((c2) => busNames.has(c2.name))
-  });
-  const order = input.traces?.length ? [0, ...[0, 1, 2, 3].map((i2) => (base + i2) % 4).filter((i2) => i2 !== 0)] : [3, 0, 1, 2].map((i2) => (base + i2) % 4);
-  const turns = backward ? (base + attempt) % 4 : order[attempt % 4];
-  const rotate2 = (p2, k2) => {
-    let { x: x2, y: y2 } = p2;
-    for (let i2 = 0; i2 < k2; i2++) [x2, y2] = [-y2, x2];
-    return { ...p2, x: x2, y: y2 };
-  };
-  const corners = [
-    { x: input.bounds.minX, y: input.bounds.minY },
-    { x: input.bounds.maxX, y: input.bounds.maxY }
-  ].map((p2) => rotate2(p2, turns));
-  const rotated = {
-    ...input,
-    bounds: {
-      minX: Math.min(...corners.map((p2) => p2.x)),
-      maxX: Math.max(...corners.map((p2) => p2.x)),
-      minY: Math.min(...corners.map((p2) => p2.y)),
-      maxY: Math.max(...corners.map((p2) => p2.y))
-    },
-    connections: input.connections.map((c2) => ({
-      ...c2,
-      pointsToConnect: c2.pointsToConnect.map((p2) => rotate2(p2, turns))
-    })),
-    obstacles: input.obstacles.map((o2) => ({
-      ...o2,
-      center: rotate2(o2.center, turns),
-      ccwRotationDegrees: (o2.ccwRotationDegrees ?? 0) + 90 * turns
-    })),
-    traces: input.traces?.map((t48) => ({
-      ...t48,
-      route: t48.route.map((p2) => rotate2(p2, turns))
-    }))
-  };
-  const result = routeLocalSignalDogbones(
-    rotated,
-    options
-  );
-  return {
-    connections: result.connections.map((c2) => ({
-      ...c2,
-      pointsToConnect: c2.pointsToConnect.map((p2) => rotate2(p2, (4 - turns) % 4))
-    })),
-    traces: result.traces.map((t48) => ({
-      ...t48,
-      route: t48.route.map((p2) => {
-        if (!("x" in p2)) throw Error("Unexpected dogbone primitive");
-        return rotate2(p2, (4 - turns) % 4);
-      })
-    }))
-  };
-}
-
-// lib/extend-package-coupling.ts
-var reverse2 = (t48) => ({
-  ...t48,
-  route: t48.route.toReversed(),
-  coupledSection: t48.coupledSection ? [
-    t48.route.length - 1 - t48.coupledSection[1],
-    t48.route.length - 1 - t48.coupledSection[0]
-  ] : void 0,
-  curvedSegments: t48.curvedSegments?.map((i2) => t48.route.length - i2)
-});
-var indexOf = (path, point5) => path.findIndex((p2) => distance(p2, point5) < 1e-7);
-var preservePoint = (path, point5) => {
-  if (indexOf(path, point5) >= 0) return path;
-  const i2 = path.findIndex(
-    (p2, i3) => i3 > 0 && pointSegmentDistanceToPoints(point5, path[i3 - 1], p2) < 1e-8
-  );
-  return i2 < 0 ? path : [...path.slice(0, i2), point5, ...path.slice(i2)];
-};
-function* extendPackageCoupling(input, original, options = {}) {
-  let result = original;
-  const fixed = fixedCopper(input);
-  const clearance = input.minTraceToPadEdgeClearance ?? input.defaultObstacleMargin ?? 0.075;
-  let budget = 2e3;
-  for (const pair of input.differentialPairs ?? []) {
-    for (const reversed of [false, true]) {
-      for (const side of [0, 1]) {
-        if (budget <= 0) return result;
-        const nativeRails = pair.connectionNames.map(
-          (name) => result.find((t48) => t48.connection_name === name)
-        );
-        if (nativeRails.some((t48) => !t48?.coupledSection)) continue;
-        const rails = nativeRails.map(
-          (t48) => reversed ? reverse2(t48) : t48
-        );
-        const ref = rails[side], other = rails[1 - side];
-        const [rs, re] = ref.coupledSection, [os, oe] = other.coupledSection;
-        const width = other.route[0].width, separation = width + (pair.traceGap ?? clearance);
-        if (re < 1 || oe < 1 || distance(ref.route[re - 1], ref.route[re]) < 1e-7)
-          continue;
-        const regions = packageApproachRegions(input, width / 2 + clearance);
-        const region = regions.find(
-          (r2) => pointInBox(ref.route.at(-1), r2.copper) && pointInBox(other.route.at(-1), r2.copper)
-        );
-        if (!region || pointInBox(ref.route[re], region.copper)) continue;
-        let stop = re + 1;
-        while (stop < ref.route.length && !pointInBox(ref.route[stop], region.copper))
-          stop++;
-        if (stop === ref.route.length || ref.curvedSegments?.some((i2) => i2 >= re && i2 <= stop))
-          continue;
-        const a2 = ref.route[stop - 1], b2 = ref.route[stop];
-        let lo = 0, hi = 1;
-        for (let i2 = 0; i2 < 40; i2++) {
-          const t48 = (lo + hi) / 2;
-          if (pointInBox(
-            { x: a2.x + (b2.x - a2.x) * t48, y: a2.y + (b2.y - a2.y) * t48 },
-            region.copper
-          ))
-            hi = t48;
-          else lo = t48;
-        }
-        const cut2 = { x: a2.x + (b2.x - a2.x) * hi, y: a2.y + (b2.y - a2.y) * hi };
-        const anchor = {
-          x: (ref.route[re - 1].x + ref.route[re].x) / 2,
-          y: (ref.route[re - 1].y + ref.route[re].y) / 2
-        };
-        let section = simplify([anchor, ...ref.route.slice(re, stop), cut2]);
-        let paths;
-        try {
-          paths = [separation, -separation].map((d2) => offsetPath(section, d2));
-        } catch {
-          continue;
-        }
-        let path = paths.find(
-          (p2) => pointSegmentDistanceToPoints(
-            p2[0],
-            other.route[oe - 1],
-            other.route[oe]
-          ) < 1e-7
-        );
-        if (!path) continue;
-        const localWire = (p2) => ({
-          ...p2,
-          route_type: "wire",
-          width,
-          layer: other.route[0].layer
-        });
-        const localRails = [
-          {
-            ...ref,
-            route: section.map(localWire),
-            curvedSegments: [],
-            coupledSection: [0, section.length - 1]
-          },
-          {
-            ...other,
-            route: path.map(localWire),
-            curvedSegments: [],
-            coupledSection: [0, path.length - 1]
-          }
-        ];
-        const bevel2 = bevelCoupledCorners(input, [
-          ...result.filter(
-            (t48) => !pair.connectionNames.includes(t48.connection_name)
-          ),
-          ...localRails
-        ]);
-        section = bevel2.find(
-          (t48) => t48.connection_name === ref.connection_name
-        ).route;
-        path = bevel2.find(
-          (t48) => t48.connection_name === other.connection_name
-        ).route;
-        const refRoute = [
-          ...ref.route.slice(0, re),
-          ...section,
-          ...ref.route.slice(stop)
-        ].map(localWire);
-        const connection = input.connections.find(
-          (c2) => c2.name === other.connection_name
-        );
-        const scene = new VectorScene(input, connection, width, [
-          ...fixed,
-          ...result.filter((t48) => t48.connection_name !== ref.connection_name).flatMap(routeCopper),
-          ...routeCopper({ ...ref, route: refRoute })
-        ]);
-        if (!scene.pathVisible(path)) continue;
-        let join = oe + 1;
-        while (join < other.route.length && !pointInBox(other.route[join], region.copper))
-          join++;
-        if (join === other.route.length) continue;
-        let accepted = false;
-        for (; join < other.route.length; join++) {
-          if (!pointInBox(other.route[join], region.copper)) continue;
-          const search = new GridVisibilitySearch(
-            scene,
-            path.at(-1),
-            other.route[join]
-          );
-          try {
-            let steps = 0;
-            while (!search.solved && !search.failed && steps++ < 256 && budget-- > 0) {
-              search.step();
-              yield;
-            }
-            if (!search.solved) continue;
-          } finally {
-            search.cancel();
-          }
-          const wire = (p2) => ({
-            ...p2,
-            route_type: "wire",
-            layer: other.route[0].layer,
-            width
-          });
-          const next = preservePoint(
-            preservePoint(
-              simplify([
-                ...other.route.slice(0, oe),
-                ...path,
-                ...reduceOrdinaryTurns(search.result, scene).slice(1),
-                ...other.route.slice(join + 1)
-              ]).map(wire),
-              wire(other.route[os])
-            ),
-            wire(path.at(-1))
-          );
-          if (!scene.pathVisible(next) || !tuningPathIsSelfClear(next, width + clearance))
-            continue;
-          const replacement = [
-            {
-              ...ref,
-              route: refRoute,
-              curvedSegments: remapCurvedSegments(ref, refRoute),
-              coupledSection: [rs, re + section.length - 1]
-            },
-            {
-              ...other,
-              route: next,
-              curvedSegments: remapCurvedSegments(other, next),
-              coupledSection: [
-                indexOf(next, other.route[os]),
-                indexOf(next, path.at(-1))
-              ]
-            }
-          ].map((t48) => reversed ? reverse2(t48) : t48);
-          const unchanged = result.filter(
-            (t48) => !pair.connectionNames.includes(t48.connection_name)
-          );
-          const surrounding = [...fixed, ...unchanged.flatMap(routeCopper)];
-          for (const trim of [
-            1.8,
-            1.5,
-            0.75,
-            0.375,
-            0.1875,
-            0.09375,
-            0.046875,
-            0.0234375
-          ]) {
-            const refinedPair = chamferOrdinaryCorners(
-              input,
-              result.filter(
-                (t48) => pair.connectionNames.includes(t48.connection_name)
-              ).map(
-                (t48) => replacement.find(
-                  (r2) => r2.connection_name === t48.connection_name
-                )
-              ),
-              surrounding,
-              trim
-            );
-            const refined = result.map(
-              (t48) => refinedPair.find(
-                (r2) => r2.connection_name === t48.connection_name
-              ) ?? t48
-            );
-            if (!routeAnglesAreConventional(refinedPair) || options.preserveMatching !== false && [
-              ...busLengthReports(input, refined),
-              ...pairLengthReports(input, refined)
-            ].some(
-              (r2) => !r2.withinLengthLimit || !r2.aboveMinimumLength || r2.toleranceMm !== null && !r2.matched
-            ) || sharedPairSpacingReports(input, refined).some((r2) => !r2.matched))
-              continue;
-            const copper = [...surrounding, ...refinedPair.flatMap(routeCopper)];
-            if (refinedPair.some((t48) => {
-              const w2 = t48.route[0].width;
-              return !tuningPathIsSelfClear(t48.route, w2 + clearance) || !new VectorScene(
-                input,
-                input.connections.find(
-                  (c2) => c2.name === t48.connection_name
-                ),
-                w2,
-                copper
-              ).pathVisible(t48.route);
-            }))
-              continue;
-            result = refined;
-            accepted = true;
-            break;
-          }
-          if (accepted) break;
-        }
-      }
-    }
-  }
-  return result;
-}
-
-// lib/normalize-surface-carriers.ts
-function monotone(path) {
-  let sx2 = 0, sy2 = 0;
-  for (let index2 = 1; index2 < path.length; index2++) {
-    const dx2 = Math.sign(path[index2].x - path[index2 - 1].x), dy2 = Math.sign(path[index2].y - path[index2 - 1].y);
-    if (dx2 && sx2 && dx2 !== sx2 || dy2 && sy2 && dy2 !== sy2) return false;
-    sx2 ||= dx2;
-    sy2 ||= dy2;
-  }
-  return true;
-}
-function octilinear(trace) {
-  return trace.route.every((b2, index2) => {
-    if (!index2 || trace.curvedSegments?.includes(index2)) return true;
-    const a2 = trace.route[index2 - 1], dx2 = Math.abs(b2.x - a2.x), dy2 = Math.abs(b2.y - a2.y);
-    return Math.min(dx2, dy2) < 1e-8 || Math.abs(dx2 - dy2) < 1e-8;
-  });
-}
-function carrierEndCandidates(trace, scene, atStart) {
-  const oriented = atStart ? trace.route.toReversed() : trace.route, required = scene.width / 2 + scene.margin, candidates = [];
-  if (!Number.isFinite(required) || required <= 0) return candidates;
-  let along2 = 0;
-  for (let anchor = oriented.length - 2; anchor >= 0; anchor--) {
-    along2 += distance(oriented[anchor], oriented[anchor + 1]);
-    if (along2 > required + 1e-8) break;
-    const cut2 = atStart ? oriented.length - 1 - anchor : anchor;
-    if (trace.curvedSegments?.some(
-      (index2) => atStart ? index2 <= cut2 : index2 > cut2
-    ) || trace.coupledSection && (atStart ? trace.coupledSection[0] < cut2 : trace.coupledSection[1] > cut2))
-      break;
-    const tail = oriented.slice(anchor), local = { ...trace, route: tail, curvedSegments: void 0 };
-    if (monotone(tail) && octilinear(local) && routeAnglesAreConventional([local]))
-      continue;
-    const a2 = tail[0], b2 = tail.at(-1), dx2 = b2.x - a2.x, dy2 = b2.y - a2.y, ax2 = Math.abs(dx2), ay2 = Math.abs(dy2), sx2 = Math.sign(dx2), sy2 = Math.sign(dy2), bends = ax2 >= ay2 ? [
-      { x: a2.x + sx2 * (ax2 - ay2), y: a2.y },
-      { x: a2.x + sx2 * ay2, y: b2.y }
-    ] : [
-      { x: a2.x, y: a2.y + sy2 * (ay2 - ax2) },
-      { x: b2.x, y: a2.y + sy2 * ax2 }
-    ];
-    for (const bend of bends) {
-      const replacement = [
-        a2,
-        {
-          ...bend,
-          route_type: "wire",
-          layer: a2.layer,
-          width: a2.width
-        },
-        b2
-      ], next = [...oriented.slice(0, anchor), ...replacement], route = atStart ? next.toReversed() : next, delta = route.length - trace.route.length, candidate = {
-        ...trace,
-        route,
-        curvedSegments: trace.curvedSegments?.map(
-          (index2) => atStart ? index2 + delta : index2
-        ),
-        coupledSection: trace.coupledSection?.map(
-          (index2) => atStart ? index2 + delta : index2
-        )
-      };
-      if (!monotone(replacement) || !scene.pathVisible(replacement)) continue;
-      candidates.push(candidate);
-      if (candidates.length >= 4) return candidates;
-    }
-  }
-  return candidates;
-}
-function normalizeCarrierEnds(trace, scene) {
-  const layer = trace.route[0].layer;
-  if (!trace.route.every(
-    (point5) => point5.route_type === "wire" && point5.layer === layer
-  ))
-    return trace;
-  const endCandidates = [trace, ...carrierEndCandidates(trace, scene, false)], candidates = [
-    ...endCandidates.slice(1),
-    ...endCandidates.flatMap(
-      (candidate) => carrierEndCandidates(candidate, scene, true)
-    )
-  ];
-  for (const candidate of candidates)
-    if (octilinear(candidate) && routeAnglesAreConventional([candidate]) && tuningPathIsSelfClear(candidate.route, scene.width / 2 + scene.margin) && scene.pathVisible(candidate.route))
-      return candidate;
-  return trace;
-}
-function octilinearSurfaceEscape(escape, scene) {
-  let result = escape;
-  for (let index2 = 1; index2 < result.route.length; index2++) {
-    if (result.curvedSegments?.includes(index2)) continue;
-    const a2 = result.route[index2 - 1], b2 = result.route[index2];
-    const dx2 = b2.x - a2.x, dy2 = b2.y - a2.y;
-    if (Math.min(Math.abs(dx2), Math.abs(dy2)) < 1e-8 || Math.abs(Math.abs(dx2) - Math.abs(dy2)) < 1e-8)
-      continue;
-    const diagonal = Math.min(Math.abs(dx2), Math.abs(dy2));
-    const bends = [
-      { x: b2.x - Math.sign(dx2) * diagonal, y: b2.y - Math.sign(dy2) * diagonal },
-      { x: a2.x + Math.sign(dx2) * diagonal, y: a2.y + Math.sign(dy2) * diagonal }
-    ];
-    for (const bend of bends) {
-      const route = [
-        ...result.route.slice(0, index2),
-        {
-          ...bend,
-          route_type: "wire",
-          layer: a2.layer,
-          width: a2.width
-        },
-        ...result.route.slice(index2)
-      ];
-      if (!scene.pathVisible(route) || !tuningPathIsSelfClear(route, scene.width / 2 + scene.margin) && tuningPathIsSelfClear(result.route, scene.width / 2 + scene.margin))
-        continue;
-      result = {
-        ...result,
-        route,
-        curvedSegments: result.curvedSegments?.map(
-          (chord) => chord >= index2 ? chord + 1 : chord
-        )
-      };
-      index2++;
-      break;
-    }
-  }
-  return result;
-}
-function normalizeSurfaceCarriers(input, traces, generatedEscapes) {
-  const replacements = /* @__PURE__ */ new Map();
-  let hard;
-  const normalized = traces.map((trace) => {
-    const first = trace.route[0];
-    if (trace.route.length < 2 || first.route_type !== "wire" || !trace.route.every(
-      (point5) => point5.route_type === "wire" && point5.layer === first.layer
-    ))
-      return trace;
-    const layer = first.layer;
-    const attached = generatedEscapes.filter(
-      (escape) => escape.connection_name === trace.connection_name && escape.route.every(
-        (point5) => point5.route_type === "wire" && point5.layer === layer
-      ) && (distance(escape.route.at(-1), trace.route[0]) < 1e-8 || distance(escape.route.at(-1), trace.route.at(-1)) < 1e-8)
-    );
-    const connection = input.connections.find(
-      (item) => item.name === trace.connection_name
-    );
-    if (!connection) return trace;
-    for (const escape of attached)
-      replacements.set(escape, {
-        ...escape,
-        route: escape.route.slice(0, 1),
-        curvedSegments: void 0
-      });
-    hard ??= [...fixedCopper(input), ...traces.flatMap(routeCopper)];
-    const scene = new VectorScene(
-      input,
-      {
-        ...connection,
-        pointsToConnect: [trace.route[0], trace.route.at(-1)]
-      },
-      trace.route[0].width,
-      hard
-    );
-    const joined = attached.length ? joinSignalEscapes(
-      trace,
-      attached.map((escape) => octilinearSurfaceEscape(escape, scene))
-    ) : trace, result = normalizeCarrierEnds(joined, scene);
-    if (result !== trace) hard.push(...routeCopper(result));
-    return result;
-  });
-  const escapes = generatedEscapes.map(
-    (escape) => replacements.get(escape) ?? escape
-  );
-  const byName = new Map(
-    normalized.map((trace) => [trace.connection_name, trace])
-  );
-  return {
-    input: {
-      ...input,
-      traces: input.traces?.map(
-        // Ownership is explicit object identity. A supplied trace may share a
-        // generated identifier and must still retain its original copper.
-        (trace) => replacements.get(trace) ?? trace
-      ),
-      connections: input.connections.map((connection) => {
-        const trace = byName.get(connection.name);
-        return trace ? {
-          ...connection,
-          pointsToConnect: [trace.route[0], trace.route.at(-1)]
-        } : connection;
-      })
-    },
-    traces: normalized,
-    escapes
-  };
-}
-
-// lib/rebalance-pair-escapes.ts
-var reverse3 = (trace) => ({
-  ...trace,
-  route: trace.route.toReversed(),
-  coupledSection: trace.coupledSection ? [
-    trace.route.length - 1 - trace.coupledSection[1],
-    trace.route.length - 1 - trace.coupledSection[0]
-  ] : void 0,
-  curvedSegments: trace.curvedSegments?.map((i2) => trace.route.length - i2)
-});
-function* rebalancePairEscapes(input, traces, generatedEscapes, options) {
-  const targets = minimumLengthTargets(input, traces);
-  const paired = new Set(
-    input.differentialPairs?.flatMap((p2) => p2.connectionNames)
-  );
-  const generatedIds = new Set(generatedEscapes.map((t48) => t48.pcb_trace_id));
-  const short = traces.filter(
-    (t48) => paired.has(t48.connection_name) && t48.coupledSection && (targets.get(t48.connection_name) ?? 0) > length(t48.route) + fixedRouteLength(input, t48.connection_name) + 1e-7
-  );
-  let attempts = 0;
-  for (const original of short)
-    for (const end of [0, 1]) {
-      const trace = end ? reverse3(original) : original, name = trace.connection_name, layer = trace.route[0].layer;
-      const escape = input.traces?.find(
-        (t48) => generatedIds.has(t48.pcb_trace_id) && t48.connection_name === name && t48.route.filter((p2) => p2.route_type === "via").length === 1 && distance(t48.route.at(-1), trace.route[0]) < 1e-7
-      );
-      if (!escape) continue;
-      const pad = escape.route[0], oldVia = escape.route.find((p2) => p2.route_type === "via");
-      if (pad.layer !== "top" || oldVia.from_layer !== "top") continue;
-      const owner = input.obstacles.find(
-        (o2) => o2.componentId && distance(o2.center, pad) < 1e-4
-      );
-      if (!owner) continue;
-      const pads = input.obstacles.filter(
-        (o2) => o2.componentId === owner.componentId
-      );
-      const pitch = Math.min(
-        ...pads.map((o2) => distance(o2.center, pad)).filter((d2) => d2 > 1e-4)
-      );
-      if (!Number.isFinite(pitch)) continue;
-      const surfaceLimit = Math.min(2, 2.5 * pitch);
-      const minX = Math.min(...pads.map((p2) => p2.center.x - p2.width / 2)), maxX = Math.max(...pads.map((p2) => p2.center.x + p2.width / 2));
-      const minY = Math.min(...pads.map((p2) => p2.center.y - p2.height / 2)), maxY = Math.max(...pads.map((p2) => p2.center.y + p2.height / 2));
-      const directions = [
-        { x: -1, y: 0, d: pad.x - minX },
-        { x: 1, y: 0, d: maxX - pad.x },
-        { x: 0, y: -1, d: pad.y - minY },
-        { x: 0, y: 1, d: maxY - pad.y }
-      ].sort((a2, b2) => a2.d - b2.d).slice(0, 2);
-      const held = traces.filter((t48) => t48 !== original), connection = input.connections.find((c2) => c2.name === name);
-      const base = {
-        ...input,
-        traces: input.traces.filter((t48) => t48 !== escape)
-      }, fixed = [...fixedCopper(base), ...held.flatMap(routeCopper)];
-      const width = trace.route[0].width;
-      function* find(a2, b2, carrier, maximum) {
-        const localConnection = {
-          ...connection,
-          pointsToConnect: [
-            { ...a2, layer: carrier },
-            { ...b2, layer: carrier }
-          ]
-        };
-        const scene = new VectorScene(base, localConnection, width, fixed);
-        const search = new GridVisibilitySearch(
-          scene,
-          localConnection.pointsToConnect[0],
-          localConnection.pointsToConnect[1],
-          [],
-          0,
-          void 0,
-          { maxLength: maximum, paretoLength: true, checkReachability: true }
-        );
-        try {
-          let steps = 0;
-          while (!search.solved && !search.failed && steps++ < 4e3) {
-            search.step();
-            yield;
-          }
-          return search.solved ? reduceOrdinaryTurns(search.result, scene).map((p2) => ({
-            ...p2,
-            route_type: "wire",
-            layer: carrier,
-            width
-          })) : null;
-        } finally {
-          search.cancel();
-        }
-      }
-      for (const normal of directions)
-        for (const outward of [1, 0.875, 1.125, 1.25, 1.5])
-          for (const across of [1.125, 1, 0.875, 0.75, 1.25, 1.375, 1.5, 0.625])
-            for (const sign of [-1, 1]) {
-              if (++attempts > 192) return null;
-              const site = {
-                x: pad.x + pitch * (normal.x * outward - normal.y * across * sign),
-                y: pad.y + pitch * (normal.y * outward + normal.x * across * sign)
-              };
-              const via = { ...oldVia, ...site, to_layer: layer };
-              const physical = Array.from(
-                { length: input.layerCount },
-                (_2, i2) => i2 === 0 ? "top" : i2 === input.layerCount - 1 ? "bottom" : `inner${i2}`
-              );
-              if (physical.some(
-                (carrier) => !new VectorScene(
-                  base,
-                  {
-                    ...connection,
-                    pointsToConnect: [
-                      { ...site, layer: carrier },
-                      { ...site, layer: carrier }
-                    ]
-                  },
-                  via.via_diameter ?? 0.3,
-                  fixed
-                ).visible(site, site)
-              ))
-                continue;
-              let top = yield* find(pad, site, "top", surfaceLimit);
-              const s2 = trace.coupledSection[0], prefix = yield* find(site, trace.route[s2], layer, 4 * pitch);
-              if (!top || !prefix) continue;
-              top = chamferOrdinaryCorners(
-                {
-                  ...base,
-                  connections: [
-                    {
-                      ...connection,
-                      pointsToConnect: [pad, { ...site, layer: "top" }]
-                    }
-                  ]
-                },
-                [{ ...escape, route: top }],
-                fixed
-              )[0].route;
-              const replacement = {
-                ...escape,
-                route: [
-                  ...top,
-                  via,
-                  { ...site, route_type: "wire", layer, width }
-                ]
-              };
-              const offset = prefix.length - 1 - s2;
-              let changed = {
-                ...trace,
-                route: [...prefix.slice(0, -1), ...trace.route.slice(s2)],
-                coupledSection: trace.coupledSection.map(
-                  (i2) => i2 + offset
-                ),
-                curvedSegments: trace.curvedSegments?.filter((i2) => i2 > s2).map((i2) => i2 + offset)
-              };
-              if (end) changed = reverse3(changed);
-              const local = {
-                ...input,
-                traces: input.traces.map(
-                  (t48) => t48 === escape ? replacement : t48
-                ),
-                connections: input.connections.map(
-                  (c2) => c2 === connection ? {
-                    ...c2,
-                    pointsToConnect: [
-                      changed.route[0],
-                      changed.route.at(-1)
-                    ]
-                  } : c2
-                )
-              };
-              const total = length(changed.route) + fixedRouteLength(local, name);
-              if (Math.abs(total - targets.get(name)) > 1) continue;
-              for (const trim of [0.75, 0.375, 1.5])
-                try {
-                  const candidate = alignCoupledSectionBoundaries(
-                    local,
-                    chamferOrdinaryCorners(
-                      local,
-                      traces.map((t48) => t48 === original ? changed : t48),
-                      void 0,
-                      trim
-                    )
-                  );
-                  const tuned = tuneCoupledLengths(local, candidate, {
-                    maxCandidates: 65536,
-                    packMeanders: true,
-                    packageOnlyPairTuning: true
-                  });
-                  if (tuned.some(
-                    (t48) => !createTerminalViaClearanceChecker(local, t48, {
-                      preserveExistingApproach: false
-                    })(t48.route)
-                  ))
-                    continue;
-                  const validator = BusLanesSolver.forValidation(
-                    local,
-                    tuned,
-                    options
-                  );
-                  try {
-                    while (!validator.solved && !validator.failed) {
-                      validator.step();
-                      yield;
-                    }
-                    const coupling = exteriorPairSpacingReports(local, tuned);
-                    if (validator.solved && coupling.length === (input.differentialPairs?.length ?? 0) && coupling.every((p2) => p2.applicable && p2.matched))
-                      return {
-                        input: local,
-                        traces: tuned,
-                        escapes: generatedEscapes.map(
-                          (t48) => t48.pcb_trace_id === escape.pcb_trace_id ? replacement : t48
-                        )
-                      };
-                  } finally {
-                    if (!validator.solved && !validator.failed)
-                      validator.tryFinalAcceptance();
-                  }
-                } catch {
-                  yield;
-                }
-            }
-    }
-  return null;
-}
-
-// lib/run-bounded-routing.ts
-function* runBoundedRouting(generator, limit) {
-  let state = generator.next();
-  let steps = 0;
-  try {
-    while (!state.done && steps++ < limit) {
-      yield;
-      state = generator.next();
-    }
-    return state.done ? state.value : null;
-  } finally {
-    if (!state.done) generator.return(null);
-  }
-}
-
-// lib/shorten-pair-approaches.ts
-function shortenPairApproaches(input, traces) {
-  const result = [...traces], fixed = fixedCopper(input);
-  for (let i2 = 0; i2 < result.length; i2++) {
-    const t48 = result[i2];
-    if (!t48.coupledSection) continue;
-    const [s2, e2] = t48.coupledSection, first = t48.route[0];
-    const scene = new VectorScene(
-      input,
-      input.connections.find((c2) => c2.name === t48.connection_name),
-      first.width,
-      [...fixed, ...result.flatMap(routeCopper)]
-    );
-    const regions = packageApproachRegions(
-      input,
-      first.width + (input.differentialPairs?.find(
-        (p2) => p2.connectionNames.includes(t48.connection_name)
-      )?.traceGap ?? 0.1) / 2 + (input.minTraceToPadEdgeClearance ?? input.defaultObstacleMargin ?? 0.075)
-    );
-    const shorten = (start, end) => {
-      const local = regions.find(
-        (r2) => pointInBox(t48.route[start === 0 ? 0 : t48.route.length - 1], r2.copper)
-      );
-      const externalCurve = (t48.curvedSegments ?? []).some(
-        (i3) => i3 > start && i3 <= end && (!local || !pointInBox(t48.route[i3 - 1], local.copper) || !pointInBox(t48.route[i3], local.copper))
-      );
-      return externalCurve ? reduceOrdinaryTurns(t48.route.slice(start, end + 1), scene) : t48.route.slice(start, end + 1);
-    };
-    const prefix = shorten(0, s2), suffix = shorten(e2, t48.route.length - 1);
-    const route = [
-      ...prefix.slice(0, -1),
-      ...t48.route.slice(s2, e2 + 1),
-      ...suffix.slice(1)
-    ].map((p2) => ({
-      ...p2,
-      route_type: "wire",
-      layer: first.layer,
-      width: first.width
-    }));
-    result[i2] = {
-      ...t48,
-      route,
-      curvedSegments: remapCurvedSegments(t48, route),
-      coupledSection: [prefix.length - 1, prefix.length + e2 - s2 - 1]
-    };
-  }
-  return result;
-}
-
-// node_modules/circuit-json/dist/index.mjs
+// ../bus-lanes-solver/node_modules/circuit-json/dist/index.mjs
 var dist_exports = {};
 __export(dist_exports, {
   all_layers: () => all_layers,
@@ -27274,7 +26192,7 @@ __export(dist_exports, {
   wave_shape: () => wave_shape
 });
 
-// node_modules/format-si-unit/dist/index.js
+// ../bus-lanes-solver/node_modules/format-si-unit/dist/index.js
 var SI_PREFIX_VALUES = /* @__PURE__ */ new Map([
   ["T", 1e12],
   ["G", 1e9],
@@ -27547,7 +26465,7 @@ var SI_PREFIXES2 = [
 ];
 var FALLBACK_PREFIX = SI_PREFIXES2[SI_PREFIXES2.length - 1];
 
-// node_modules/zod/v3/external.js
+// ../bus-lanes-solver/node_modules/zod/v3/external.js
 var external_exports = {};
 __export(external_exports, {
   BRAND: () => BRAND,
@@ -27659,7 +26577,7 @@ __export(external_exports, {
   void: () => voidType
 });
 
-// node_modules/zod/v3/helpers/util.js
+// ../bus-lanes-solver/node_modules/zod/v3/helpers/util.js
 var util;
 (function(util2) {
   util2.assertEqual = (_2) => {
@@ -27793,7 +26711,7 @@ var getParsedType = (data) => {
   }
 };
 
-// node_modules/zod/v3/ZodError.js
+// ../bus-lanes-solver/node_modules/zod/v3/ZodError.js
 var ZodIssueCode = util.arrayToEnum([
   "invalid_type",
   "invalid_literal",
@@ -27911,7 +26829,7 @@ ZodError.create = (issues) => {
   return error;
 };
 
-// node_modules/zod/v3/locales/en.js
+// ../bus-lanes-solver/node_modules/zod/v3/locales/en.js
 var errorMap = (issue, _ctx) => {
   let message;
   switch (issue.code) {
@@ -28014,7 +26932,7 @@ var errorMap = (issue, _ctx) => {
 };
 var en_default = errorMap;
 
-// node_modules/zod/v3/errors.js
+// ../bus-lanes-solver/node_modules/zod/v3/errors.js
 var overrideErrorMap = en_default;
 function setErrorMap(map) {
   overrideErrorMap = map;
@@ -28023,7 +26941,7 @@ function getErrorMap() {
   return overrideErrorMap;
 }
 
-// node_modules/zod/v3/helpers/parseUtil.js
+// ../bus-lanes-solver/node_modules/zod/v3/helpers/parseUtil.js
 var makeIssue = (params) => {
   const { data, path, errorMaps, issueData } = params;
   const fullPath = [...path, ...issueData.path || []];
@@ -28133,14 +27051,14 @@ var isDirty = (x2) => x2.status === "dirty";
 var isValid = (x2) => x2.status === "valid";
 var isAsync = (x2) => typeof Promise !== "undefined" && x2 instanceof Promise;
 
-// node_modules/zod/v3/helpers/errorUtil.js
+// ../bus-lanes-solver/node_modules/zod/v3/helpers/errorUtil.js
 var errorUtil;
 (function(errorUtil2) {
   errorUtil2.errToObj = (message) => typeof message === "string" ? { message } : message || {};
   errorUtil2.toString = (message) => typeof message === "string" ? message : message?.message;
 })(errorUtil || (errorUtil = {}));
 
-// node_modules/zod/v3/types.js
+// ../bus-lanes-solver/node_modules/zod/v3/types.js
 var ParseInputLazyPath = class {
   constructor(parent, value, path, key) {
     this._cachedPath = [];
@@ -31588,7 +30506,7 @@ var coerce = {
 };
 var NEVER = INVALID;
 
-// node_modules/circuit-json/dist/index.mjs
+// ../bus-lanes-solver/node_modules/circuit-json/dist/index.mjs
 var resistance = external_exports.string().or(external_exports.number()).transform((v2) => parseAndConvertSiUnit(v2, "\u03A9").value);
 var capacitance = external_exports.string().or(external_exports.number()).transform((v2) => parseAndConvertSiUnit(v2, "F").value).transform((value) => {
   return Number.parseFloat(value.toPrecision(12));
@@ -36177,7 +35095,7 @@ var any_soup_element = any_circuit_element;
 expectTypesMatch(true);
 expectStringUnionsMatch(true);
 
-// node_modules/@tscircuit/circuit-json-util/node_modules/@flatten-js/core/dist/main.mjs
+// ../bus-lanes-solver/node_modules/@tscircuit/circuit-json-util/node_modules/@flatten-js/core/dist/main.mjs
 var CCW = true;
 var CW2 = false;
 var ORIENTATION = { CCW: -1, CW: 1, NOT_ORIENTABLE: 0 };
@@ -43388,7 +42306,7 @@ Flatten.parseWKT = parseWKT;
 Flatten.BooleanOperations = BooleanOperations;
 Flatten.Relations = Relations;
 
-// node_modules/@tscircuit/circuit-json-util/dist/index.js
+// ../bus-lanes-solver/node_modules/@tscircuit/circuit-json-util/dist/index.js
 function connect(map, a2, b2) {
   if (!a2 || !b2) return;
   let setA = map.get(a2);
@@ -44221,7 +43139,7 @@ var PIN1_LOCATION_PARTS = {
 };
 var PIN1_LOCATIONS = Object.keys(PIN1_LOCATION_PARTS);
 
-// node_modules/@tscircuit/math-utils/dist/chunk-EFLPMB4J.js
+// ../bus-lanes-solver/node_modules/@tscircuit/math-utils/dist/chunk-EFLPMB4J.js
 function doSegmentsIntersect(p1, q1, p2, q2) {
   const o1 = orientation(p1, q1, p2);
   const o2 = orientation(p1, q1, q2);
@@ -44261,7 +43179,7 @@ function distance6(p1, p2) {
   return Math.sqrt(dx2 * dx2 + dy2 * dy2);
 }
 
-// node_modules/@tscircuit/math-utils/dist/chunk-Y7G4VXR7.js
+// ../bus-lanes-solver/node_modules/@tscircuit/math-utils/dist/chunk-Y7G4VXR7.js
 function segmentToSegmentMinDistance(a2, b2, u2, v2) {
   if (a2.x === b2.x && a2.y === b2.y) {
     return pointToSegmentDistance(a2, u2, v2);
@@ -44281,7 +43199,7 @@ function segmentToSegmentMinDistance(a2, b2, u2, v2) {
   return Math.min(...distances);
 }
 
-// node_modules/@flatten-js/core/dist/main.mjs
+// ../bus-lanes-solver/node_modules/@flatten-js/core/dist/main.mjs
 var CCW2 = true;
 var CW3 = false;
 var ORIENTATION2 = { CCW: -1, CW: 1, NOT_ORIENTABLE: 0 };
@@ -51213,7 +50131,7 @@ Flatten2.parseWKT = parseWKT2;
 Flatten2.BooleanOperations = BooleanOperations2;
 Flatten2.Relations = Relations2;
 
-// node_modules/@tscircuit/checks/dist/index.js
+// ../bus-lanes-solver/node_modules/@tscircuit/checks/dist/index.js
 var jlcMinTolerances = {
   min_trace_width: 0.1,
   min_via_hole_edge_to_via_hole_edge_clearance: 0.1,
@@ -51539,6 +50457,1249 @@ function checkPcbTraceSelfShorts(circuitJson) {
     }
   }
   return errors;
+}
+
+// lib/check-signal-self-shorts.ts
+var clearedCopper = /* @__PURE__ */ new Set();
+var maximumClearedEntries = 1024;
+function checkSignalSelfShorts(input, traces) {
+  const sourceId = (trace) => trace.connection_name || trace.source_trace_id || trace.pcb_trace_id;
+  const keys = new Map(
+    traces.map((trace) => [
+      trace,
+      JSON.stringify([
+        input.layerCount,
+        trace.pcb_trace_id,
+        trace.connection_name,
+        trace.route
+      ])
+    ])
+  );
+  const pending = traces.filter((trace) => !clearedCopper.has(keys.get(trace)));
+  if (!pending.length) return [];
+  const circuit = [
+    { type: "pcb_board", pcb_board_id: "board", num_layers: input.layerCount },
+    // The native check selects traces through a matching bus. Audit untimed
+    // controls too, without changing the board's actual routing constraints.
+    {
+      type: "source_bus",
+      source_bus_id: "signal_self_short_audit",
+      max_length_skew: 0,
+      source_trace_ids: pending.map(sourceId)
+    },
+    ...(input.buses ?? []).map((bus) => ({
+      type: "source_bus",
+      source_bus_id: bus.busId,
+      max_length_skew: bus.maxLengthSkew,
+      source_trace_ids: bus.connectionNames
+    })),
+    ...input.connections.map((c2) => ({
+      type: "source_trace",
+      source_trace_id: c2.name,
+      name: c2.name,
+      connected_source_port_ids: [],
+      connected_source_net_ids: []
+    })),
+    ...pending.map((t48) => ({
+      ...t48,
+      type: "pcb_trace",
+      source_trace_id: sourceId(t48)
+    })),
+    ...pending.flatMap(
+      (t48) => t48.route.flatMap(
+        (p2, i2) => p2.route_type === "via" ? [
+          {
+            type: "pcb_via",
+            pcb_via_id: `${t48.pcb_trace_id}_via_${i2}`,
+            pcb_trace_id: t48.pcb_trace_id,
+            source_trace_id: sourceId(t48),
+            x: p2.x,
+            y: p2.y,
+            outer_diameter: p2.via_diameter,
+            hole_diameter: p2.via_hole_diameter,
+            layers: p2.layers ?? getCopperLayerNames(input.layerCount)
+          }
+        ] : []
+      )
+    )
+  ];
+  const errors = checkPcbTraceSelfShorts(circuit);
+  const failed = new Set(errors.map((error) => error.pcb_trace_id));
+  for (const trace of pending) {
+    if (failed.has(trace.pcb_trace_id)) continue;
+    if (clearedCopper.size >= maximumClearedEntries)
+      clearedCopper.delete(clearedCopper.values().next().value);
+    clearedCopper.add(keys.get(trace));
+  }
+  return errors;
+}
+
+// lib/retarget-generated-escape.ts
+function retargetGeneratedEscape(trace, carrierLayer) {
+  const viaIndex = trace.route.findIndex((point5) => point5.route_type === "via");
+  if (viaIndex < 0) {
+    if (trace.route.some(
+      (point5) => point5.route_type !== "wire" || point5.layer !== carrierLayer
+    ))
+      throw Error("Surface escape does not support the selected carrier layer");
+    return trace;
+  }
+  const viaCount = trace.route.filter(
+    (point5) => point5.route_type === "via"
+  ).length;
+  if (viaCount > 1) {
+    if (!multiViaApproachIsContinuous(trace))
+      throw Error(
+        "Multi-via generated escape requires explicit continuous manufactured handoffs"
+      );
+    if (trace.route.at(-1).layer !== carrierLayer)
+      throw Error("Multi-via generated escape cannot change its carrier layer");
+    return trace;
+  }
+  const via = trace.route[viaIndex];
+  const handoff = trace.route[viaIndex - 1];
+  if (handoff?.route_type !== "wire" || handoff.layer !== via.from_layer || Math.hypot(handoff.x - via.x, handoff.y - via.y) > 1e-8)
+    throw Error(
+      "Generated escape requires one explicit native-layer via handoff"
+    );
+  if (!via.layers && carrierLayer !== via.from_layer && carrierLayer !== via.to_layer)
+    throw Error(
+      "Generated escape needs an explicit span to change carrier layers"
+    );
+  if (via.layers && !via.layers.includes(carrierLayer))
+    throw Error("Generated escape does not span the selected carrier layer");
+  if (carrierLayer === via.from_layer)
+    return { ...trace, route: trace.route.slice(0, viaIndex) };
+  return {
+    ...trace,
+    route: trace.route.map(
+      (point5, index2) => point5.route_type === "via" ? { ...point5, to_layer: carrierLayer } : index2 > viaIndex ? { ...point5, layer: carrierLayer } : point5
+    )
+  };
+}
+function multiViaApproachIsContinuous(trace) {
+  if (trace.route[0]?.route_type !== "wire" || trace.route.at(-1)?.route_type !== "wire")
+    return false;
+  for (const [index2, point5] of trace.route.entries()) {
+    if (!Number.isFinite(point5.x) || !Number.isFinite(point5.y)) return false;
+    if (point5.route_type === "wire") {
+      if (!point5.layer || !Number.isFinite(point5.width) || point5.width <= 0)
+        return false;
+      const previous = trace.route[index2 - 1];
+      if (previous?.route_type === "wire" && previous.layer !== point5.layer)
+        return false;
+      continue;
+    }
+    const before = trace.route[index2 - 1], after = trace.route[index2 + 1];
+    if (before?.route_type !== "wire" || after?.route_type !== "wire" || !point5.from_layer || !point5.to_layer || point5.from_layer === point5.to_layer || before.layer !== point5.from_layer || after.layer !== point5.to_layer || Math.hypot(before.x - point5.x, before.y - point5.y) > 1e-8 || Math.hypot(after.x - point5.x, after.y - point5.y) > 1e-8 || !Array.isArray(point5.layers) || point5.layers.length < 2 || point5.layers.some((layer) => typeof layer !== "string" || !layer) || new Set(point5.layers).size !== point5.layers.length || !point5.layers.includes(point5.from_layer) || !point5.layers.includes(point5.to_layer) || !Number.isFinite(point5.via_diameter) || !Number.isFinite(point5.via_hole_diameter) || point5.via_diameter <= 0 || point5.via_hole_diameter <= 0 || point5.via_hole_diameter > point5.via_diameter)
+      return false;
+  }
+  return true;
+}
+
+// lib/join-signal-escapes.ts
+function joinSignalEscapes(lane, escapes) {
+  const prefix = escapes.find(
+    (trace) => distance(trace.route.at(-1), lane.route[0]) < 1e-8
+  );
+  const suffix = escapes.find(
+    (trace) => trace !== prefix && distance(trace.route.at(-1), lane.route.at(-1)) < 1e-8
+  );
+  const reversed = suffix?.route.toReversed().map(
+    (point5) => point5.route_type === "via" ? { ...point5, from_layer: point5.to_layer, to_layer: point5.from_layer } : point5
+  ) ?? [];
+  const offset = (prefix?.route.length ?? 1) - 1;
+  const suffixOffset = offset + lane.route.length - 1;
+  const curvedSegments = [
+    ...prefix?.curvedSegments ?? [],
+    ...lane.curvedSegments?.map((index2) => index2 + offset) ?? [],
+    ...suffix?.curvedSegments?.map(
+      (index2) => suffixOffset + suffix.route.length - index2
+    ) ?? []
+  ].sort((a2, b2) => a2 - b2);
+  return {
+    ...lane,
+    coupledSection: lane.coupledSection?.map((index2) => index2 + offset),
+    curvedSegments: curvedSegments.length ? curvedSegments : void 0,
+    route: [
+      ...prefix?.route.slice(0, -1) ?? [],
+      ...lane.route,
+      ...reversed.slice(1)
+    ]
+  };
+}
+
+// lib/exterior-pair-spacing.ts
+function exteriorIntervals(a2, b2, boxes) {
+  const inside3 = [];
+  for (const box3 of boxes) {
+    let lo = 0, hi = 1;
+    for (const [axis, min, max] of [
+      ["x", box3.minX, box3.maxX],
+      ["y", box3.minY, box3.maxY]
+    ]) {
+      const delta = b2[axis] - a2[axis];
+      if (Math.abs(delta) < 1e-15) {
+        if (a2[axis] < min || a2[axis] > max) {
+          lo = 1;
+          hi = 0;
+          break;
+        }
+      } else {
+        const p2 = (min - a2[axis]) / delta, q2 = (max - a2[axis]) / delta;
+        lo = Math.max(lo, Math.min(p2, q2));
+        hi = Math.min(hi, Math.max(p2, q2));
+      }
+    }
+    if (lo < hi) inside3.push([lo, hi]);
+  }
+  inside3.sort((a3, b3) => a3[0] - b3[0]);
+  const outside = [];
+  let end = 0;
+  for (const [lo, hi] of inside3) {
+    if (lo > end) outside.push([end, lo]);
+    end = Math.max(end, hi);
+  }
+  if (end < 1) outside.push([end, 1]);
+  return outside;
+}
+function exteriorPairSpacingReports(input, traces) {
+  const localDogbones = traces.flatMap((t48) => {
+    const vias = t48.route.flatMap((p2, i2) => p2.route_type === "via" ? [i2] : []);
+    return vias.length === 2 ? [
+      { ...t48, route: t48.route.slice(0, vias[0] + 2) },
+      { ...t48, route: t48.route.slice(vias[1] - 1).toReversed() }
+    ] : [];
+  });
+  return (input.differentialPairs ?? []).map((pair) => {
+    const rails = pair.connectionNames.map(
+      (name) => traces.find(
+        (t48) => t48.connection_name === name || t48.source_trace_id === name
+      )
+    );
+    const width = Math.max(
+      ...rails.flatMap(
+        (t48) => t48?.route.flatMap((p2) => p2.route_type === "wire" ? [p2.width] : []) ?? []
+      )
+    );
+    const clearance = input.minTraceToPadEdgeClearance ?? input.defaultObstacleMargin ?? 0.075;
+    const gap = pair.traceGap ?? clearance;
+    const regions = packageApproachRegions(
+      { ...input, traces: [...input.traces ?? [], ...localDogbones] },
+      width + gap / 2 + clearance
+    );
+    const fields = [0, 1].flatMap((end) => {
+      const r2 = regions.find(
+        (r3) => rails.every(
+          (t48) => t48?.route.length && pointInBox(end ? t48.route.at(-1) : t48.route[0], r3.copper)
+        )
+      );
+      return r2 ? [r2.copper] : [];
+    });
+    const applicable = (pair.traceGap !== void 0 || pair.maxUncoupledLength !== void 0) && fields.length === 2 && rails.every((t48) => t48?.route.length);
+    const base = { connectionNames: pair.connectionNames, applicable };
+    if (!applicable)
+      return {
+        ...base,
+        matched: true,
+        maxExteriorEdgeGapMm: null,
+        maxSamplingErrorMm: null,
+        separatedExteriorLengthMm: null
+      };
+    const segments = (trace) => trace.route.slice(1).flatMap((b2, i2) => {
+      const a2 = trace.route[i2];
+      return a2.route_type === "wire" && b2.route_type === "wire" && a2.layer === b2.layer ? [{ a: a2, b: b2, radius: a2.width / 2, layer: a2.layer, owners: [] }] : [];
+    });
+    let max = -Infinity, error = 0, separated = 0;
+    const maxAllowed = (width + gap) / Math.cos(Math.PI / 8) - width + 2e-3;
+    for (let side = 0; side < 2; side++) {
+      const mate = segments(rails[1 - side]);
+      const indexes = new Map(
+        [...new Set(mate.map((s2) => s2.layer))].map((layer) => [
+          layer,
+          new CopperIndex(mate.filter((s2) => s2.layer === layer))
+        ])
+      );
+      for (const { a: a2, b: b2 } of segments(rails[side])) {
+        const span = distance(a2, b2);
+        for (const [lo, hi] of exteriorIntervals(a2, b2, fields)) {
+          const count = Math.max(1, Math.ceil((hi - lo) * span / 2e-3));
+          const step = (hi - lo) * span / count;
+          error = Math.max(error, step / 2);
+          for (let k2 = 0; k2 < count; k2++) {
+            const t48 = lo + (hi - lo) * (k2 + 0.5) / count;
+            const p2 = { x: a2.x + (b2.x - a2.x) * t48, y: a2.y + (b2.y - a2.y) * t48 };
+            const spacing = (indexes.get(a2.layer)?.distanceToPoint(
+              p2,
+              (s2) => pointSegmentDistanceToPoints(p2, s2.a, s2.b) - s2.radius
+            ) ?? Infinity) - a2.width / 2;
+            max = Math.max(max, spacing);
+            if (spacing + step / 2 > maxAllowed) separated += step;
+          }
+        }
+      }
+    }
+    return {
+      ...base,
+      matched: separated === 0,
+      maxExteriorEdgeGapMm: max === -Infinity ? null : max,
+      maxSamplingErrorMm: error,
+      separatedExteriorLengthMm: separated
+    };
+  });
+}
+
+// lib/tune-generated-pair-escapes.ts
+function* tuneGeneratedPairEscapes(input, traces, generatedEscapes, options) {
+  const targets = minimumLengthTargets(input, traces);
+  const paired = new Set(
+    input.differentialPairs?.flatMap((p2) => p2.connectionNames)
+  );
+  const generatedIds = new Set(generatedEscapes.map((t48) => t48.pcb_trace_id));
+  let local = input;
+  let escapes = generatedEscapes;
+  let changed = false;
+  for (const carrier of traces) {
+    const name = carrier.connection_name;
+    if (!paired.has(name) || !carrier.coupledSection) continue;
+    if ((targets.get(name) ?? 0) <= length(carrier.route) + fixedRouteLength(local, name) + 1e-7)
+      continue;
+    for (const escape of local.traces ?? []) {
+      if (!generatedIds.has(escape.pcb_trace_id) || escape.connection_name !== name)
+        continue;
+      const viaIndex = escape.route.findIndex((p2) => p2.route_type === "via");
+      if (viaIndex < 2 || escape.route.filter((p2) => p2.route_type === "via").length !== 1)
+        continue;
+      const pad = escape.route[0];
+      const via = escape.route[viaIndex];
+      if (pad.route_type !== "wire" || pad.layer !== "top" || via.route_type !== "via" || via.from_layer !== "top")
+        continue;
+      const top = escape.route.slice(0, viaIndex);
+      if (top.some((p2) => p2.route_type !== "wire" || p2.layer !== "top") || distance(top.at(-1), via) > 1e-8)
+        continue;
+      const owner = input.obstacles.find(
+        (o2) => o2.componentId && distance(o2.center, pad) < 1e-4
+      );
+      if (!owner) continue;
+      const pitch = Math.min(
+        ...input.obstacles.filter((o2) => o2.componentId === owner.componentId).map((o2) => distance(o2.center, pad)).filter((d2) => d2 > 1e-4)
+      );
+      if (!Number.isFinite(pitch)) continue;
+      const surfaceLimit = Math.min(2, 2.5 * pitch);
+      const connection = input.connections.find((c2) => c2.name === name);
+      const stubInput = {
+        ...local,
+        connections: local.connections.map(
+          (c2) => c2.name === name ? { ...connection, pointsToConnect: [pad, top.at(-1)] } : c2
+        ),
+        traces: [
+          ...(local.traces ?? []).filter((t48) => t48 !== escape),
+          {
+            ...escape,
+            pcb_trace_id: `${escape.pcb_trace_id}_held_barrel`,
+            route: escape.route.slice(viaIndex)
+          },
+          ...traces
+        ]
+      };
+      const stub = { ...escape, route: top };
+      try {
+        const tuned = tuneSmoothLengths(
+          stubInput,
+          [stub],
+          /* @__PURE__ */ new Map([[name, targets.get(name)]]),
+          { maxCandidates: 4096, packMeanders: true }
+        )[0];
+        const clearance = input.minTraceToPadEdgeClearance ?? input.defaultObstacleMargin ?? 0.075;
+        if (length(tuned.route) > surfaceLimit + 1e-8 || !routeAnglesAreConventional([tuned]) || !tuningPathIsSelfClear(tuned.route, pad.width + clearance) || !createTerminalViaClearanceChecker(stubInput, stub, {
+          preserveExistingApproach: false
+        })(tuned.route))
+          continue;
+        const replacement = {
+          ...escape,
+          route: [...tuned.route, ...escape.route.slice(viaIndex)],
+          curvedSegments: tuned.curvedSegments
+        };
+        local = {
+          ...local,
+          traces: local.traces.map((t48) => t48 === escape ? replacement : t48)
+        };
+        escapes = escapes.map(
+          (t48) => t48.pcb_trace_id === escape.pcb_trace_id ? replacement : t48
+        );
+        changed = true;
+        break;
+      } catch {
+      }
+      yield;
+    }
+  }
+  if (!changed) return null;
+  const validator = BusLanesSolver.forValidation(local, traces, options);
+  try {
+    while (!validator.solved && !validator.failed) {
+      validator.step();
+      yield;
+    }
+    const coupling = exteriorPairSpacingReports(local, traces);
+    if (validator.solved && coupling.length === (input.differentialPairs?.length ?? 0) && coupling.every((p2) => p2.applicable && p2.matched)) {
+      return { input: local, traces, escapes };
+    }
+  } finally {
+    if (!validator.solved && !validator.failed) validator.tryFinalAcceptance();
+  }
+  return null;
+}
+
+// lib/alternate-signal-dogbones.ts
+function routeAlternateSignalDogbones(input, options, attempt) {
+  try {
+    return routeVariant(input, options, attempt);
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== "No collision-free local dogbone assignment")
+      throw error;
+    const targets = new Map(options.targetLayers);
+    const nativeLayer = (name) => {
+      const connection = input.connections.find((c2) => c2.name === name);
+      if (!connection || connection.pointsToConnect.length !== 2) return;
+      const layer = connection.pointsToConnect[0].layer;
+      if (!connection.pointsToConnect.every((point5) => point5.layer === layer) || !input.allowedLayers?.includes(layer) || (input.buses ?? []).some(
+        (bus) => bus.connectionNames.includes(name) && bus.allowedLayers && !bus.allowedLayers.includes(layer)
+      ))
+        return;
+      return layer;
+    };
+    let changed = false;
+    for (const connection of input.connections) {
+      const layer = nativeLayer(connection.name);
+      if (!layer || targets.get(connection.name) === layer) continue;
+      const single = {
+        ...input,
+        connections: [connection],
+        buses: [],
+        differentialPairs: []
+      };
+      let possible = false;
+      for (let quadrant = 0; quadrant < 4 && !possible; quadrant++) {
+        try {
+          routeVariant(single, options, quadrant);
+          possible = true;
+        } catch {
+        }
+      }
+      if (possible) continue;
+      targets.set(connection.name, layer);
+      changed = true;
+    }
+    if (!changed) throw error;
+    for (const pair of input.differentialPairs ?? []) {
+      const [a2, b2] = pair.connectionNames;
+      if (targets.get(a2) === targets.get(b2)) continue;
+      const layer = nativeLayer(a2);
+      if (!layer || nativeLayer(b2) !== layer) throw error;
+      targets.set(a2, layer);
+      targets.set(b2, layer);
+    }
+    return routeVariant(input, { ...options, targetLayers: targets }, attempt);
+  }
+}
+function routeVariant(input, options, attempt) {
+  const delta = input.connections.reduce(
+    (s2, c2) => ({
+      x: s2.x + c2.pointsToConnect[1].x - c2.pointsToConnect[0].x,
+      y: s2.y + c2.pointsToConnect[1].y - c2.pointsToConnect[0].y
+    }),
+    { x: 0, y: 0 }
+  );
+  const base = Math.abs(delta.x) > Math.abs(delta.y) ? delta.x > 0 ? 3 : 1 : 0;
+  const busNames = new Set(
+    (input.buses ?? []).flatMap((b2) => b2.connectionNames)
+  );
+  const backward = backwardFacingPackageTerminals({
+    ...input,
+    connections: input.connections.filter((c2) => busNames.has(c2.name))
+  });
+  const order = input.traces?.length ? [0, ...[0, 1, 2, 3].map((i2) => (base + i2) % 4).filter((i2) => i2 !== 0)] : [3, 0, 1, 2].map((i2) => (base + i2) % 4);
+  const turns = backward ? (base + attempt) % 4 : order[attempt % 4];
+  const rotate2 = (p2, k2) => {
+    let { x: x2, y: y2 } = p2;
+    for (let i2 = 0; i2 < k2; i2++) [x2, y2] = [-y2, x2];
+    return { ...p2, x: x2, y: y2 };
+  };
+  const corners = [
+    { x: input.bounds.minX, y: input.bounds.minY },
+    { x: input.bounds.maxX, y: input.bounds.maxY }
+  ].map((p2) => rotate2(p2, turns));
+  const rotated = {
+    ...input,
+    bounds: {
+      minX: Math.min(...corners.map((p2) => p2.x)),
+      maxX: Math.max(...corners.map((p2) => p2.x)),
+      minY: Math.min(...corners.map((p2) => p2.y)),
+      maxY: Math.max(...corners.map((p2) => p2.y))
+    },
+    connections: input.connections.map((c2) => ({
+      ...c2,
+      pointsToConnect: c2.pointsToConnect.map((p2) => rotate2(p2, turns))
+    })),
+    obstacles: input.obstacles.map((o2) => ({
+      ...o2,
+      center: rotate2(o2.center, turns),
+      ccwRotationDegrees: (o2.ccwRotationDegrees ?? 0) + 90 * turns
+    })),
+    traces: input.traces?.map((t48) => ({
+      ...t48,
+      route: t48.route.map((p2) => rotate2(p2, turns))
+    }))
+  };
+  const result = routeLocalSignalDogbones(
+    rotated,
+    options
+  );
+  return {
+    connections: result.connections.map((c2) => ({
+      ...c2,
+      pointsToConnect: c2.pointsToConnect.map((p2) => rotate2(p2, (4 - turns) % 4))
+    })),
+    traces: result.traces.map((t48) => ({
+      ...t48,
+      route: t48.route.map((p2) => {
+        if (!("x" in p2)) throw Error("Unexpected dogbone primitive");
+        return rotate2(p2, (4 - turns) % 4);
+      })
+    }))
+  };
+}
+
+// lib/extend-package-coupling.ts
+var reverse2 = (t48) => ({
+  ...t48,
+  route: t48.route.toReversed(),
+  coupledSection: t48.coupledSection ? [
+    t48.route.length - 1 - t48.coupledSection[1],
+    t48.route.length - 1 - t48.coupledSection[0]
+  ] : void 0,
+  curvedSegments: t48.curvedSegments?.map((i2) => t48.route.length - i2)
+});
+var indexOf = (path, point5) => path.findIndex((p2) => distance(p2, point5) < 1e-7);
+var preservePoint = (path, point5) => {
+  if (indexOf(path, point5) >= 0) return path;
+  const i2 = path.findIndex(
+    (p2, i3) => i3 > 0 && pointSegmentDistanceToPoints(point5, path[i3 - 1], p2) < 1e-8
+  );
+  return i2 < 0 ? path : [...path.slice(0, i2), point5, ...path.slice(i2)];
+};
+function* extendPackageCoupling(input, original, options = {}) {
+  let result = original;
+  const fixed = fixedCopper(input);
+  const clearance = input.minTraceToPadEdgeClearance ?? input.defaultObstacleMargin ?? 0.075;
+  let budget = 2e3;
+  for (const pair of input.differentialPairs ?? []) {
+    for (const reversed of [false, true]) {
+      for (const side of options.reverseSides ? [1, 0] : [0, 1]) {
+        if (budget <= 0) return result;
+        const nativeRails = pair.connectionNames.map(
+          (name) => result.find((t48) => t48.connection_name === name)
+        );
+        if (nativeRails.some((t48) => !t48?.coupledSection)) continue;
+        const rails = nativeRails.map(
+          (t48) => reversed ? reverse2(t48) : t48
+        );
+        const ref = rails[side], other = rails[1 - side];
+        const [rs, re] = ref.coupledSection, [os, oe] = other.coupledSection;
+        const width = other.route[0].width, separation = width + (pair.traceGap ?? clearance);
+        if (re < 1 || oe < 1 || distance(ref.route[re - 1], ref.route[re]) < 1e-7)
+          continue;
+        const regions = packageApproachRegions(input, width / 2 + clearance);
+        const region = regions.find(
+          (r2) => pointInBox(ref.route.at(-1), r2.copper) && pointInBox(other.route.at(-1), r2.copper)
+        );
+        if (!region || pointInBox(ref.route[re], region.copper)) continue;
+        let stop = re + 1;
+        while (stop < ref.route.length && !pointInBox(ref.route[stop], region.copper))
+          stop++;
+        if (stop === ref.route.length || ref.curvedSegments?.some((i2) => i2 >= re && i2 <= stop))
+          continue;
+        const a2 = ref.route[stop - 1], b2 = ref.route[stop];
+        let lo = 0, hi = 1;
+        for (let i2 = 0; i2 < 40; i2++) {
+          const t48 = (lo + hi) / 2;
+          if (pointInBox(
+            { x: a2.x + (b2.x - a2.x) * t48, y: a2.y + (b2.y - a2.y) * t48 },
+            region.copper
+          ))
+            hi = t48;
+          else lo = t48;
+        }
+        const cut2 = { x: a2.x + (b2.x - a2.x) * hi, y: a2.y + (b2.y - a2.y) * hi };
+        const anchor = {
+          x: (ref.route[re - 1].x + ref.route[re].x) / 2,
+          y: (ref.route[re - 1].y + ref.route[re].y) / 2
+        };
+        let section = simplify([anchor, ...ref.route.slice(re, stop), cut2]);
+        let paths;
+        try {
+          paths = [separation, -separation].map((d2) => offsetPath(section, d2));
+        } catch {
+          continue;
+        }
+        let path = paths.find(
+          (p2) => pointSegmentDistanceToPoints(
+            p2[0],
+            other.route[oe - 1],
+            other.route[oe]
+          ) < 1e-7
+        );
+        if (!path) continue;
+        const localWire = (p2) => ({
+          ...p2,
+          route_type: "wire",
+          width,
+          layer: other.route[0].layer
+        });
+        const localRails = [
+          {
+            ...ref,
+            route: section.map(localWire),
+            curvedSegments: [],
+            coupledSection: [0, section.length - 1]
+          },
+          {
+            ...other,
+            route: path.map(localWire),
+            curvedSegments: [],
+            coupledSection: [0, path.length - 1]
+          }
+        ];
+        const bevel2 = bevelCoupledCorners(input, [
+          ...result.filter(
+            (t48) => !pair.connectionNames.includes(t48.connection_name)
+          ),
+          ...localRails
+        ]);
+        section = bevel2.find(
+          (t48) => t48.connection_name === ref.connection_name
+        ).route;
+        path = bevel2.find(
+          (t48) => t48.connection_name === other.connection_name
+        ).route;
+        const refRoute = [
+          ...ref.route.slice(0, re),
+          ...section,
+          ...ref.route.slice(stop)
+        ].map(localWire);
+        const connection = input.connections.find(
+          (c2) => c2.name === other.connection_name
+        );
+        const scene = new VectorScene(input, connection, width, [
+          ...fixed,
+          ...result.filter((t48) => t48.connection_name !== ref.connection_name).flatMap(routeCopper),
+          ...routeCopper({ ...ref, route: refRoute })
+        ]);
+        if (!scene.pathVisible(path)) continue;
+        let join = oe + 1;
+        while (join < other.route.length && !pointInBox(other.route[join], region.copper))
+          join++;
+        if (join === other.route.length) continue;
+        let accepted = false;
+        for (; join < other.route.length; join++) {
+          if (!pointInBox(other.route[join], region.copper)) continue;
+          const search = new GridVisibilitySearch(
+            scene,
+            path.at(-1),
+            other.route[join]
+          );
+          try {
+            let steps = 0;
+            while (!search.solved && !search.failed && steps++ < 256 && budget-- > 0) {
+              search.step();
+              yield;
+            }
+            if (!search.solved) continue;
+          } finally {
+            search.cancel();
+          }
+          const wire = (p2) => ({
+            ...p2,
+            route_type: "wire",
+            layer: other.route[0].layer,
+            width
+          });
+          const next = preservePoint(
+            preservePoint(
+              simplify([
+                ...other.route.slice(0, oe),
+                ...path,
+                ...reduceOrdinaryTurns(search.result, scene).slice(1),
+                ...other.route.slice(join + 1)
+              ]).map(wire),
+              wire(other.route[os])
+            ),
+            wire(path.at(-1))
+          );
+          if (!scene.pathVisible(next) || !tuningPathIsSelfClear(next, width + clearance) || !createTerminalViaClearanceChecker(input, other)(next) || !createTerminalViaClearanceChecker(input, ref)(refRoute))
+            continue;
+          const replacement = [
+            {
+              ...ref,
+              route: refRoute,
+              curvedSegments: remapCurvedSegments(ref, refRoute),
+              coupledSection: [rs, re + section.length - 1]
+            },
+            {
+              ...other,
+              route: next,
+              curvedSegments: remapCurvedSegments(other, next),
+              coupledSection: [
+                indexOf(next, other.route[os]),
+                indexOf(next, path.at(-1))
+              ]
+            }
+          ].map((t48) => reversed ? reverse2(t48) : t48);
+          const unchanged = result.filter(
+            (t48) => !pair.connectionNames.includes(t48.connection_name)
+          );
+          const surrounding = [...fixed, ...unchanged.flatMap(routeCopper)];
+          for (const trim of [
+            1.8,
+            1.5,
+            0.75,
+            0.375,
+            0.1875,
+            0.09375,
+            0.046875,
+            0.0234375
+          ]) {
+            const refinedPair = chamferOrdinaryCorners(
+              input,
+              result.filter(
+                (t48) => pair.connectionNames.includes(t48.connection_name)
+              ).map(
+                (t48) => replacement.find(
+                  (r2) => r2.connection_name === t48.connection_name
+                )
+              ),
+              surrounding,
+              trim
+            );
+            const refined = result.map(
+              (t48) => refinedPair.find(
+                (r2) => r2.connection_name === t48.connection_name
+              ) ?? t48
+            );
+            if (!routeAnglesAreConventional(refinedPair) || options.preserveMatching !== false && [
+              ...busLengthReports(input, refined),
+              ...pairLengthReports(input, refined)
+            ].some(
+              (r2) => !r2.withinLengthLimit || !r2.aboveMinimumLength || r2.toleranceMm !== null && !r2.matched
+            ) || sharedPairSpacingReports(input, refined).some((r2) => !r2.matched))
+              continue;
+            const copper = [...surrounding, ...refinedPair.flatMap(routeCopper)];
+            if (refinedPair.some((t48) => {
+              const w2 = t48.route[0].width;
+              return !tuningPathIsSelfClear(t48.route, w2 + clearance) || !createTerminalViaClearanceChecker(
+                input,
+                nativeRails.find(
+                  (rail) => rail?.connection_name === t48.connection_name
+                )
+              )(t48.route) || !new VectorScene(
+                input,
+                input.connections.find(
+                  (c2) => c2.name === t48.connection_name
+                ),
+                w2,
+                copper
+              ).pathVisible(t48.route);
+            }))
+              continue;
+            result = refined;
+            accepted = true;
+            break;
+          }
+          if (accepted) break;
+        }
+      }
+    }
+  }
+  return result;
+}
+
+// lib/normalize-surface-carriers.ts
+function monotone(path) {
+  let sx2 = 0, sy2 = 0;
+  for (let index2 = 1; index2 < path.length; index2++) {
+    const dx2 = Math.sign(path[index2].x - path[index2 - 1].x), dy2 = Math.sign(path[index2].y - path[index2 - 1].y);
+    if (dx2 && sx2 && dx2 !== sx2 || dy2 && sy2 && dy2 !== sy2) return false;
+    sx2 ||= dx2;
+    sy2 ||= dy2;
+  }
+  return true;
+}
+function octilinear(trace) {
+  return trace.route.every((b2, index2) => {
+    if (!index2 || trace.curvedSegments?.includes(index2)) return true;
+    const a2 = trace.route[index2 - 1], dx2 = Math.abs(b2.x - a2.x), dy2 = Math.abs(b2.y - a2.y);
+    return Math.min(dx2, dy2) < 1e-8 || Math.abs(dx2 - dy2) < 1e-8;
+  });
+}
+function carrierEndCandidates(trace, scene, atStart) {
+  const oriented = atStart ? trace.route.toReversed() : trace.route, required = scene.width / 2 + scene.margin, candidates = [];
+  if (!Number.isFinite(required) || required <= 0) return candidates;
+  let along2 = 0;
+  for (let anchor = oriented.length - 2; anchor >= 0; anchor--) {
+    along2 += distance(oriented[anchor], oriented[anchor + 1]);
+    if (along2 > required + 1e-8) break;
+    const cut2 = atStart ? oriented.length - 1 - anchor : anchor;
+    if (trace.curvedSegments?.some(
+      (index2) => atStart ? index2 <= cut2 : index2 > cut2
+    ) || trace.coupledSection && (atStart ? trace.coupledSection[0] < cut2 : trace.coupledSection[1] > cut2))
+      break;
+    const tail = oriented.slice(anchor), local = { ...trace, route: tail, curvedSegments: void 0 };
+    if (monotone(tail) && octilinear(local) && routeAnglesAreConventional([local]))
+      continue;
+    const a2 = tail[0], b2 = tail.at(-1), dx2 = b2.x - a2.x, dy2 = b2.y - a2.y, ax2 = Math.abs(dx2), ay2 = Math.abs(dy2), sx2 = Math.sign(dx2), sy2 = Math.sign(dy2), bends = ax2 >= ay2 ? [
+      { x: a2.x + sx2 * (ax2 - ay2), y: a2.y },
+      { x: a2.x + sx2 * ay2, y: b2.y }
+    ] : [
+      { x: a2.x, y: a2.y + sy2 * (ay2 - ax2) },
+      { x: b2.x, y: a2.y + sy2 * ax2 }
+    ];
+    for (const bend of bends) {
+      const replacement = [
+        a2,
+        {
+          ...bend,
+          route_type: "wire",
+          layer: a2.layer,
+          width: a2.width
+        },
+        b2
+      ], next = [...oriented.slice(0, anchor), ...replacement], route = atStart ? next.toReversed() : next, delta = route.length - trace.route.length, candidate = {
+        ...trace,
+        route,
+        curvedSegments: trace.curvedSegments?.map(
+          (index2) => atStart ? index2 + delta : index2
+        ),
+        coupledSection: trace.coupledSection?.map(
+          (index2) => atStart ? index2 + delta : index2
+        )
+      };
+      if (!monotone(replacement) || !scene.pathVisible(replacement)) continue;
+      candidates.push(candidate);
+      if (candidates.length >= 4) return candidates;
+    }
+  }
+  return candidates;
+}
+function normalizeCarrierEnds(trace, scene) {
+  const layer = trace.route[0].layer;
+  if (!trace.route.every(
+    (point5) => point5.route_type === "wire" && point5.layer === layer
+  ))
+    return trace;
+  const endCandidates = [trace, ...carrierEndCandidates(trace, scene, false)], candidates = [
+    ...endCandidates.slice(1),
+    ...endCandidates.flatMap(
+      (candidate) => carrierEndCandidates(candidate, scene, true)
+    )
+  ];
+  for (const candidate of candidates)
+    if (octilinear(candidate) && routeAnglesAreConventional([candidate]) && tuningPathIsSelfClear(candidate.route, scene.width / 2 + scene.margin) && scene.pathVisible(candidate.route))
+      return candidate;
+  return trace;
+}
+function octilinearSurfaceEscape(escape, scene) {
+  let result = escape;
+  for (let index2 = 1; index2 < result.route.length; index2++) {
+    if (result.curvedSegments?.includes(index2)) continue;
+    const a2 = result.route[index2 - 1], b2 = result.route[index2];
+    const dx2 = b2.x - a2.x, dy2 = b2.y - a2.y;
+    if (Math.min(Math.abs(dx2), Math.abs(dy2)) < 1e-8 || Math.abs(Math.abs(dx2) - Math.abs(dy2)) < 1e-8)
+      continue;
+    const diagonal = Math.min(Math.abs(dx2), Math.abs(dy2));
+    const bends = [
+      { x: b2.x - Math.sign(dx2) * diagonal, y: b2.y - Math.sign(dy2) * diagonal },
+      { x: a2.x + Math.sign(dx2) * diagonal, y: a2.y + Math.sign(dy2) * diagonal }
+    ];
+    for (const bend of bends) {
+      const route = [
+        ...result.route.slice(0, index2),
+        {
+          ...bend,
+          route_type: "wire",
+          layer: a2.layer,
+          width: a2.width
+        },
+        ...result.route.slice(index2)
+      ];
+      if (!scene.pathVisible(route) || !tuningPathIsSelfClear(route, scene.width / 2 + scene.margin) && tuningPathIsSelfClear(result.route, scene.width / 2 + scene.margin))
+        continue;
+      result = {
+        ...result,
+        route,
+        curvedSegments: result.curvedSegments?.map(
+          (chord) => chord >= index2 ? chord + 1 : chord
+        )
+      };
+      index2++;
+      break;
+    }
+  }
+  return result;
+}
+function normalizeSurfaceCarriers(input, traces, generatedEscapes) {
+  const replacements = /* @__PURE__ */ new Map();
+  let hard;
+  const normalized = traces.map((trace) => {
+    const first = trace.route[0];
+    if (trace.route.length < 2 || first.route_type !== "wire" || !trace.route.every(
+      (point5) => point5.route_type === "wire" && point5.layer === first.layer
+    ))
+      return trace;
+    const layer = first.layer;
+    const attached = generatedEscapes.filter(
+      (escape) => escape.connection_name === trace.connection_name && escape.route.every(
+        (point5) => point5.route_type === "wire" && point5.layer === layer
+      ) && (distance(escape.route.at(-1), trace.route[0]) < 1e-8 || distance(escape.route.at(-1), trace.route.at(-1)) < 1e-8)
+    );
+    const connection = input.connections.find(
+      (item) => item.name === trace.connection_name
+    );
+    if (!connection) return trace;
+    for (const escape of attached)
+      replacements.set(escape, {
+        ...escape,
+        route: escape.route.slice(0, 1),
+        curvedSegments: void 0
+      });
+    hard ??= [...fixedCopper(input), ...traces.flatMap(routeCopper)];
+    const scene = new VectorScene(
+      input,
+      {
+        ...connection,
+        pointsToConnect: [trace.route[0], trace.route.at(-1)]
+      },
+      trace.route[0].width,
+      hard
+    );
+    const joined = attached.length ? joinSignalEscapes(
+      trace,
+      attached.map((escape) => octilinearSurfaceEscape(escape, scene))
+    ) : trace, result = normalizeCarrierEnds(joined, scene);
+    if (result !== trace) hard.push(...routeCopper(result));
+    return result;
+  });
+  const escapes = generatedEscapes.map(
+    (escape) => replacements.get(escape) ?? escape
+  );
+  const byName = new Map(
+    normalized.map((trace) => [trace.connection_name, trace])
+  );
+  return {
+    input: {
+      ...input,
+      traces: input.traces?.map(
+        // Ownership is explicit object identity. A supplied trace may share a
+        // generated identifier and must still retain its original copper.
+        (trace) => replacements.get(trace) ?? trace
+      ),
+      connections: input.connections.map((connection) => {
+        const trace = byName.get(connection.name);
+        return trace ? {
+          ...connection,
+          pointsToConnect: [trace.route[0], trace.route.at(-1)]
+        } : connection;
+      })
+    },
+    traces: normalized,
+    escapes
+  };
+}
+
+// lib/rebalance-pair-escapes.ts
+var reverse3 = (trace) => ({
+  ...trace,
+  route: trace.route.toReversed(),
+  coupledSection: trace.coupledSection ? [
+    trace.route.length - 1 - trace.coupledSection[1],
+    trace.route.length - 1 - trace.coupledSection[0]
+  ] : void 0,
+  curvedSegments: trace.curvedSegments?.map((i2) => trace.route.length - i2)
+});
+function* rebalancePairEscapes(input, traces, generatedEscapes, options) {
+  const targets = minimumLengthTargets(input, traces);
+  const paired = new Set(
+    input.differentialPairs?.flatMap((p2) => p2.connectionNames)
+  );
+  const generatedIds = new Set(generatedEscapes.map((t48) => t48.pcb_trace_id));
+  const short = traces.filter(
+    (t48) => paired.has(t48.connection_name) && t48.coupledSection && (targets.get(t48.connection_name) ?? 0) > length(t48.route) + fixedRouteLength(input, t48.connection_name) + 1e-7
+  );
+  let attempts = 0;
+  for (const original of short)
+    for (const end of [0, 1]) {
+      const trace = end ? reverse3(original) : original, name = trace.connection_name, layer = trace.route[0].layer;
+      const escape = input.traces?.find(
+        (t48) => generatedIds.has(t48.pcb_trace_id) && t48.connection_name === name && t48.route.filter((p2) => p2.route_type === "via").length === 1 && distance(t48.route.at(-1), trace.route[0]) < 1e-7
+      );
+      if (!escape) continue;
+      const pad = escape.route[0], oldVia = escape.route.find((p2) => p2.route_type === "via");
+      if (pad.layer !== "top" || oldVia.from_layer !== "top") continue;
+      const owner = input.obstacles.find(
+        (o2) => o2.componentId && distance(o2.center, pad) < 1e-4
+      );
+      if (!owner) continue;
+      const pads = input.obstacles.filter(
+        (o2) => o2.componentId === owner.componentId
+      );
+      const pitch = Math.min(
+        ...pads.map((o2) => distance(o2.center, pad)).filter((d2) => d2 > 1e-4)
+      );
+      if (!Number.isFinite(pitch)) continue;
+      const surfaceLimit = Math.min(2, 2.5 * pitch);
+      const minX = Math.min(...pads.map((p2) => p2.center.x - p2.width / 2)), maxX = Math.max(...pads.map((p2) => p2.center.x + p2.width / 2));
+      const minY = Math.min(...pads.map((p2) => p2.center.y - p2.height / 2)), maxY = Math.max(...pads.map((p2) => p2.center.y + p2.height / 2));
+      const directions = [
+        { x: -1, y: 0, d: pad.x - minX },
+        { x: 1, y: 0, d: maxX - pad.x },
+        { x: 0, y: -1, d: pad.y - minY },
+        { x: 0, y: 1, d: maxY - pad.y }
+      ].sort((a2, b2) => a2.d - b2.d).slice(0, 2);
+      const held = traces.filter((t48) => t48 !== original), connection = input.connections.find((c2) => c2.name === name);
+      const base = {
+        ...input,
+        traces: input.traces.filter((t48) => t48 !== escape)
+      }, fixed = [...fixedCopper(base), ...held.flatMap(routeCopper)];
+      const width = trace.route[0].width;
+      function* find(a2, b2, carrier, maximum) {
+        const localConnection = {
+          ...connection,
+          pointsToConnect: [
+            { ...a2, layer: carrier },
+            { ...b2, layer: carrier }
+          ]
+        };
+        const scene = new VectorScene(base, localConnection, width, fixed);
+        const search = new GridVisibilitySearch(
+          scene,
+          localConnection.pointsToConnect[0],
+          localConnection.pointsToConnect[1],
+          [],
+          0,
+          void 0,
+          { maxLength: maximum, paretoLength: true, checkReachability: true }
+        );
+        try {
+          let steps = 0;
+          while (!search.solved && !search.failed && steps++ < 4e3) {
+            search.step();
+            yield;
+          }
+          return search.solved ? reduceOrdinaryTurns(search.result, scene).map((p2) => ({
+            ...p2,
+            route_type: "wire",
+            layer: carrier,
+            width
+          })) : null;
+        } finally {
+          search.cancel();
+        }
+      }
+      for (const normal of directions)
+        for (const outward of [1, 0.875, 1.125, 1.25, 1.5])
+          for (const across of [1.125, 1, 0.875, 0.75, 1.25, 1.375, 1.5, 0.625])
+            for (const sign of [-1, 1]) {
+              if (++attempts > 192) return null;
+              const site = {
+                x: pad.x + pitch * (normal.x * outward - normal.y * across * sign),
+                y: pad.y + pitch * (normal.y * outward + normal.x * across * sign)
+              };
+              const via = { ...oldVia, ...site, to_layer: layer };
+              const physical = Array.from(
+                { length: input.layerCount },
+                (_2, i2) => i2 === 0 ? "top" : i2 === input.layerCount - 1 ? "bottom" : `inner${i2}`
+              );
+              if (physical.some(
+                (carrier) => !new VectorScene(
+                  base,
+                  {
+                    ...connection,
+                    pointsToConnect: [
+                      { ...site, layer: carrier },
+                      { ...site, layer: carrier }
+                    ]
+                  },
+                  via.via_diameter ?? 0.3,
+                  fixed
+                ).visible(site, site)
+              ))
+                continue;
+              let top = yield* find(pad, site, "top", surfaceLimit);
+              const s2 = trace.coupledSection[0], prefix = yield* find(site, trace.route[s2], layer, 4 * pitch);
+              if (!top || !prefix) continue;
+              top = chamferOrdinaryCorners(
+                {
+                  ...base,
+                  connections: [
+                    {
+                      ...connection,
+                      pointsToConnect: [pad, { ...site, layer: "top" }]
+                    }
+                  ]
+                },
+                [{ ...escape, route: top }],
+                fixed
+              )[0].route;
+              const replacement = {
+                ...escape,
+                route: [
+                  ...top,
+                  via,
+                  { ...site, route_type: "wire", layer, width }
+                ]
+              };
+              const offset = prefix.length - 1 - s2;
+              let changed = {
+                ...trace,
+                route: [...prefix.slice(0, -1), ...trace.route.slice(s2)],
+                coupledSection: trace.coupledSection.map(
+                  (i2) => i2 + offset
+                ),
+                curvedSegments: trace.curvedSegments?.filter((i2) => i2 > s2).map((i2) => i2 + offset)
+              };
+              if (end) changed = reverse3(changed);
+              const local = {
+                ...input,
+                traces: input.traces.map(
+                  (t48) => t48 === escape ? replacement : t48
+                ),
+                connections: input.connections.map(
+                  (c2) => c2 === connection ? {
+                    ...c2,
+                    pointsToConnect: [
+                      changed.route[0],
+                      changed.route.at(-1)
+                    ]
+                  } : c2
+                )
+              };
+              const total = length(changed.route) + fixedRouteLength(local, name);
+              if (Math.abs(total - targets.get(name)) > 1) continue;
+              for (const trim of [0.75, 0.375, 1.5])
+                try {
+                  const candidate = alignCoupledSectionBoundaries(
+                    local,
+                    chamferOrdinaryCorners(
+                      local,
+                      traces.map((t48) => t48 === original ? changed : t48),
+                      void 0,
+                      trim
+                    )
+                  );
+                  const tuned = tuneCoupledLengths(local, candidate, {
+                    maxCandidates: 65536,
+                    packMeanders: true,
+                    packageOnlyPairTuning: true
+                  });
+                  if (tuned.some(
+                    (t48) => !createTerminalViaClearanceChecker(local, t48, {
+                      preserveExistingApproach: false
+                    })(t48.route)
+                  ))
+                    continue;
+                  const validator = BusLanesSolver.forValidation(
+                    local,
+                    tuned,
+                    options
+                  );
+                  try {
+                    while (!validator.solved && !validator.failed) {
+                      validator.step();
+                      yield;
+                    }
+                    const coupling = exteriorPairSpacingReports(local, tuned);
+                    if (validator.solved && coupling.length === (input.differentialPairs?.length ?? 0) && coupling.every((p2) => p2.applicable && p2.matched))
+                      return {
+                        input: local,
+                        traces: tuned,
+                        escapes: generatedEscapes.map(
+                          (t48) => t48.pcb_trace_id === escape.pcb_trace_id ? replacement : t48
+                        )
+                      };
+                  } finally {
+                    if (!validator.solved && !validator.failed)
+                      validator.tryFinalAcceptance();
+                  }
+                } catch {
+                  yield;
+                }
+            }
+    }
+  return null;
+}
+
+// lib/run-bounded-routing.ts
+function* runBoundedRouting(generator, limit) {
+  let state = generator.next();
+  let steps = 0;
+  try {
+    while (!state.done && steps++ < limit) {
+      yield;
+      state = generator.next();
+    }
+    return state.done ? state.value : null;
+  } finally {
+    if (!state.done) generator.return(null);
+  }
+}
+
+// lib/shorten-pair-approaches.ts
+function shortenPairApproaches(input, traces) {
+  const result = [...traces], fixed = fixedCopper(input);
+  for (let i2 = 0; i2 < result.length; i2++) {
+    const t48 = result[i2];
+    if (!t48.coupledSection) continue;
+    const [s2, e2] = t48.coupledSection, first = t48.route[0];
+    const scene = new VectorScene(
+      input,
+      input.connections.find((c2) => c2.name === t48.connection_name),
+      first.width,
+      [...fixed, ...result.flatMap(routeCopper)]
+    );
+    const regions = packageApproachRegions(
+      input,
+      first.width + (input.differentialPairs?.find(
+        (p2) => p2.connectionNames.includes(t48.connection_name)
+      )?.traceGap ?? 0.1) / 2 + (input.minTraceToPadEdgeClearance ?? input.defaultObstacleMargin ?? 0.075)
+    );
+    const shorten = (start, end) => {
+      const local = regions.find(
+        (r2) => pointInBox(t48.route[start === 0 ? 0 : t48.route.length - 1], r2.copper)
+      );
+      const externalCurve = (t48.curvedSegments ?? []).some(
+        (i3) => i3 > start && i3 <= end && (!local || !pointInBox(t48.route[i3 - 1], local.copper) || !pointInBox(t48.route[i3], local.copper))
+      );
+      return externalCurve ? reduceOrdinaryTurns(t48.route.slice(start, end + 1), scene) : t48.route.slice(start, end + 1);
+    };
+    const prefix = shorten(0, s2), suffix = shorten(e2, t48.route.length - 1);
+    const route = [
+      ...prefix.slice(0, -1),
+      ...t48.route.slice(s2, e2 + 1),
+      ...suffix.slice(1)
+    ].map((p2) => ({
+      ...p2,
+      route_type: "wire",
+      layer: first.layer,
+      width: first.width
+    }));
+    result[i2] = {
+      ...t48,
+      route,
+      curvedSegments: remapCurvedSegments(t48, route),
+      coupledSection: [prefix.length - 1, prefix.length + e2 - s2 - 1]
+    };
+  }
+  return result;
 }
 
 // lib/repair-bus-dogbones.ts
@@ -52778,7 +52939,8 @@ function* finishSurfaceTiming(previous, options, policy = {}) {
         (escape) => escape.connection_name === trace.connection_name
       )
     );
-    if (!routeAnglesAreConventional([joined])) return false;
+    if (!routeAnglesAreConventional([joined]) || checkSignalSelfShorts(native, [joined]).length)
+      return false;
     const clearance = native.minTraceToPadEdgeClearance ?? native.defaultObstacleMargin ?? 0.075;
     const runs = [];
     for (const point5 of joined.route) {
@@ -55435,6 +55597,7 @@ function* planSharedPairCorridors(input, terminalLayers, freshDogbones = false, 
               penalty: 0,
               preferPackageOnlyTuning: options.preferPackageOnlyTuning,
               allowProvisionalPairTuning,
+              allowProvisionalLandConflicts: options.allowProvisionalLandConflicts,
               ...typeof variant === "number" ? { variant: reserved ? variant - 100 : variant } : { handoffOffsets: variant }
             }
           ),
@@ -55463,7 +55626,7 @@ function* planSharedPairCorridors(input, terminalLayers, freshDogbones = false, 
         domains[index2].push({
           id: serial++,
           layer,
-          provisional: allowProvisionalPairTuning,
+          provisional: allowProvisionalPairTuning || !!options.allowProvisionalLandConflicts,
           traces: state.value,
           length: state.value.reduce((sum, t48) => sum + length(t48.route), 0)
         });
@@ -56268,7 +56431,7 @@ function surfaceOrdinaryPlanningInput(native, prefix) {
   return { ...native, buses };
 }
 
-// node_modules/yalps/dist/index.js
+// ../bus-lanes-solver/node_modules/yalps/dist/index.js
 var import_heap = __toESM(require_heap2(), 1);
 var index = (tableau, row, col) => tableau.matrix[Math.imul(row, tableau.width) + col];
 var update = (tableau, row, col, value) => {
@@ -57538,6 +57701,108 @@ function compactUnconstrainedLanes(input, traces) {
   return result;
 }
 
+// lib/reserve-package-tuning-approaches.ts
+function reservePackageTuningApproaches(input, traces) {
+  return traces.map((trace) => {
+    if (!trace.coupledSection || trace.route.some((p2) => p2.route_type !== "wire"))
+      return trace;
+    const [start, end] = trace.coupledSection;
+    const width = trace.route[0].width;
+    const pair = input.differentialPairs?.find(
+      (p2) => p2.connectionNames.includes(trace.connection_name)
+    );
+    if (!pair) return trace;
+    const rails = pair.connectionNames.map(
+      (name) => traces.find(
+        (t48) => t48.connection_name === name || t48.source_trace_id === name
+      )
+    );
+    if (rails.some((t48) => !t48)) return trace;
+    const clearance = input.minTraceToPadEdgeClearance ?? input.defaultObstacleMargin ?? 0.075;
+    const regions = packageApproachRegions(
+      input,
+      width + (pair.traceGap ?? clearance) / 2 + clearance
+    ).filter(
+      (r2) => [0, 1].some(
+        (end2) => rails.every(
+          (t48) => pointInBox(end2 ? t48.route.at(-1) : t48.route[0], r2.copper)
+        )
+      )
+    );
+    if (!regions.length) return trace;
+    const route = [trace.route[0]], curvedSegments = [], exterior = [];
+    for (let i2 = 0; i2 < trace.route.length - 1; i2++) {
+      const a2 = trace.route[i2], b2 = trace.route[i2 + 1], parameters = [0, 1];
+      if (i2 >= start && i2 < end)
+        for (const { copper: box3 } of regions)
+          for (const [axis, low, high] of [
+            ["x", box3.minX, box3.maxX],
+            ["y", box3.minY, box3.maxY]
+          ]) {
+            const delta = b2[axis] - a2[axis];
+            if (Math.abs(delta) < 1e-12) continue;
+            for (const boundary of [low, high]) {
+              const t48 = (boundary - a2[axis]) / delta;
+              if (t48 > 1e-9 && t48 < 1 - 1e-9) parameters.push(t48);
+            }
+          }
+      const sorted = [...new Set(parameters)].sort((a3, b3) => a3 - b3);
+      for (let j2 = 1; j2 < sorted.length; j2++) {
+        const previous = route.at(-1), t48 = sorted[j2], point5 = t48 === 1 ? b2 : { ...a2, x: a2.x + (b2.x - a2.x) * t48, y: a2.y + (b2.y - a2.y) * t48 };
+        const middle = {
+          x: (previous.x + point5.x) / 2,
+          y: (previous.y + point5.y) / 2
+        };
+        if (i2 >= start && i2 < end && !regions.some((r2) => pointInBox(middle, r2.copper)))
+          exterior.push(route.length - 1);
+        route.push(point5);
+        if (trace.curvedSegments?.includes(i2 + 1))
+          curvedSegments.push(route.length - 1);
+      }
+    }
+    if (!exterior.length) return trace;
+    return {
+      ...trace,
+      route,
+      curvedSegments: curvedSegments.length ? curvedSegments : void 0,
+      coupledSection: [exterior[0], exterior.at(-1) + 1]
+    };
+  });
+}
+
+// lib/straighten-pair-approaches.ts
+function straightenPairApproaches(input, traces) {
+  const copper = [...fixedCopper(input), ...traces.flatMap(routeCopper)];
+  return traces.map((trace) => {
+    if (!trace.coupledSection || trace.route.some((point5) => point5.route_type !== "wire"))
+      return trace;
+    const [start, end] = trace.coupledSection;
+    const first = trace.route[0];
+    const connection = input.connections.find(
+      (c2) => c2.name === trace.connection_name
+    );
+    const scene = new VectorScene(input, connection, first.width, copper);
+    const before = reduceOrdinaryTurns(trace.route.slice(0, start + 1), scene);
+    const after = reduceOrdinaryTurns(trace.route.slice(end), scene);
+    const route = [
+      ...before.slice(0, -1),
+      ...trace.route.slice(start, end + 1),
+      ...after.slice(1)
+    ].map((p2) => ({
+      ...p2,
+      route_type: "wire",
+      layer: first.layer,
+      width: first.width
+    }));
+    return {
+      ...trace,
+      route,
+      curvedSegments: remapCurvedSegments(trace, route),
+      coupledSection: [before.length - 1, before.length + end - start - 1]
+    };
+  });
+}
+
 // lib/repair-shared-layer-conflicts.ts
 function* repairSharedLayerConflicts(input, initial, layers, options = {}) {
   const connections = input.connections, fixed = fixedCopper(input), index2 = new RouteConflictIndex();
@@ -57948,10 +58213,14 @@ function* routeFreshSharedBuses(native, allocation, originalEscapes, terminalLay
     { x: 0, y: 0 }
   );
   const nearestAttachments = Math.abs(direction.x) > Math.abs(direction.y);
+  const deferPackageMatching = !nearestAttachments && (native.differentialPairs ?? []).some(
+    (pair) => pair.connectionNames.every((name) => !busNames.has(name))
+  );
   for (const paired of planSharedPairCorridors(
     allocation,
     native.buses?.some((bus) => bus.maxLength !== void 0) ? layers : terminalLayers,
-    true
+    true,
+    { allowProvisionalLandConflicts: deferPackageMatching }
   )) {
     if (!paired) {
       yield;
@@ -58104,13 +58373,35 @@ function* routeFreshSharedBuses(native, allocation, originalEscapes, terminalLay
       traces = chamferOrdinaryCorners(input, traces);
       yield;
     }
-    const matcher = BusLanesSolver.forRefinement(input, traces, options);
+    if (deferPackageMatching) {
+      traces = straightenPairApproaches(input, traces);
+      traces = yield* extendPackageCoupling(input, traces, {
+        preserveMatching: false
+      });
+      traces = reservePackageTuningApproaches(input, traces);
+    }
+    const matcher = BusLanesSolver.forRefinement(
+      input,
+      traces,
+      options,
+      deferPackageMatching ? 4096 : 0
+    );
     try {
       while (!matcher.solved && !matcher.failed) {
         matcher.step();
         yield;
       }
-      if (matcher.solved)
+      if (matcher.solved && checkSignalSelfShorts(
+        native,
+        matcher.traces.map(
+          (trace) => joinSignalEscapes(
+            trace,
+            normalized.escapes.filter(
+              (escape) => escape.connection_name === trace.connection_name
+            )
+          )
+        )
+      ).length === 0)
         return { input, traces: matcher.traces, escapes: normalized.escapes };
     } finally {
       if (!matcher.solved && !matcher.failed) matcher.tryFinalAcceptance();
@@ -59023,7 +59314,7 @@ var BusLanesPipelineSolver = class extends BaseSolver {
                 validator.step();
                 yield;
               }
-              if (!validator.solved || exteriorPairSpacingReports(view.input, carriers).some(
+              if (!validator.solved || checkSignalSelfShorts(this.input, complete).length > 0 || exteriorPairSpacingReports(view.input, carriers).some(
                 (r2) => !r2.matched
               ))
                 continue;
@@ -59091,7 +59382,8 @@ var BusLanesPipelineSolver = class extends BaseSolver {
                     validator.step();
                     yield;
                   }
-                  if (!validator.solved) continue;
+                  if (!validator.solved || checkSignalSelfShorts(this.input, complete).length > 0)
+                    continue;
                 } finally {
                   if (!validator.solved && !validator.failed)
                     validator.tryFinalAcceptance();
@@ -59202,15 +59494,27 @@ var BusLanesPipelineSolver = class extends BaseSolver {
     let refined = yield* extendPackageCoupling(input, lanes);
     if (exteriorPairSpacingReports(input, refined).every((r2) => r2.matched))
       return refined;
-    refined = yield* extendPackageCoupling(
-      input,
-      shortenPairApproaches(input, refined),
-      { preserveMatching: false }
-    );
-    if (exteriorPairSpacingReports(input, refined).some((r2) => !r2.matched))
-      throw Error(
-        "Pair approaches still separate outside native package fanouts"
-      );
+    const preserved = refined;
+    let error;
+    for (const reverseSides of [false, true]) {
+      try {
+        refined = yield* extendPackageCoupling(
+          input,
+          shortenPairApproaches(input, preserved),
+          { preserveMatching: false, reverseSides }
+        );
+        if (exteriorPairSpacingReports(input, refined).some((r2) => !r2.matched))
+          throw Error(
+            "Pair approaches still separate outside native package fanouts"
+          );
+        return yield* this.matchPackageApproaches(input, refined, lanes);
+      } catch (candidateError) {
+        error = candidateError;
+      }
+    }
+    throw error;
+  }
+  *matchPackageApproaches(input, refined, lanes) {
     const tunedEscapes = yield* tuneGeneratedPairEscapes(
       input,
       refined,
@@ -59233,7 +59537,12 @@ var BusLanesPipelineSolver = class extends BaseSolver {
         return repaired.traces;
       }
     }
-    const matcher = BusLanesSolver.forRefinement(input, refined, this.options);
+    const matcher = BusLanesSolver.forRefinement(
+      input,
+      refined,
+      this.options,
+      4096
+    );
     try {
       while (!matcher.solved && !matcher.failed) {
         matcher.step();
@@ -59740,6 +60049,9 @@ var BusLanesPipelineSolver = class extends BaseSolver {
           (b2) => !b2.withinLengthLimit || !b2.aboveMinimumLength
         ))
           throw Error("Final absolute bus length violation");
+        const selfShorts = checkSignalSelfShorts(this.input, this.traces);
+        if (selfShorts.length)
+          throw Error(selfShorts.map((error) => error.message).join("; "));
         this.acceptedTraces = structuredClone(this.traces);
         this.phase = "optimize_envelope";
         this.envelopeOptimization = this.optimizeEnvelope();

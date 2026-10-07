@@ -1,14 +1,14 @@
 {
   "repository": "https://github.com/tscircuit/bus-lanes-solver",
-  "sourceCommit": "215a906eb39f847fa0e1c3ece0508e83de748d9d",
-  "sourceState": "Committed generic native-surface routing implementation; generated JavaScript and declarations only, with no recorded PCB routes",
+  "sourceCommit": "aa214adb66403c6be14acd5fea29432702fb97f5",
+  "sourceState": "Committed native-surface solver with mandatory complete-copper self-short acceptance and rebuilt via-safe tuning banks",
   "packageVersion": "0.0.22",
   "buildCommand": "bun run build",
-  "bundleSha256": "99b7e1f731e200ab4515addbbd33538037e548f26475e6116d8a2aef5e950dd9",
-  "declarationsSha256": "5b56003749fb407f9e6ab68b058d46abdf7cc855dc5256c1689ff68b4528ef46",
+  "bundleSha256": "0045fd0ea9db9ff35255afa5077405c95942d0d6a60437d5f2414de684937620",
+  "declarationsSha256": "34e7c303762e5d0b337b9308f5edccae9f6e342e02916591ec9321bcbac99a8c",
   "purpose": "Fresh routing of native AM3352 SBC TOP/BOTTOM signals with preserved complete DDR timing constraints and supplied copper",
   "changesFromPreviousCommit": {
-    "previousCommit": "34896d865202d122fb34fee366536cc12f7f9636",
-    "behavior": "Adds explicit strict finished paired-prefix planning, optional four-via timed surface routes, rotation-aware owning-pad handoffs, held multi-via planar-run tuning, and generated standalone public declarations. Native fixed copper, physical four-layer manufactured via spans, timing limits, and pair coupling remain acceptance requirements."
+    "previousCommit": "215a906eb39f847fa0e1c3ece0508e83de748d9d",
+    "behavior": "Rejects adjacent retracing, self-touching complete signal copper and via-land shortcuts; rebuilds provisional package banks against completed neighboring copper; preserves native surface routing options, immutable supplied fanouts and complete timing constraints."
   }
 }
