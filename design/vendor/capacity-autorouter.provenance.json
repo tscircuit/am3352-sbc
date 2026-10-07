@@ -1,0 +1,722 @@
+{
+  "repository": "https://github.com/tscircuit/tscircuit-autorouter",
+  "baseCommit": "243b2a5e3a2c3ce3b875e8cd00f9b8b003156326",
+  "branch": "feat/outer-layer-repair-reservations",
+  "sourceCommit": "d65545d08289ad1e9c368daa52d954b5d3c21be3",
+  "sourceArchive": {
+    "file": "capacity-native-surface-source-648682be.tgz",
+    "sha256": "f5979cc75b642d76e42f3c55bf7060e778834541ef5ac7618a44460d361d49b8"
+  },
+  "changedSourceFiles": [
+    {
+      "path": ".gitignore",
+      "sha256": "bd4c49174479f6cdf8229eb199c3af26a57b9cf0574d77c0d4f9e10b154e9493",
+      "bytes": 2625
+    },
+    {
+      "path": "bun.lock",
+      "sha256": "b310f7c3cec5ea08efab1965a3379e092a06f38044a74c356ffbdd57320993fe",
+      "bytes": 268565
+    },
+    {
+      "path": "lib/autorouter-pipelines/AutoroutingPipeline7_MultiGraph/prepare-pipeline7-power-trace-expansion-input.ts",
+      "sha256": "ea541f194430bd4e358b4aa542855b837f12233f711258b3b7efba35bac68610",
+      "bytes": 3946
+    },
+    {
+      "path": "lib/autorouter-pipelines/AutoroutingPipeline9_PreloadedTraceGraph/AutoroutingPipelineSolver9_PreloadedTraceGraph.ts",
+      "sha256": "db68a732937b70b7dec0621d8662d1dfb6d65aa518ce128d2248f50a39528070",
+      "bytes": 69728
+    },
+    {
+      "path": "lib/autorouter-pipelines/AutoroutingPipeline9_PreloadedTraceGraph/Pipeline9HighDensitySolver.ts",
+      "sha256": "ae2584991cbc4181ea9eecc14fbc24e76d80453b60f6ab1166bac0a708180237",
+      "bytes": 40819
+    },
+    {
+      "path": "lib/autorouter-pipelines/AutoroutingPipeline9_PreloadedTraceGraph/Pipeline9JointDrcRepairSolver.ts",
+      "sha256": "7afe6d98e162642a2f26df18e6108e26e176f7db83b67226ef8ed819946591c1",
+      "bytes": 75981
+    },
+    {
+      "path": "lib/autorouter-pipelines/AutoroutingPipeline9_PreloadedTraceGraph/Pipeline9RegionalFallbackSolver.ts",
+      "sha256": "baadca062fe47670e3b8c7d1291c8262afc9cba51ae26fd0fdea5d93f83b93d9",
+      "bytes": 11455
+    },
+    {
+      "path": "lib/autorouter-pipelines/AutoroutingPipeline9_PreloadedTraceGraph/applyPipeline9RegionalB01Repairs.ts",
+      "sha256": "28c48b22899db9b4dada88cc91ac21a30d3e0a78611ee54d7d7127359f9fae49",
+      "bytes": 20923
+    },
+    {
+      "path": "lib/autorouter-pipelines/AutoroutingPipeline9_PreloadedTraceGraph/pipeline9RegionalFallback.ts",
+      "sha256": "390c3ec724da3424c08d07e0fc6ac8669b29a79d97fd91b38ab53e79a984b8c6",
+      "bytes": 15058
+    },
+    {
+      "path": "lib/solvers/CapacityMeshSolver/CapacityMeshEdgeSolver.ts",
+      "sha256": "a17a5e8f3ab795e64b8b786d7e7c2ee818a5d8c570792fd62d547dd7cf6e3c06",
+      "bytes": 8304
+    },
+    {
+      "path": "lib/solvers/EscapeViaLocationSolver/EscapeViaLocationSolver.ts",
+      "sha256": "376fabd364818c7dd4c6be8d5b49d125271224bef93d2cb358bcccb4ca4c0a1a",
+      "bytes": 31316
+    },
+    {
+      "path": "lib/solvers/HighDensitySolver/CachedIntraNodeRouteSolver.ts",
+      "sha256": "91bef10c59033c32a0ff2a84abfda08d0bcdbc089fdeb644e6e20bf07d996bba",
+      "bytes": 8322
+    },
+    {
+      "path": "lib/solvers/HighDensitySolver/IntraNodeSolver.ts",
+      "sha256": "c9396d5a63c78bb4d214d6d9f7d2c11c0a272d4401f5730ec4a33220f76c4569",
+      "bytes": 19012
+    },
+    {
+      "path": "lib/solvers/HyperHighDensitySolver/CachedPortfolioSingleIntraNodeSolver.ts",
+      "sha256": "87b4abd10a738738522ce43ae9e977551e5ffa10d32990c7f44c9d8ab549998d",
+      "bytes": 8972
+    },
+    {
+      "path": "lib/solvers/HyperHighDensitySolver/PortfolioSingleIntraNodeSolver.ts",
+      "sha256": "ceebf7fd0c1ca40096a58da387b738e30f8d28263c4fa5089ffb3ad08bf3fb30",
+      "bytes": 26672
+    },
+    {
+      "path": "lib/solvers/NetToPointPairsSolver/mergeConnections.ts",
+      "sha256": "762237679bcb40f07ef076de740d29ad49d6b04a359d62fd667113cdcb3392ab",
+      "bytes": 6807
+    },
+    {
+      "path": "lib/solvers/PortPointPathingSolver/hgportpointpathingsolver/buildHyperGraph.ts",
+      "sha256": "a2a0c255d3fba068f9afda1f8b30c8f429482df2085391d223e015bfc3885bd3",
+      "bytes": 8410
+    },
+    {
+      "path": "lib/solvers/PortPointPathingSolver/hgportpointpathingsolver/types.ts",
+      "sha256": "99c9eda204e23dc9342733c622cf94f15dab7b08fed43ca3b44112905880f440",
+      "bytes": 4968
+    },
+    {
+      "path": "lib/solvers/PortPointPathingSolver/tinyhypergraph/TinyHypergraphPortPointPathingSolver.ts",
+      "sha256": "a6a7cad7f62d62fe05248b6d600decbc1773a004ee49642d688465ac771522af",
+      "bytes": 64132
+    },
+    {
+      "path": "lib/types/high-density-types.ts",
+      "sha256": "bb4c92e34a75243356c29986286f901f4a2bfec14eabd7557fd11f547ebbc368",
+      "bytes": 2883
+    },
+    {
+      "path": "lib/types/srj-types.ts",
+      "sha256": "156d84551f1cd2ee742044877847174f2f8223fd17201915d4b59146a9bb0cf4",
+      "bytes": 8019
+    },
+    {
+      "path": "lib/utils/createRoutingLayerDomainSrj.ts",
+      "sha256": "bc3199350f3c6388e4baa53be2f79e3bdaebc1b93c818e5118ad5ea671cc538f",
+      "bytes": 695
+    },
+    {
+      "path": "lib/utils/getAllowedZForConnection.ts",
+      "sha256": "64eddce825216ba9650d9790ce12647fcd12909ef9569cddb541f9f4ee1563b9",
+      "bytes": 5557
+    },
+    {
+      "path": "lib/utils/getAllowedZForNodeConnection.ts",
+      "sha256": "d1f9c8b5fa8774966abf55a547fdc2a9e4e9160f8396dc56a6b23ef1eb6a159b",
+      "bytes": 998
+    },
+    {
+      "path": "package.json",
+      "sha256": "20b00dfc2f473a5035e527a79642e57cd2258fa098db144e0fb25ab5916da772",
+      "bytes": 7813
+    },
+    {
+      "path": "scripts/build-native-outer-package.cjs",
+      "sha256": "7956e4787fafd63ed7406d4b1afeca9d0cf8034f55b93bd5c89bcac2cc17b49b",
+      "bytes": 1504
+    },
+    {
+      "path": "scripts/build-standalone-declarations.cjs",
+      "sha256": "25f80decc04cd0f2cac46b66dc3207aaef55562bfae89d51bc591922cb4a4cdf",
+      "bytes": 21467
+    },
+    {
+      "path": "tests/high-density-per-connection-wire-domains.test.ts",
+      "sha256": "b00f9b4eb96e5bd38a103e9eb1c02d9a03d219e3dbaf4cf4e49c6cf3a04a8fb3",
+      "bytes": 1507
+    },
+    {
+      "path": "tests/native-allowed-wire-layer-domains.test.ts",
+      "sha256": "6638284013b3cee770fcc5af24a2328c5a618be8f6f31c4b60723343bcb121e9",
+      "bytes": 2490
+    },
+    {
+      "path": "tests/pipeline9-immutable-native-preloaded-traces.test.ts",
+      "sha256": "857d1049b8fc5fdf2e31c4ef7d18a07f8a6a52c86ee46ca3c200745e39ec6b1a",
+      "bytes": 4697
+    },
+    {
+      "path": "tests/pipeline9-native-coordinate-terminal-wall.test.ts",
+      "sha256": "2e12f6b3275a8ff63044e72c5bc3399b05ce98b08cc45636f2f1934053c117dc",
+      "bytes": 3128
+    },
+    {
+      "path": "tests/pipeline9-regional-allowed-signal-layers.test.ts",
+      "sha256": "67982295322e7a8c5f0ca9fcfce46f5183bd59741b9ca53d8ead39ec74800965",
+      "bytes": 2422
+    },
+    {
+      "path": "tests/pipeline9-regional-native-plane-antipads.test.ts",
+      "sha256": "3759895f910eb6ae98523e85f360ab1b9b5a9e0b817f290f9d2322f693fb541b",
+      "bytes": 2465
+    },
+    {
+      "path": "tests/portfolio-same-root-bridge-wire-domain.test.ts",
+      "sha256": "5b2ced0aea323370813153a9b4c4fc4a1fcadb76784c0180c1dc495358513a1e",
+      "bytes": 2358
+    },
+    {
+      "path": "tests/preloaded-ground-native-layer-ownership.test.ts",
+      "sha256": "bd861d01ae01f7858273ac3aadc3b6b437b3f5536e32fc9cfd09feb13c1ba8b7",
+      "bytes": 2014
+    },
+    {
+      "path": "tests/target-pad-region-routing-edge.test.ts",
+      "sha256": "ba6edb79a70081868d21ce918b439e98d232c72776dc1941e3fe5b37940e414b",
+      "bytes": 1951
+    },
+    {
+      "path": "vendor-source/tiny-hypergraph-b9343f0.tgz",
+      "sha256": "9ef1ac5f69f53ad97dff0f3c5de65eb779aecc17c376837782838d1274dcff61",
+      "bytes": 6952797
+    },
+    {
+      "path": "vendor-source/tiny-hypergraph-native-wire-domains.patch",
+      "sha256": "e22a770816b15fadce398a7d45008dfedd4272cda860cab70c6d71ed5be81ec6",
+      "bytes": 13065
+    },
+    {
+      "path": "vendor-source/tiny-hypergraph-provenance.json",
+      "sha256": "be036d09dbd3f1521ea3136aa88377c6d42e6b336af9287dbd1efe1e33d161bd",
+      "bytes": 538
+    },
+    {
+      "path": "vendor/repair-sources/annotate-declaration-packaging.py",
+      "sha256": "9521b5c482beb1770cc6e013a66ca329a6647be82656c490e9db7a8069973d4f",
+      "bytes": 3278
+    },
+    {
+      "path": "vendor/repair-sources/build-source-packaging.py",
+      "sha256": "b44d284b3b35048619b3b1368d3821dfebce708e7f998c870e4a268ef53e8ced",
+      "bytes": 4651
+    },
+    {
+      "path": "vendor/repair-sources/declaration-packaging-provenance.json",
+      "sha256": "a5b03b2cf3b4272051822cb01af10eeb0b199fe149c137a8590cddf3d980ea92",
+      "bytes": 1670
+    },
+    {
+      "path": "vendor/repair-sources/packaging-provenance.json",
+      "sha256": "9f88aaa19ed7aceceddfcc262022884383fc2fc5a7d16c204497b1dad5cd8afc",
+      "bytes": 1884
+    },
+    {
+      "path": "vendor/repair-sources/provenance.json",
+      "sha256": "68844c73ba9487f69db10616475293d04961ef9156fff759bd365875810aea14",
+      "bytes": 1273
+    },
+    {
+      "path": "vendor/repair-sources/repair03-compatible-875f3020.tgz",
+      "sha256": "1223e9557757862391fc1e732ccef66c413bbd25570571e4ed68ea1aac719fac",
+      "bytes": 1646787
+    },
+    {
+      "path": "vendor/repair-sources/repair03-compatible-source.patch",
+      "sha256": "122ed06963a1ea35c98b272c355c3f4fe5919578e7eb5b867b461eab7823e2d6",
+      "bytes": 10531
+    },
+    {
+      "path": "vendor/repair-sources/repair03-direct-b62b158e-build-edc4fc8a.tgz",
+      "sha256": "edc4fc8a7f2ab22e05d4ccb91bc718ea5dd4835688c407785ee3f907e646df97",
+      "bytes": 1650453
+    },
+    {
+      "path": "vendor/repair-sources/repair03-direct-b62b158e.tgz",
+      "sha256": "2b7f12aef69b7a9a2ae8d390aad2ad1aea76ae4f366ed2c0656baf23e8deb4a6",
+      "bytes": 1643623
+    },
+    {
+      "path": "vendor/repair-sources/repair03-direct-declaration-packaging.patch",
+      "sha256": "8ff4fe9a6adddc5dbee0aaf442836eadbfeb6838be706e8f39d1fd31bcc2d2d1",
+      "bytes": 365
+    },
+    {
+      "path": "vendor/repair-sources/repair03-direct-source.patch",
+      "sha256": "d4be67b23431db43afde1a9c580226d2170f0c35911f9bd537945d5c846012e9",
+      "bytes": 10531
+    },
+    {
+      "path": "vendor/repair-sources/repair04-4f9d8bd6-build-0b76d448.tgz",
+      "sha256": "0b76d4486895f0c0243bdd7647377b20c2aecb22687f80d81c6f9ddce9ff696b",
+      "bytes": 1872026
+    },
+    {
+      "path": "vendor/repair-sources/repair04-4f9d8bd6-declarations-a71a8ec3.tgz",
+      "sha256": "a71a8ec39f185994ed5680b8f67409200055f88ff1e0f942c5018b6798c59b79",
+      "bytes": 1872029
+    },
+    {
+      "path": "vendor/repair-sources/repair04-4f9d8bd6.tgz",
+      "sha256": "1397c6483e66a075221a88d1130e39c2cb675936a8ae4f823e5edbbe0129b364",
+      "bytes": 212358
+    },
+    {
+      "path": "vendor/repair-sources/repair04-build-source-declaration-packaging.patch",
+      "sha256": "08d739fe2c90f11f4de422a8034de2541219065b806f411e46aacc575426881a",
+      "bytes": 423
+    },
+    {
+      "path": "vendor/repair-sources/repair04-source-packaging.patch",
+      "sha256": "5cfddbd5a4f7c3c8a12385f1245ef64517dcea56244e575822315056810753a2",
+      "bytes": 9739
+    },
+    {
+      "path": "vendor/repair-sources/repair04-source.patch",
+      "sha256": "bb84aa0d9465c1481a379f5ae2b63ce5ff8f8fcfbf65cb6e447334f0b89399eb",
+      "bytes": 14376
+    },
+    {
+      "path": "vendor/repair-sources/source-build-proof.json",
+      "sha256": "6c79a2e2261088738781655e3d17e74bc2e502bdb55279b3b77f1ce88904701f",
+      "bytes": 1089
+    }
+  ],
+  "consumerPackage": {
+    "file": "tscircuit-capacity-autorouter-0.0.958-fa89cd01-f5348585.tgz",
+    "sha256": "f534858543c436d25785dcfc065d3f4737018b62cc5e62096bab8bd96e33ca41",
+    "main": "dist/index.js",
+    "javascriptSha256": "fa89cd01182aa56e71cd1db472109a2f7c1dc0d1e7e97fd6351667d2384c0db2",
+    "sourcemapSha256": "30ba6accb7b538626fefba9fd341c7efaa5238b4efb84d4a0d091f4a04931e8d",
+    "types": "dist/types/lib/index.d.ts",
+    "runtimeAndPublicTypeDependencies": {
+      "object-hash": "3.0.0",
+      "circuit-json": "0.0.516",
+      "zod": "3.25.76",
+      "transformation-matrix": "3.1.0"
+    },
+    "runtimeWorkspaceLinks": false,
+    "privateRuntimeDependencies": false,
+    "declarationFiles": 286,
+    "declarationClosureSha256": "dbfa209621bf07767444ec29b76b5453a07ffa60ed8503ebe23d6420d7031d08"
+  },
+  "validation": {
+    "focusedSourceTests": {
+      "pass": 9,
+      "fail": 0,
+      "assertions": 105,
+      "log": "fresh-source-final-focused-tests.log",
+      "freshLibrarySourceShaMatchFiles": 466
+    },
+    "freshSourceStrictTypes": {
+      "pass": true,
+      "log": "typecheck-fresh-source.log"
+    },
+    "capacityDeclarationsStrictTypes": {
+      "pass": true,
+      "strict": true,
+      "skipLibCheck": false,
+      "typescript": "5.9.3",
+      "proof": "source-install/work/package-declarations/standalone-declarations-provenance.json"
+    },
+    "boardCompatibleConsumerStrictTypes": {
+      "pass": true,
+      "strict": true,
+      "skipLibCheck": true,
+      "noCompilerPathAliases": true,
+      "heapMiB": 1024,
+      "negativeExpectations": [
+        "string minTraceWidth rejected",
+        "numeric immutable native trace ID rejected",
+        "numeric output minTraceWidth cannot assign to string"
+      ],
+      "log": "fresh-consumer-proper-build-strict-typecheck.log"
+    },
+    "combinedPublishedCoreSchemas": {
+      "status": "resource_limited",
+      "typeErrorsObserved": false,
+      "diagnosticsObtained": false,
+      "heapMiB": 1536,
+      "log": "fresh-consumer-public-types-typecheck.log",
+      "scope": "Published core/props/circuit-json declaration graph; independent capacity declarations check passes with skipLibCheck false."
+    },
+    "freshNativeFourLayerConsumer": {
+      "pass": true,
+      "proof": {
+        "coreConstructorIdentity": true,
+        "coreVersion": "0.0.2095",
+        "physicalLayerCount": 4,
+        "innerGroundPlanes": 2,
+        "immutableNativeTraces": 1,
+        "routedTraces": 3,
+        "nativeSelfShorts": 0,
+        "nativeViaTraceClearanceErrors": 0
+      },
+      "log": "fresh-consumer-proper-build-native-four-proof.log"
+    }
+  },
+  "buildProvenance": {
+    "properPackageBuild": {
+      "passed": true,
+      "command": "NODE_OPTIONS=--max-old-space-size=4096 bun run build",
+      "heapMiB": 4096,
+      "log": "source-proper-build-public-matrix.log",
+      "emittedSourceRoots": 1000,
+      "strictClosureDiagnostics": 0,
+      "strict": true,
+      "skipLibCheck": false,
+      "noCompilerPathAliases": true,
+      "builderSha256": "25f80decc04cd0f2cac46b66dc3207aaef55562bfae89d51bc591922cb4a4cdf"
+    },
+    "javascriptSourceExact": true,
+    "declarationEmitManifest": "source-install/work/package-declarations/standalone-declarations-provenance.json",
+    "fullSourceManifest": "source-proper-build-manifest.json"
+  },
+  "dependencySourceArchives": [
+    {
+      "path": "vendor/repair-sources/repair03-compatible-875f3020.tgz",
+      "sha256": "1223e9557757862391fc1e732ccef66c413bbd25570571e4ed68ea1aac719fac"
+    },
+    {
+      "path": "vendor/repair-sources/repair03-direct-b62b158e-build-edc4fc8a.tgz",
+      "sha256": "edc4fc8a7f2ab22e05d4ccb91bc718ea5dd4835688c407785ee3f907e646df97"
+    },
+    {
+      "path": "vendor/repair-sources/repair03-direct-b62b158e.tgz",
+      "sha256": "2b7f12aef69b7a9a2ae8d390aad2ad1aea76ae4f366ed2c0656baf23e8deb4a6"
+    },
+    {
+      "path": "vendor/repair-sources/repair04-4f9d8bd6-build-0b76d448.tgz",
+      "sha256": "0b76d4486895f0c0243bdd7647377b20c2aecb22687f80d81c6f9ddce9ff696b"
+    },
+    {
+      "path": "vendor/repair-sources/repair04-4f9d8bd6-declarations-a71a8ec3.tgz",
+      "sha256": "a71a8ec39f185994ed5680b8f67409200055f88ff1e0f942c5018b6798c59b79"
+    },
+    {
+      "path": "vendor/repair-sources/repair04-4f9d8bd6.tgz",
+      "sha256": "1397c6483e66a075221a88d1130e39c2cb675936a8ae4f823e5edbbe0129b364"
+    },
+    {
+      "path": "vendor-source/tiny-hypergraph-b9343f0.tgz",
+      "sha256": "9ef1ac5f69f53ad97dff0f3c5de65eb779aecc17c376837782838d1274dcff61"
+    }
+  ],
+  "routingScope": "Native layer-domain/immutability fixtures pass. Actual full LCD/CONTROL/DDR board route remains under validation; this artifact does not assert board route acceptance.",
+  "declarationsSha256": "39a8760d9a4e1f4b2cc1d9df942c2bfe581b67d49daa624ae3682ff5504baecb",
+  "packageJsonSha256": "7736b84c90729e243e82c854b4b0f975d99965d25b257e5bf6da4a387ca23d99",
+  "packageFiles": {
+    "dist/index.js": "fa89cd01182aa56e71cd1db472109a2f7c1dc0d1e7e97fd6351667d2384c0db2",
+    "dist/index.js.map": "30ba6accb7b538626fefba9fd341c7efaa5238b4efb84d4a0d091f4a04931e8d",
+    "dist/types/lib/autorouter-pipelines/AssignableAutoroutingPipeline1/AssignableAutoroutingPipeline1Solver.d.ts": "60d65d1ab4e0bda133bfc8313c292cc095cee353a09b01c50c1ea465437717a5",
+    "dist/types/lib/autorouter-pipelines/AssignableAutoroutingPipeline1/AssignableViaCapacityPathing/AssignableViaCapacityPathingSolver_DirectiveSubOptimal.d.ts": "7f45cb3f5a48e9e54090d67ac4cb4c0b611b5138b60540d6209035a4765e65c4",
+    "dist/types/lib/autorouter-pipelines/AssignableAutoroutingPipeline1/AssignableViaNodeMergerSolver.d.ts": "c791fc85dfd7d68c6f007bda89f208b47cdc0e7021350332897594ec6df4157d",
+    "dist/types/lib/autorouter-pipelines/AssignableAutoroutingPipeline1/CapacityMeshNodeSolver_OnlyTraverseLayersInAssignableObstacles.d.ts": "17ce0c0ae1135f4b7da6d0fb9b090fb0bf8923a2ccd6a740adacfddb9272c257",
+    "dist/types/lib/autorouter-pipelines/AssignableAutoroutingPipeline1/HyperAssignableViaCapacityPathingSolver.d.ts": "be4ad7fbc3eef220b59dae6e88590cc027a78ae0e613ab6cb056d73ea510540e",
+    "dist/types/lib/autorouter-pipelines/AssignableAutoroutingPipeline1/OffboardCapacityNodeSolver.d.ts": "4d5da368ec23e0fd5dadcdda4360a607dd99d805b8c23e9ab47289a9d5f9406b",
+    "dist/types/lib/autorouter-pipelines/AssignableAutoroutingPipeline1/OffboardPathFragmentSolver.d.ts": "07eb130b05ece1bf073a3d123a25aad45ae88f33e11488bb8320705778a1fcf4",
+    "dist/types/lib/autorouter-pipelines/AssignableAutoroutingPipeline1/SingleLayerNodeMergerSolver_OnlyMergeTargets.d.ts": "655a405c1fab0630edd06018db74840511182b4699b4e298149e6f42770c46c5",
+    "dist/types/lib/autorouter-pipelines/AssignableAutoroutingPipeline2/AssignableAutoroutingPipeline2.d.ts": "2e8fe8c220116ad758d9029288398943e39474809b126b215db80a193f00734f",
+    "dist/types/lib/autorouter-pipelines/AssignableAutoroutingPipeline2/JumperHighDensitySolver.d.ts": "4b00b864e68c747120ed67cd3decfe26b748159d6d3cdb26d33a96c37dcfbfae",
+    "dist/types/lib/autorouter-pipelines/AssignableAutoroutingPipeline2/PortPointOffboardPathFragmentSolver.d.ts": "34a4dae7f10f44ef52f651f687489ba1190e8d617f678ca99767bef9fdd34986",
+    "dist/types/lib/autorouter-pipelines/AssignableAutoroutingPipeline2/RelateNodesToOffBoardConnectionsSolver.d.ts": "be266d852dbdd633e0b517603f0a3b1270ca1363a194bca23b0fa069283fa049",
+    "dist/types/lib/autorouter-pipelines/AssignableAutoroutingPipeline2/SimpleHighDensitySolver.d.ts": "eafc7e28ef6544a3303e2844ea4b843eeab9f84f02b4e89006c51c264bf8a847",
+    "dist/types/lib/autorouter-pipelines/AssignableAutoroutingPipeline3/AssignableAutoroutingPipeline3.d.ts": "ca99f542007acccbc8fc69b3f6ff8c75b18eb068b66acbe6ae12f6bd3df58c7d",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline10_BgaFanout/AutoroutingPipelineSolver10_BgaFanout.d.ts": "44c3b7a50e930f20e5a7470282f598c57d09907de50f36b0041f3f351187fd33",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline11_Simplification/ApplyTraceSimplificationSolver.d.ts": "95bbd3bcb74f382417932793b952280ce6ef976bfa0e63c33fdf124467696c26",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline11_Simplification/AutoroutingPipelineSolver11_Simplification.d.ts": "d0b6743426744f9310c4ca45140bc4967e1db01ed05e84a5eb6828be7bd56cbe",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline11_Simplification/PrepareTraceSimplificationSolver.d.ts": "588dea451b27e36318308f7241f20bd46c12adbe9bba3e9dbe059dfdbc576b51",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline11_Simplification/TraceSimplificationStageSolver.d.ts": "35e8e72a9522c22b0a086671a23e451f867192ee8851b7c656ef32a1ebcf1838",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline11_Simplification/ValidateTraceSimplificationSolver.d.ts": "c0214e4868da27a7b5b9dd3559e0414423fa41c9a12e406a9443617b8d67d12f",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline1_OriginalUnravel/AutoroutingPipeline1_OriginalUnravel.d.ts": "ddd5a7559de318ea0a126d242bd9f187e353fefdb519157c86ad767ff02beedd",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline2_PortPointPathing/AutoroutingPipelineSolver2_PortPointPathing.d.ts": "39a33654a138b461d2b03ae6a07c0682ed9e736f710f841cf20fe043543d196c",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline3_HgPortPointPathing/AutoroutingPipelineSolver3_HgPortPointPathing.d.ts": "3d1aaed3ad0538cd92bd2042954669d39fde27cbb0f372a03a1e88e756ab11f7",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline4_TinyHypergraph/AutoroutingPipelineSolver4_TinyHypergraph.d.ts": "e36953b2ce8fbcd6dd5ecf5686c12dc0a4c6426a385390c6dc01e3477ebd56ea",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline4_TinyHypergraph/PreprocessSimpleRouteJsonSolver.d.ts": "cdf05fedd97d6a89de810d3d2f72b7e6d9bd9b34ad9c4541ab696238c6f0d32a",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline5_HdCache/AutoroutingPipelineSolver5_HdCache.d.ts": "35544715fa4c0ebfcd9ce7e6681f8bcd02f90efbc17bb0a4f6b2cf726df8deec",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline6_PolyHypergraph/AttachProjectedRectsSolver.d.ts": "f440039acdf7e50ffccef35faa1f311670c5f510974b630082738720162b5b9b",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline6_PolyHypergraph/AutoroutingPipelineSolver6_PolyHypergraph.d.ts": "7a5787ab2de30fcf058b8cf071b405400894ba43a122aacad91709ae6b16fefd",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline6_PolyHypergraph/PolyHighDensitySolver.d.ts": "e38383bc04486959c7262c41b44c2eab3ea299523fb8460c533ec9e23e113125",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline6_PolyHypergraph/PolyHypergraphPortPointPathingSolver.d.ts": "7ba0c6ae29135d0c32c6ba9f1c37a12f5d96d5ab683954dbf8fc21495bccc235",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline6_PolyHypergraph/PolySingleIntraNodeSolver.d.ts": "d5f42fdf8ce72d1c9a61e9eeb2d0d5b795dfe5dc16f741df9c4da6476ffcb9df",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline6_PolyHypergraph/PreprocessSimpleRouteJsonSolver.d.ts": "1519777bb3219d1b998863589abfbc4e92472e410b10ff260c510a5e17d67cde",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline6_PolyHypergraph/ProjectHighDensityToPolygonSolver.d.ts": "ee67eec81cc47a010131a0c31d0821f1a8e8fa5f01aa79c4b8f7bbafe48718e9",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline6_PolyHypergraph/geometry.d.ts": "7e403e14f71040db9232e7bf295d91be8970671853fb3cd4cadb637bccc9d032",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline6_PolyHypergraph/types.d.ts": "ccc21b11d2c9a0ba45740028d3027911bc93d59fdace9d7769bfa8b60a822577",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline7_MultiGraph/AutoroutingPipelineSolver7_MultiGraph.d.ts": "30c9fb73249de924f74f0a321bcee545bb7c679ee85dd4a5e5d701d9201371fa",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline7_MultiGraph/MergedComponentTopologyView.d.ts": "f355017bc0f6e9e6b03ff2ff26770277889896cc6e231492412c3dcbc5b019cb",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline7_MultiGraph/PowerTraceExpansionSolver.d.ts": "d9a795313a2ee8abf1d39f9286649e188a69bd6bfcd6eec66087389c2fe37c40",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline8/AutoroutingPipelineSolver8.d.ts": "79333fe8648a39fce0a3e37de0eec3b4b306e57fd6e9cd045101e0e02d31201f",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline8/SplitNodesIntoSingleLayerNodeSolver.d.ts": "e07824395eac9497f393f5c006cbf409fbcf02cc42bf44ba06fdfb311e5cd616",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline9_Networked/AutoroutingPipelineSolver9_Networked.d.ts": "e22ab52b89b062c03462ad355f2603336930ca052759e33ef2f6dac1f339a0ee",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline9_Networked/HdCache2Client.d.ts": "4cdcd5612cc8f843fd47292d5f6908777d679db197348e69601b09c5b6eb486b",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline9_Networked/autorouterVersion.d.ts": "195e3e3000176e96bde364e5f84524cb1b177309967ea3d46185fe3a1b60b611",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline9_Networked/pipeline9NetworkedTypes.d.ts": "19991797954ebd50844a200bb342c7fc4fa86263bf2bc7138e830ff5db8f6029",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline9_Networked/solvePipeline9NetworkedHighDensityNode.d.ts": "d521a59416a0aef006a822fa79de9192be9f690db6b79b0675be576c41b97e8c",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline9_PreloadedTraceGraph/AutoroutingPipelineSolver9_PreloadedTraceGraph.d.ts": "e52bb1d2f15c0ae46b45c3c7e798d24dd36b7be2420a621a0d9abe946b083083",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline9_PreloadedTraceGraph/Pipeline9BoundedRegionalRepairSolver.d.ts": "67dd9b2726a819a2312aa23c8044fda971cd00f82ff70a69c83570bf3348091b",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline9_PreloadedTraceGraph/Pipeline9EffortCleanupSolver.d.ts": "23be10a1a73601bcb5666187df7481eea27b154e23f3f34a065302c654865789",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline9_PreloadedTraceGraph/Pipeline9HighDensitySolver.d.ts": "d0d4b4f5bdfe962da7d1f5283930b446150bd3ee636bf36693821a5c362f5023",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline9_PreloadedTraceGraph/Pipeline9JointDrcRepairSolver.d.ts": "e52be3e8db392dd02a3d2ed295194750979d3ada13b7d5b1a735d24e343b76ea",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline9_PreloadedTraceGraph/Pipeline9RegionalB01RepairSolver.d.ts": "6fd6e355bdc2a47ad836a4e0312f23022a6280479ebe2afb8fdd383f1abd671b",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline9_PreloadedTraceGraph/Pipeline9RegionalFallbackSolver.d.ts": "bf2cebb9cdcf9daf360e7fa751bf883404889b303f83a13f9a2c466e33a86dd3",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline9_PreloadedTraceGraph/PreloadedTraceGraphSolver.d.ts": "d1a1d0032eb0dbf312fdfb570023b60c45b2b07f3496332f3bf8a4ec5bdaa016",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline9_PreloadedTraceGraph/PreprocessSimpleRouteJsonWithoutTraceObstaclesSolver.d.ts": "f242e8dfb77cb619837a5291dbe878c3cd37af4a2cbfd80f91cfdcb474012a17",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline9_PreloadedTraceGraph/applyPipeline9BoundedRegionalRepairs.d.ts": "ad86a274de6e7abf1b46a5a1123cc5fc0f621eb1b9ee06f5f6f4dc2eabe70807",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline9_PreloadedTraceGraph/applyPipeline9RegionalB01Repairs.d.ts": "d50cb14b08a27c4e327501ea6551c371a036da6357b0fcb2efb67052b913dcc7",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline9_PreloadedTraceGraph/convertPreloadedTraceToHdRoutes.d.ts": "1813fc77304d2bcfd9354df14415b0b1885df0d5221c7d36ef092268dd8091ea",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline9_PreloadedTraceGraph/pipeline9FixedRouteCopper.d.ts": "3f6a3540dd54d9adb39f287be21463342cefd2b199127fde4332d214c8985269",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline9_PreloadedTraceGraph/pipeline9JointDrcRepairUtils.d.ts": "d22c4da57da17c47be07eb4162e866fc3aedf466d85f57db5a85694870978abc",
+    "dist/types/lib/autorouter-pipelines/AutoroutingPipeline9_PreloadedTraceGraph/pipeline9RegionalFallback.d.ts": "e2820b53c5bcce01fef48d85e2e1952db7e5dba4b73de854742141ffe9291150",
+    "dist/types/lib/cache/InMemoryCache.d.ts": "c7612fe3bd5501e8903fc897ca3b41a55109f612d6a8ee22b21c9793c4073ecf",
+    "dist/types/lib/cache/LocalStorageCache.d.ts": "dda16c4574f7beedaa7e9c6a603a3d581ef4273d3f07d129d6a1550b6f8a897e",
+    "dist/types/lib/cache/setupGlobalCaches.d.ts": "71e791fe5363e46241b2b2b1a7ebc6982e1e9dfe81ce7312eb9a941138efdcba",
+    "dist/types/lib/cache/types.d.ts": "f5604f704e0ced5df1c6d87846a3a7c0d71da50ab4b90b848b2ea8676c0e8b56",
+    "dist/types/lib/data-structures/CapacityNodeTree.d.ts": "142f8f2b2121bdd9ec97aefb460b5aac87e59a7a896298315d7f617f400a2251",
+    "dist/types/lib/data-structures/HighDensityRouteSpatialIndex.d.ts": "8066545fafa9a13ef08809373f7084105ddb16db037774628bfbf1890181476d",
+    "dist/types/lib/data-structures/ObstacleTree.d.ts": "641759cc7875e767b0559a738507ee2d3dd88e4cfab8bc3f3c0a7b1aafd05b9d",
+    "dist/types/lib/data-structures/SingleRouteCandidatePriorityQueue.d.ts": "a9cc1f6d403fcf086fbeffa30bc750fe8b4ce367dda61eff80af03deed69b2a6",
+    "dist/types/lib/data-structures/TargetTree.d.ts": "2ef8c7088c3f71f32d424bd278b14e253c72b606a3cb090e815f4ba5345b8af2",
+    "dist/types/lib/index.d.ts": "39a8760d9a4e1f4b2cc1d9df942c2bfe581b67d49daa624ae3682ff5504baecb",
+    "dist/types/lib/solvers/AvailableSegmentPointSolver/AvailableSegmentPointSolver.d.ts": "be9cbb0e8d5277d2dd9cdda9962c5176208f008fe29962d10e7ee6a803159137",
+    "dist/types/lib/solvers/BaseSolver.d.ts": "0b01d9bfc5a1778e811f32fcda19918886f6714f32eb120ef0824f2d9a6adc10",
+    "dist/types/lib/solvers/BgaTopologyGeneratorSolver/BgaGapFillTypes.d.ts": "62dda1b8cb791e6b12838d515aad1425f7a7029df7774a9cc1252bd101061005",
+    "dist/types/lib/solvers/BgaTopologyGeneratorSolver/BgaTopologyGeneratorSolver.d.ts": "18e5362ce1ed951d79888fddcf4a729524d722563e964b2c244b53c90da387b2",
+    "dist/types/lib/solvers/BgaTopologyGeneratorSolver/DetectEdgesNotConnectedToMesh.d.ts": "dca04aaef952e05dc5ff2d1c43c372710860390b39b0321f795dd480819693e8",
+    "dist/types/lib/solvers/BgaTopologyGeneratorSolver/ExpandUnconnectedEdgesToMesh.d.ts": "4d12ed235fd3555bb3e6614e1e4042e934893f88928a827d78e59ad5bee64b0a",
+    "dist/types/lib/solvers/BgaTopologyGeneratorSolver/GapFill.d.ts": "cd86f78cdddbaf4dfae1edede96e92853479690e5525d9805ea686a8b381c582",
+    "dist/types/lib/solvers/BgaTopologyGeneratorSolver/InitialBgaTopologySolver.d.ts": "5e5e4199128a7d11f5b1ee975b85a07bd96d9a995f58ed040758dae25ecdbd2d",
+    "dist/types/lib/solvers/BgaTopologyGeneratorSolver/MergeMeshNodes.d.ts": "198ad5254b7569841c36d08827ca7bf5d9111c6d1cc41e63e9b31efec0f9a880",
+    "dist/types/lib/solvers/BgaTopologyGeneratorSolver/RemoveMeshNodeOverlappingSolver.d.ts": "6eb02b0642c664f4c9ecfb495866c7bee3dc1a3d3c526cb8d7242728137f7736",
+    "dist/types/lib/solvers/CapacityHyperParameters.d.ts": "0f975d3d27be2bd09bd6aa287645e83eab70059240e4feff00ddf6fd6b182361",
+    "dist/types/lib/solvers/CapacityMeshSolver/CapacityEdgeToPortSegmentSolver.d.ts": "e702e51d122e6c89a1c673026a5f838ffa0a7a3e35ddc273c738aa6b4556b696",
+    "dist/types/lib/solvers/CapacityMeshSolver/CapacityMeshEdgeSolver.d.ts": "1e68b9f8de0be768d31e14fff2c3c51cb560a0129b6e2384f8d493add8ebea38",
+    "dist/types/lib/solvers/CapacityMeshSolver/CapacityMeshEdgeSolver2_NodeTreeOptimization.d.ts": "b4bbbe1940dc9a5430183be32d98882ea0028ad6f2e12eda3153660ebfdc5ae5",
+    "dist/types/lib/solvers/CapacityMeshSolver/CapacityMeshNodeSolver1.d.ts": "09e4f6b4db0d728764e844d7e1145c4f5dd8f02b72560657e40ed67e27a8f8fa",
+    "dist/types/lib/solvers/CapacityMeshSolver/CapacityMeshNodeSolver2_NodesUnderObstacles.d.ts": "76b77b0207ade718f6240fb622a1d21816a4b9d75fa5fae9693b2285363ba4da",
+    "dist/types/lib/solvers/CapacityMeshSolver/CapacitySegmentToPointSolver.d.ts": "a3ec5607b4cb86d14d2d4d1504456397b2bdf0f6917501caf91b6ac178af1e77",
+    "dist/types/lib/solvers/CapacityNodeTargetMerger/CapacityNodeTargetMerger.d.ts": "d1da39a9b95615110c150b2fd6700f782c3df8c2a4b9f9ceb2a033ca0680a7b3",
+    "dist/types/lib/solvers/CapacityPathingSectionSolver/CapacityPathingGreedySolver.d.ts": "5c261dd5118b80499d1a5ec3196042bc285ec0c6a59f117c2209c51805e3ec92",
+    "dist/types/lib/solvers/CapacityPathingSectionSolver/CapacityPathingMultiSectionSolver.d.ts": "4c26d51e9594f6afd15a1d93a9a0acd5e9c5e07cefcc846d140ec8d49b05a2ba",
+    "dist/types/lib/solvers/CapacityPathingSectionSolver/CapacityPathingSingleSectionSolver.d.ts": "6f0d1a5bc2d2b682a0b2dacf2d8bb88c5d0fecc4077eb547a22b93b951342631",
+    "dist/types/lib/solvers/CapacityPathingSectionSolver/HyperCapacityPathingSingleSectionSolver.d.ts": "d7d3b9f717ed599299bda2fbcf364f75d9604a81c36e18e0bc232f70fe94b3cd",
+    "dist/types/lib/solvers/CapacityPathingSectionSolver/computeSectionNodesTerminalsAndEdges.d.ts": "92c50666a5fa9958633d3da7c1bc0aee2fbad8a4f56b0193303c2eec1493d5f9",
+    "dist/types/lib/solvers/CapacityPathingSolver/CapacityPathingSolver.d.ts": "c6ed33b3cb6208bea466f6be2f283f7d2941daebec541f5259dbb1235a710163",
+    "dist/types/lib/solvers/CapacityPathingSolver/CapacityPathingSolver5.d.ts": "14b707e89b6fba726fa84642c0e528c582797f1eceaca94b750af610d6c88cba",
+    "dist/types/lib/solvers/CapacitySegmentPointOptimizer/CapacitySegmentPointOptimizer.d.ts": "4b87dc921142405c260d17b07b2b4b0521fc401e791c5309849f28b8169f7bff",
+    "dist/types/lib/solvers/ComponentDetectionSolver/ComponentDetectionSolver.d.ts": "22153076e92e468be853f6af2fb87600586f83a3b6128e0aca05fceffbbc4f6d",
+    "dist/types/lib/solvers/ComponentDetectionSolver/RectBoundsComponentDetectionStage.d.ts": "00ddd5f649039c4d17f8b8c58e96431bce0ff66d165fe495c373bffa474c6c03",
+    "dist/types/lib/solvers/ComponentDetectionSolver/detectors/types.d.ts": "f99e1ababeac28eae08c422339f3aa46f352abc7a008f43564e22467d2418f41",
+    "dist/types/lib/solvers/CurvyIntraNodeSolver/CurvyIntraNodeSolver.d.ts": "5684a000a66774e9c0bfac6e87bcfd95752adfce22773c1ba5faa9de643bda50",
+    "dist/types/lib/solvers/DeadEndSolver/DeadEndSolver.d.ts": "d8e9b0db2c9e363a5640f381a59109e7d98a5b30de2287f91a01d7114e0c9613",
+    "dist/types/lib/solvers/EscapeViaLocationSolver/EscapeViaLocationSolver.d.ts": "21ac445882824e73a2ff2fd2f05b5bc67546c7816426864b515f8f4137552746",
+    "dist/types/lib/solvers/HighDensityRepairSolver/Pipeline4HighDensityRepairSolver.d.ts": "1616bd8b170bda99265764492e5f499128ff72982b0d6aeb6c469b9ee92a6cc6",
+    "dist/types/lib/solvers/HighDensitySolver/CachedIntraNodeRouteSolver.d.ts": "fa2ae520eadb6acc18f5c3effd67722cccfa08bca0c73cdde76e01226c9e32f6",
+    "dist/types/lib/solvers/HighDensitySolver/HighDensityHyperParameters.d.ts": "73a9837df9e6870f2a3273325d2e3b383d741d506cb6738b48b6cac15c408b32",
+    "dist/types/lib/solvers/HighDensitySolver/HighDensitySolver.d.ts": "d4b9d5a7dffc65490c6e9d7da0a0d7c4fc852beae6e049d4b6954ff13e44a377",
+    "dist/types/lib/solvers/HighDensitySolver/IntraNodeSolver.d.ts": "2aa9bb7afc82433e52502f300e1b9cad3aa69bf467280c3ac2d3bd15fbdbc1e8",
+    "dist/types/lib/solvers/HighDensitySolver/IntraNodeSolverWithJumpers.d.ts": "f4033f253573511f1375927687aff3cdc11ca708e3b5f70263702ead3e8b1ffd",
+    "dist/types/lib/solvers/HighDensitySolver/SingleHighDensityRouteSolver.d.ts": "938fdc25d0320b64b05204fd8db78a5de59e55f70ebdd9b656a040460ceb5a11",
+    "dist/types/lib/solvers/HighDensitySolver/SingleHighDensityRouteWithJumpersSolver.d.ts": "2177c694011c367b9e59ebb740ec9eef0542b33fa2dd011e3a2d1ad21182457b",
+    "dist/types/lib/solvers/HighDensitySolver/SingleLayerNoDifferentRootIntersectionsIntraNodeSolver.d.ts": "01cf5569c2436520b0b3095844709721c893f4505194c6917be59df10beb198f",
+    "dist/types/lib/solvers/HighDensitySolver/SingleTransitionIntraNodeSolver.d.ts": "4332c46d1bab3ee5f85019fa93693dc15a438c622124bbe62fa8c2517025b774",
+    "dist/types/lib/solvers/HighDensitySolver/SingleTransitionThroughObstacleIntraNodeSolver.d.ts": "fa7156896cc6647c23ceee5dc4d8961ca7c7bff8d280b3095f84e2be8de75c3b",
+    "dist/types/lib/solvers/HighDensitySolver/TwoRouteHighDensitySolver/SingleTransitionCrossingRouteSolver.d.ts": "1dc1af8b1329622d7844f7bafdb3599b8952e85a155aa7532ea264037bc16dae",
+    "dist/types/lib/solvers/HighDensitySolver/TwoRouteHighDensitySolver/TwoCrossingRoutesHighDensitySolver.d.ts": "fae3ec5ef371fa57474fcdce49059713deb6d0696a911f7814885212db6ad749",
+    "dist/types/lib/solvers/HighDensitySolver/precomputeIntraNodeRouteParams.d.ts": "e7ab01ee4e76a43ecb521762b2a3462209575c4cde7a13e132521839bd5f3a8f",
+    "dist/types/lib/solvers/HyperHighDensitySolver/GrowShrinkHighDensityIntraNodeSolver/GrowShrinkHighDensityIntraNodeSolver.d.ts": "097e51feaee99436ebb2ac0ea119c353e7005a9691052759efcd269366aa0b9f",
+    "dist/types/lib/solvers/HyperHighDensitySolver/HyperSingleIntraNodeSolver.d.ts": "aa8f9b68fa344d268fd153d124f25612c7b18fa834d11252da60e5667e17530e",
+    "dist/types/lib/solvers/HyperHighDensitySolver/PortfolioSingleIntraNodeSolver.d.ts": "dfc9783f3ecb06fedd9da7259e5725221f31a60905ab26dbf658a297bb859193",
+    "dist/types/lib/solvers/HyperParameterSupervisorSolver.d.ts": "11f0dcf600cec1982b221075865178838b5782b2267e110c4c05a4c2442f8f73",
+    "dist/types/lib/solvers/JumperPrepatternSolver/HyperJumperPrepatternSolver2.d.ts": "e01f20d7c094c39516fa8554e8c2cb6694d19b92b1a61b6aa5e4d1433845f2a6",
+    "dist/types/lib/solvers/JumperPrepatternSolver/JumperPrepatternSolver2_HyperGraph.d.ts": "a00072c0cb6259855bba2a038dc01465463e85571c0c5200b2c340398c0f3e05",
+    "dist/types/lib/solvers/MultiSectionPortPointOptimizer/MultiSectionPortPointOptimizer.d.ts": "6addeaeacbfbacef326785773ff07a42c9fb7d535757bc1e98274a7c8f3b8775",
+    "dist/types/lib/solvers/MultiSectionPortPointOptimizer/createPortPointSection.d.ts": "e0f6230e59a27415fb64a1b72b16fdaca9f286aa4821c2abe10162039018a087",
+    "dist/types/lib/solvers/NecessaryCrampedPortPointSolver/MultiTargetNecessaryCrampedPortPointSolver.d.ts": "e340b68592d859f6a1ed44803c854acd2bf2010a921b2547ca3665894712e5d2",
+    "dist/types/lib/solvers/NecessaryCrampedPortPointSolver/SingleTargetNecessaryCrampedPortPointSolver.d.ts": "3ebdb01df02ca94c216eb26a13dcf22bd4a11159e2a67c944284c28e98f015aa",
+    "dist/types/lib/solvers/NecessaryCrampedPortPointSolver/types.d.ts": "ffd9d77b44698bf3ab1707e53cad80ab785c4133bcb2d43c84dda79a223e627d",
+    "dist/types/lib/solvers/NetToPointPairsSolver/NetToPointPairsSolver.d.ts": "3282752b672fe73bb3588369bbe49d113bec962043e561de864a1eb0e1762db3",
+    "dist/types/lib/solvers/NetToPointPairsSolver2_OffBoardConnection/NetToPointPairsSolver2_OffBoardConnection.d.ts": "c8592f8c018a93587b43e538e5fce306f617b013a4adb075666c50677d94e8ef",
+    "dist/types/lib/solvers/NodeDimensionSubdivisionSolver/NodeDimensionSubdivisionSolver.d.ts": "19e90969f7c73ed9f1e301d9770c46f645834e0660e0e9a8b18a32dd131af102",
+    "dist/types/lib/solvers/PortPointPathingSolver/HyperPortPointPathingSolver.d.ts": "37d0adfe6f89f6abfd115ca9644c5bafa9e5c145491e9f423fca85ebd48ba0b6",
+    "dist/types/lib/solvers/PortPointPathingSolver/PortPointPathingSolver.d.ts": "723a3f8e6986667919c24b9dd9f7d527d63fb2de0d4061b3a8ea7d8a35bebd2e",
+    "dist/types/lib/solvers/PortPointPathingSolver/hgportpointpathingsolver/HgPortPointPathingSolverClass.d.ts": "936db34436df9a516f8a9c1f07e2b22fd1564a6fa14d2b94049d93206b141e54",
+    "dist/types/lib/solvers/PortPointPathingSolver/hgportpointpathingsolver/types.d.ts": "7eed949f87e8fe2aa964062bd24eb98180ab9a49f8f1f6f04608a4f143dbf872",
+    "dist/types/lib/solvers/PortPointPathingSolver/precomputeSharedParams.d.ts": "cc4e947483512657149fa1835de8a1902445c1ef908ee08f62e54bce8f456667",
+    "dist/types/lib/solvers/PortPointPathingSolver/tinyhypergraph/TinyHypergraphPortPointPathingSolver.d.ts": "24b0fe6287a68055612e9d40c29528c5d2578440a8ed53f15440b423cc56eed8",
+    "dist/types/lib/solvers/PortPointPathingSolver/tinyhypergraph/serializePreloadedTraceAssignments.d.ts": "3518ac88476de2e463a387d06361addcb995b2d252a3355c03bf59f382b17164",
+    "dist/types/lib/solvers/QfpThermalPadTopologyGeneratorSolver/QfpThermalPadTopologyGeneratorSolver.d.ts": "4181682d10964555687740dbd1a34f4f1ea8d5e3455bfdbb8a1e894f40d5dad3",
+    "dist/types/lib/solvers/QfpTopologyGeneratorSolver/QfpTopologyGeneratorSolver.d.ts": "ee1938d6e72fc6bbf2424f7b133f0b4b3ec482786a19e609831a20ad71d82eac",
+    "dist/types/lib/solvers/RouteStitchingSolver/MultipleHighDensityRouteStitchSolver.d.ts": "d52dd98d52680145df6780d840747e72a7eef7b8633bd8bc20f70db0cfe594e6",
+    "dist/types/lib/solvers/RouteStitchingSolver/MultipleHighDensityRouteStitchSolver2.d.ts": "f4037c8a6784a00398ef0123cf1f9367d72abc900007349aa1b32228708495e5",
+    "dist/types/lib/solvers/RouteStitchingSolver/MultipleHighDensityRouteStitchSolver3.d.ts": "8de813e1a777e20c10bd5b53043007f64efef6bfe6866b767a46792d4ba3d129",
+    "dist/types/lib/solvers/RouteStitchingSolver/NoOffBoardMultipleHighDensityRouteStitchSolver.d.ts": "c155817e907a350a3366bf15af8a0b6f5b892fe61ce83b6c476a549c4c197dd4",
+    "dist/types/lib/solvers/RouteStitchingSolver/SingleHighDensityRouteStitchSolver.d.ts": "c523d23220cb4946ce03058cc0382c369664c90bef5c81e7f19ed370beeda68f",
+    "dist/types/lib/solvers/RouteStitchingSolver/SingleHighDensityRouteStitchSolver3.d.ts": "6212483fa2dd0c88ffc057ee47681e94b0c66604c25dbe0387cbd413a479bf6f",
+    "dist/types/lib/solvers/RouteStitchingSolver/route-stitch-clearance-validator.d.ts": "fe2503099956239fa9d168726f070ffdabb98cae7a64e0b83ffed85cb9d04d55",
+    "dist/types/lib/solvers/RouteStitchingSolver/routeStitchingShared.d.ts": "17ae137450b5d64692c93415f6e9d6be6cd534a46c4331db0a0f06ecf3ec5b9b",
+    "dist/types/lib/solvers/SingleLayerNodeMerger/SingleLayerNodeMergerSolver.d.ts": "1af4dd61ba71e12c12de53c03ae17b950d59307a28494f10e779d7724a04f1d8",
+    "dist/types/lib/solvers/SoicTopologyGeneratorSolver/SoicTopologyGeneratorSolver.d.ts": "c6a8f2f405c0de71cd22a6ed24a9102cd1aa198f03d12c82b0f8f465b4a6f91d",
+    "dist/types/lib/solvers/StrawSolver/StrawSolver.d.ts": "cedc1fb6c7188e9b10ab2593cfb36b63e02e2ffe68cdc5c36ffec6aec438d004",
+    "dist/types/lib/solvers/TopologyMergingSolver/TopologyMergingSolver.d.ts": "06b41df4e333ab631524607a056abf42c8d32e480161a9d80dd3b17e86d8cd33",
+    "dist/types/lib/solvers/TopologyMergingSolver/topology-merging-types.d.ts": "09f0487d96428dc2695b42a25c3040adf5b9cfc353fc22c1433f78cb3df289bc",
+    "dist/types/lib/solvers/TopologyPlanningSolver/MultiGraphTopologyPlannerSolver.d.ts": "3700d301e907bd6eedabba08b4806b3e555f0ddf4793edaa4af811def27532d1",
+    "dist/types/lib/solvers/TopologyPlanningSolver/TopologyGenerator.d.ts": "70095a525c6cb61f24a124721c4ef254b56a3a9a48b85739476329350559a704",
+    "dist/types/lib/solvers/TopologyPlanningSolver/topologyPlanningShared.d.ts": "2d2f9be4259b2a66d4f97e7746c8373a3c64957943436943beecbb79ffeee96d",
+    "dist/types/lib/solvers/TraceKeepoutSolver/TraceKeepoutSolver.d.ts": "32d215f6472cf6f12957efc6d17ef359091d5f157fcc38b7eca3b0abb2858187",
+    "dist/types/lib/solvers/TraceKeepoutSolver/computeDrawPositionFromCollisions.d.ts": "bd5c18d8d5414df1c2f377560e58c5a86adcc61203408d15f7ee859f380cbc77",
+    "dist/types/lib/solvers/TraceWidthSolver/TraceWidthSolver.d.ts": "3039cba49004ad23a134b2304e01d95d3ec9213b7d94e490d4a841ff0a7ffc71",
+    "dist/types/lib/solvers/UniformPortDistributionSolver/UniformPortDistributionSolver.d.ts": "33f11a5e61be72fdfc3ef3d7521bc769def2a78ac1d289d495ce1dce3fb00f85",
+    "dist/types/lib/solvers/UniformPortDistributionSolver/types.d.ts": "7af4cf79a3824277fd39631b7fb8d8e38e129d5792650444865fc8ae3ce71426",
+    "dist/types/lib/solvers/UnravelSolver/UnravelMultiSectionSolver.d.ts": "efa2c8163492d8feb49fa2998718e7936aa21d83a25963a723bb46826c19ca6f",
+    "dist/types/lib/solvers/UnravelSolver/UnravelSectionSolver.d.ts": "b1c48c2c3d6b99abb64c8f16812063dfcdb34039682c99de0131d22a28e54215",
+    "dist/types/lib/solvers/UnravelSolver/createSegmentPointMap.d.ts": "fb607b6d6be96d84f85a0d90b93d3d142b917d74bbafb4883b2e2186cd0e110a",
+    "dist/types/lib/solvers/UnravelSolver/types.d.ts": "5364b685b98e18836cde4a923e833a190c065ee0396942a6647763fdb6c8735b",
+    "dist/types/lib/solvers/length-matching-post-processing-solver.d.ts": "2b0da9630561d9f90343aab021bf3c1acd2c36d051d64c1b34059034fbcab8fd",
+    "dist/types/lib/types/capacity-edges-to-port-segments-types.d.ts": "ab3da48441c03edda690331059576fd46d63840ff0afaeb89699436c3652dbe0",
+    "dist/types/lib/types/capacity-mesh-types.d.ts": "3de7762598d2fcf7eac06c6bd86a0b4854489ee1fb5c553c2e0551cf9d2ad45d",
+    "dist/types/lib/types/capacity-pathing-types.d.ts": "4305c92e0ac8103bc172dcb7f7734ed2d55701f5853ddb29d24750bb4bd855ec",
+    "dist/types/lib/types/capacity-segment-to-point-types.d.ts": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+    "dist/types/lib/types/high-density-board-geometry.d.ts": "63e83547d96544d0a8d2716fa2c34c354a1ddeb93cea21088450c6b6ba225f8f",
+    "dist/types/lib/types/high-density-router-types.d.ts": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+    "dist/types/lib/types/high-density-types.d.ts": "b6ff90c51a3d4c814eea2bc202c7cf5f0491ac6fd961805c444f078fcae8783e",
+    "dist/types/lib/types/index.d.ts": "dd4387663cdd43edc811ee32b25da346042f674ba1748937065ad18b51b77f6d",
+    "dist/types/lib/types/srj-types.d.ts": "3b842bc0875f50b8d09e515ca1da432585a34232effea10e7fe424d24797a8fd",
+    "dist/types/lib/utils/connection-point-utils.d.ts": "1102fd479ebc403220f3239f749d8eca3caca7b1baca46b521fa8055da3e373b",
+    "dist/types/lib/utils/convertSrjToGraphicsObject.d.ts": "c19cd45bbb9298b8420a8d7d070f4f504bd6f3c0d2b98f9e074c24c4c62a578a",
+    "dist/types/lib/utils/dsu.d.ts": "2eb90f064ecc89df9e058c1bcc9fd6a7e78b32c5b59c54bf6e07fd27691cdfd8",
+    "dist/types/lib/utils/getRerouteSimpleRouteJson.d.ts": "5b181af4fae5fba2a72816d202be36ab5f758f420cdf454ebb4f0c4152a0def3",
+    "dist/types/lib/utils/getTunedTotalCapacity1.d.ts": "8098bf1285a86c35435c1acb9b7083011c4cfaf3cc0bc6b8ab9770fe3e03908e",
+    "dist/types/node_modules/@tscircuit/create-fdm-enclosure/node_modules/@tscircuit/solver-utils/dist/index.d.ts": "1de92634adee863b01488e33e08e4371abbe6af58265d84180c8094e8cf0dc69",
+    "dist/types/node_modules/@tscircuit/curvy-trace-solver/dist/index.d.ts": "4c4acdfd75ed3fbbef3888fff2e1ceb23b95b23d9238c2c5d9f8ffbc0605c7f8",
+    "dist/types/node_modules/@tscircuit/fanout-solver/lib/fanout-solver.d.ts": "2e12d1ea05d1890dd5c322cada2fe92e6460701d61e6a26fd9f9542cc2bbf900",
+    "dist/types/node_modules/@tscircuit/fanout-solver/lib/types.d.ts": "cdc1ca5493ef7cf6c2c67d7a44eea9bedcc111d0a7c6fb7a9dfee4aaf800a458",
+    "dist/types/node_modules/@tscircuit/fanout-solver/lib/validate-original-endpoint-connectivity.d.ts": "b01e761fe7c180ef7d1d099483967b99984a5b0a674cc16b7ccb01127d4f274c",
+    "dist/types/node_modules/@tscircuit/fanout-solver/lib/validate-routed-copper-drc.d.ts": "78ec5f4c878d99bae6184f7dc3233a1b322ab8cf7edf8783607df5997e055052",
+    "dist/types/node_modules/@tscircuit/high-density-a01/lib/HighDensitySolverA03/HighDensitySolverA03.d.ts": "abfeb3bb186d3c1bbfb53c5375defd36b9588c14dfd2fac747564885b66a8594",
+    "dist/types/node_modules/@tscircuit/high-density-a01/lib/HighDensitySolverA13/HighDensitySolverA13.d.ts": "28c0369583a297b8d6378487ea21d8b8049e8fdee4f35dc8c6230ee87e7e5ddf",
+    "dist/types/node_modules/@tscircuit/high-density-a01/lib/gridToAffineTransform.d.ts": "0c450334cfbe19ed98365f8ff6569f3840eebb397758d91178f01cbb76dad33b",
+    "dist/types/node_modules/@tscircuit/high-density-a01/lib/routeGeometryValidation.d.ts": "9ce1f1b6d553d4ceaf51618476c5ff843f4b11fddbf42aaaa1116cefe136a42e",
+    "dist/types/node_modules/@tscircuit/high-density-a01/lib/types.d.ts": "dfe44929fa5af904ec57446b92f55f1756bec03c441821e3ec15c276170d2f07",
+    "dist/types/node_modules/@tscircuit/high-density-b01/lib/HighDensitySolverB01/HighDensitySolverB01.d.ts": "c756008f1ff9257c931574ad3565b58a0a2efc0c7d54f7425ea1c8a01741a74f",
+    "dist/types/node_modules/@tscircuit/high-density-b01/lib/gridToAffineTransform.d.ts": "0c450334cfbe19ed98365f8ff6569f3840eebb397758d91178f01cbb76dad33b",
+    "dist/types/node_modules/@tscircuit/high-density-b01/lib/obstacle-dataset-types.d.ts": "58b11e67b0a95a717d91e9f29d2a159ea3261f655459e9e942619a252235665c",
+    "dist/types/node_modules/@tscircuit/high-density-b01/lib/types.d.ts": "dfe44929fa5af904ec57446b92f55f1756bec03c441821e3ec15c276170d2f07",
+    "dist/types/node_modules/@tscircuit/hypergraph/dist/index.d.ts": "86461ca24f45f82285fcff733fd0ed86a15a7d520df206f54748ab753ce1b94e",
+    "dist/types/node_modules/@tscircuit/hypergraph/node_modules/@tscircuit/solver-utils/dist/index.d.ts": "e77a9354adb6d6633a752cdf11108424dfd06e13819b309bcb85614b1d7b47fb",
+    "dist/types/node_modules/@tscircuit/length-matching-solver/lib/PostProcessingSolver.d.ts": "721ccfd8cb6deea32cadca442a2ec8a35b6bc16c634578cd291ed76bc6db48f0",
+    "dist/types/node_modules/@tscircuit/length-matching-solver/lib/length-matching/types.d.ts": "f65a9fdde277973143f7c8f0d1e8ba76ecc2b9aa46ce281ca569730bb722f9c9",
+    "dist/types/node_modules/@tscircuit/length-matching-solver/lib/length-matching-solver.d.ts": "6f37666213cdcd37fbf0a80c9f74ff5db0effa8a5d2dba17c181cdcee40845a1",
+    "dist/types/node_modules/@tscircuit/length-matching-solver/lib/post-processing/binding/createLengthMatchingBinding.d.ts": "ae92aaff5df606716a042052dde78654f2d9a99f1b7842aaf3895e9eacd4994d",
+    "dist/types/node_modules/@tscircuit/length-matching-solver/lib/post-processing/errors/DifferentialPairRoutingError.d.ts": "2a3acab477b7c8199ed5619613277d4749f4cf6209a1aafec9a41b2e0bb2643e",
+    "dist/types/node_modules/@tscircuit/length-matching-solver/lib/post-processing/solvers/DifferentialPairReroutingSolver.d.ts": "0ab2c746f74f8d5d7bfc9916a85337ac0b7b65324b6074b59c409e7b266d1f94",
+    "dist/types/node_modules/@tscircuit/length-matching-solver/lib/post-processing/solvers/FortyFiveDegreeSimplificationSolver.d.ts": "d35eccb450b9d7e5d2788888b99d77ab799dd0e89c828cf0a615313a70befc79",
+    "dist/types/node_modules/@tscircuit/length-matching-solver/lib/post-processing/solvers/HdRouteReconstructionSolver.d.ts": "06e3907b43f2bb19d9b9d024f82c3a718c8934f2f0647ea6c01ea44e33db211d",
+    "dist/types/node_modules/@tscircuit/length-matching-solver/lib/post-processing/types.d.ts": "77b91d382070fc286ffed082f6da8eb4b189df5be22998ee2c8e44f4830f0e98",
+    "dist/types/node_modules/@tscircuit/length-matching-solver/lib/types.d.ts": "bb583b83215ba16cecc30931e002049ff75f8c6b486fa93dc745500c3ac00c88",
+    "dist/types/node_modules/@tscircuit/length-matching-solver/node_modules/@tscircuit/solver-utils/dist/index.d.ts": "7ea6695f853db08ca527a7d4c69f416f07962553b0e9d15dc524bcdf0c508812",
+    "dist/types/node_modules/@tscircuit/length-matching-solver/node_modules/graphics-debug/dist/lib/types.d.ts": "6a756f3b2dbfb7d7cdffa14b33be23b69b8b52d9357d1b2d9ab6d36766ade08b",
+    "dist/types/node_modules/@tscircuit/math-utils/dist/common.d.ts": "59bebb73fe9183b7777b821013dfa35fabae211c28e9cbf57faf753f8f67d42e",
+    "dist/types/node_modules/@tscircuit/math-utils/dist/point3.d.ts": "9336c47dc76606a4bfcd359fbb7c6cd44738a61cf0926852bddcdf118c756ab7",
+    "dist/types/node_modules/@tscircuit/math-utils/dist/polygon.d.ts": "57d6854a279598d03708d54bf89a536ae55e65a3d3d8d1c64e08252c80fcd1fb",
+    "dist/types/node_modules/@tscircuit/power-trace-expander/src/ConnectionNameResolver.d.ts": "fda15f5bbcd4721d532582a35f17a802f410dad13591a756d81bd8e72c71849b",
+    "dist/types/node_modules/@tscircuit/power-trace-expander/src/ElasticTracePushSolver.d.ts": "1b30fbc192947b04e3e20c46f340d12fa2cd452293459f097540e9923e0d135e",
+    "dist/types/node_modules/@tscircuit/power-trace-expander/src/LayerAwareGridRouteSolver.d.ts": "5618858cb097d502551aa0424b55ac82c9c37b9e15ded84481fb259ae0cedb4f",
+    "dist/types/node_modules/@tscircuit/power-trace-expander/src/LocalTraceInflationSolver.d.ts": "799446a5fc75e559e301590d9f50786b4d8234614bcd60608d191e372c723999",
+    "dist/types/node_modules/@tscircuit/power-trace-expander/src/ObstacleAwareGridRouteSolver.d.ts": "cfd4e3de7f3ba1fa0da404ae9d9645d7d951a7e661c3ed878f0e983844aaa1f8",
+    "dist/types/node_modules/@tscircuit/power-trace-expander/src/PowerTraceCleanupSolver.d.ts": "ac9af6ecd828bada538efc869c1f2ad5e98f5b82853039ef8769a452c3cba122",
+    "dist/types/node_modules/@tscircuit/power-trace-expander/src/PowerTraceClearanceRepairSolver.d.ts": "490309a56b20daf7234fd95398c6ba735dd26ca40a8e6fcf9e4ee003b94f2691",
+    "dist/types/node_modules/@tscircuit/power-trace-expander/src/PowerTraceExpanderSolver.d.ts": "d0c49e02ff64b76da65cc6f3ccdd27f826cf8ff4214763fc226049516fd5d140",
+    "dist/types/node_modules/@tscircuit/power-trace-expander/src/SpatialObstacleIndex.d.ts": "342cd68d87e0dd05ee999a051873bb390881f16253f81a63c76ee0dc1fc052f4",
+    "dist/types/node_modules/@tscircuit/power-trace-expander/src/types.d.ts": "1f1d21a4451f2b8d300b7f7372fe26f2c68f83fd9f9c93f3208a1f7c15616026",
+    "dist/types/node_modules/@tscircuit/rectdiff/lib/RectDiffPipeline.d.ts": "cfa46edd8134ccc00e5b3880975f8f601ea8eb98118c78fdea2938a7fa57f4bd",
+    "dist/types/node_modules/@tscircuit/rectdiff/lib/rectdiff-types.d.ts": "a5ea1aa6058cb7c932d564abf6a6c42ba21dc8599ad5dd7613147909d637adcc",
+    "dist/types/node_modules/@tscircuit/rectdiff/lib/solvers/GapFillSolver/ExpandEdgesToEmptySpaceSolver.d.ts": "c619d4d5a738674566c4448a3ef7695dba713f9d1fe60ba30a03e7a3eaae851a",
+    "dist/types/node_modules/@tscircuit/rectdiff/lib/solvers/GapFillSolver/FindSegmentsWithAdjacentEmptySpaceSolver.d.ts": "72611708d7f81ec043c0326a29d9c186083d4337a0ae861a8b54487dc3766c7b",
+    "dist/types/node_modules/@tscircuit/rectdiff/lib/solvers/GapFillSolver/GapFillSolverPipeline.d.ts": "bfd7a31d0ba69b2143a0315753049c25ed373cb27d897d8c3f961939aa328016",
+    "dist/types/node_modules/@tscircuit/rectdiff/lib/solvers/OuterLayerContainmentMergeSolver/OuterLayerContainmentMergeSolver.d.ts": "fdab2b7229fa987b47eafbd7185050da5ebffa806ef5a4492d600811969c92c1",
+    "dist/types/node_modules/@tscircuit/rectdiff/lib/solvers/RectDiffExpansionSolver/RectDiffExpansionSolver.d.ts": "fc2653e6a9126415795da792ba100fb0c710e640c04be906e914cc55282923e5",
+    "dist/types/node_modules/@tscircuit/rectdiff/lib/solvers/RectDiffGridSolverPipeline/RectDiffGridSolverPipeline.d.ts": "2d8c7432700c85d86a60838d382db41d6f9cdc8819f8954d52dbce32e886a6ea",
+    "dist/types/node_modules/@tscircuit/rectdiff/lib/solvers/RectDiffSeedingSolver/RectDiffSeedingSolver.d.ts": "c35ecb97e82a3c3c0999e074b1681e8ef0787f911b2c2e6af69463ccb8eda5e8",
+    "dist/types/node_modules/@tscircuit/rectdiff/lib/types/capacity-mesh-types.d.ts": "21858bc6342b23d12d1c024c972aaae0827b1c399ee7419d3121ba9b4af22695",
+    "dist/types/node_modules/@tscircuit/rectdiff/lib/types/srj-types.d.ts": "7f2f7e9dc7df54cfe1c145047931695e6df3c8c7ced36c279271deb126680c54",
+    "dist/types/node_modules/@tscircuit/solver-utils/dist/index.d.ts": "7ea6695f853db08ca527a7d4c69f416f07962553b0e9d15dc524bcdf0c508812",
+    "dist/types/node_modules/@tscircuit/trace-simplification-solver/lib/data-structures/HighDensityRouteSpatialIndex.d.ts": "5fe7f10f3c245ff88b5612cc7ccaa95040c97fb0e6d2e38707548a467dcff510",
+    "dist/types/node_modules/@tscircuit/trace-simplification-solver/lib/data-structures/ObstacleTree.d.ts": "641759cc7875e767b0559a738507ee2d3dd88e4cfab8bc3f3c0a7b1aafd05b9d",
+    "dist/types/node_modules/@tscircuit/trace-simplification-solver/lib/solvers/BaseSolver.d.ts": "5f11ed0a3df894fe6a1f8e066d0ba086ae150245b469783c85beed31c6c93968",
+    "dist/types/node_modules/@tscircuit/trace-simplification-solver/lib/solvers/SimplifiedPathSolver/MultiSimplifiedPathSolver.d.ts": "068f0bf0d250ab47b4d5be150692de4d5cc806c7b5ce950cd23b6245291ab4f3",
+    "dist/types/node_modules/@tscircuit/trace-simplification-solver/lib/solvers/SimplifiedPathSolver/SingleSimplifiedPathSolver.d.ts": "779ad168767ca4587832785076501bb3a9acdfeadb9f432212b08de7063869e7",
+    "dist/types/node_modules/@tscircuit/trace-simplification-solver/lib/solvers/TraceSimplificationSolver/TraceSimplificationSolver.d.ts": "364bf72ad30d27629d8a4aa2a547aae6ea262c3c0463be83423d9ec31153a9a3",
+    "dist/types/node_modules/@tscircuit/trace-simplification-solver/lib/solvers/UselessViaRemovalSolver/SingleRouteUselessViaRemovalSolver.d.ts": "b31b78938af90f7919ad24033d911190a7a7fd848a028e8bad8ea9035df23fc8",
+    "dist/types/node_modules/@tscircuit/trace-simplification-solver/lib/solvers/UselessViaRemovalSolver/UselessViaRemovalSolver.d.ts": "df71f55a759a25c9ff268c3d6846b4c83c85117f2de61d346f1f2462c9044b76",
+    "dist/types/node_modules/@tscircuit/trace-simplification-solver/lib/solvers/UselessViaRemovalSolver/route-section.d.ts": "fae3df9dfd6992a8548a3aba0be9adf0574d5b5acbab2d1f41332bec278a6ff9",
+    "dist/types/node_modules/@tscircuit/trace-simplification-solver/lib/types/high-density-types.d.ts": "e89fccb6624fb797c8becff505111c842ab9ce4189e498f190a1bb7eea86fdec",
+    "dist/types/node_modules/@tscircuit/trace-simplification-solver/lib/types/srj-types.d.ts": "83542bfdb3a18f8635e877d722a4846f537138860afb4cd6ec34556c33dcfaf5",
+    "dist/types/node_modules/@tscircuit/trace-simplification-solver/node_modules/circuit-json-to-connectivity-map/dist/index.d.ts": "5cde7c2c0d8630d9a4b2a815f0c67e497556c23c7ba7165ac66fbd9ea5a71ee4",
+    "dist/types/node_modules/@types/rbush/index.d.ts": "68ef208a6d046c09cc2b3ca7012b0801881d850b681d26992c9b881f0912d8c8",
+    "dist/types/node_modules/circuit-json-to-connectivity-map/dist/index.d.ts": "5cde7c2c0d8630d9a4b2a815f0c67e497556c23c7ba7165ac66fbd9ea5a71ee4",
+    "dist/types/node_modules/connectivity-map/dist/index.d.ts": "ce5a459b0c65693d022f862eefb9060588108c26d4bf09104a81d1a21cd00aff",
+    "dist/types/node_modules/flatbush/index.d.ts": "a451ec504e1dca4f6286b5824aa3ee71751f7c4ae63ab83e10e7784bc6491049",
+    "dist/types/node_modules/flatqueue/index.d.ts": "78d0a7bc8f502fc9e8c3a85afa01b52d66d872b8189e12331c660d4b7058160c",
+    "dist/types/node_modules/graphics-debug/dist/lib/constants.d.ts": "88b2bedac3ecbef6e1fc914492ecad0eb792cb79b72704e5188744b3784c4670",
+    "dist/types/node_modules/graphics-debug/dist/lib/drawGraphicsToCanvas.d.ts": "69830a84bc946d4b94f7df12c6e5acac7a73fd144057147e278cd7c3020c64fa",
+    "dist/types/node_modules/graphics-debug/dist/lib/getGraphicsObjectsFromLogString.d.ts": "4a453af8174f24aefed906094112ff603e3cd326c789e1c48b8ce3986c459c96",
+    "dist/types/node_modules/graphics-debug/dist/lib/getPngBufferFromGraphicsObject.d.ts": "23fb4f45e859d9a48877498b53689272207b9464001c41231a0854575ed43e5d",
+    "dist/types/node_modules/graphics-debug/dist/lib/getSvgFromGraphicsObject.d.ts": "3523130c4be0861c641949b4acfb405d95dce559aed1b4ae4af71bd7921e7895",
+    "dist/types/node_modules/graphics-debug/dist/lib/index.d.ts": "630b4ec55dec560991e29952b386de15e7f6876fc0c500b008737ebf0affc1ba",
+    "dist/types/node_modules/graphics-debug/dist/lib/mergeGraphics.d.ts": "6477e519aa406548521ecdd4bb34a55992e2d1de2dd46d74ab40aa06b3cd44d8",
+    "dist/types/node_modules/graphics-debug/dist/lib/setStepOfAllObjects.d.ts": "0fa47e00c3421a96b8e598aaa47cc3ad2cd9e970a36768f310b4a33b63a017b6",
+    "dist/types/node_modules/graphics-debug/dist/lib/stackGraphics.d.ts": "f7afcf84f88276f62d415e838244d00801518f695efb532e87e2d82cfb9ff504",
+    "dist/types/node_modules/graphics-debug/dist/lib/translateGraphics.d.ts": "2660e68423d69b68420a9bfe8cc3e72ae691cae8840c7cac49d2d0efc281711c",
+    "dist/types/node_modules/graphics-debug/dist/lib/types.d.ts": "e57929455863c43edd6529cfec66c9411938b7b6e6deeb918efd8873aa436d8b",
+    "dist/types/node_modules/high-density-repair01/lib/BaseSolver.d.ts": "68ffcb060c4c2612d173937f137e970f1076d8d58a1f1385045c2a413ec46eed",
+    "dist/types/node_modules/high-density-repair01/lib/HighDensityForceImproveSolver.d.ts": "a9496bc073958485c515d91c439619ebe69ad16537bdf353fda346cf204052bd",
+    "dist/types/node_modules/high-density-repair01/lib/types/high-density-types.d.ts": "89f69400949c6f39aee2ed64a2e33580798a48db7abc162b3561d4c1562a357a",
+    "dist/types/node_modules/high-density-repair02/lib/high-density-repair-solver/shared/types.d.ts": "7b28075c0e063eec4778bb23a0e55e0c2a96ee3ad00660c4f792b8b132834ec0",
+    "dist/types/node_modules/high-density-repair02/lib/high-density-repair-solver.d.ts": "1067a44f0e1624b854c5c9e40441b5cac3674055c649ffc550308ffa76c20220",
+    "dist/types/node_modules/high-density-repair03/lib/drc/AutoroutingDrcEngine.d.ts": "3ef095fba44d300aeed7bc591274d2c7fd105232cdb811ca63958cd2eab37288",
+    "dist/types/node_modules/high-density-repair03/lib/solvers/GlobalDrcForceImproveSolver/GlobalDrcBranchPortfolioSolver.d.ts": "5546787e4a882e352c44441f03443e64ec204f9afb32d72c22841320d04b56e8",
+    "dist/types/node_modules/high-density-repair03/lib/solvers/GlobalDrcForceImproveSolver/GlobalDrcForceImproveSolver.d.ts": "67c144e02184a19a59ab78c8d36f97b3fdfb0919c31c2a503ac42e8c1ac2f3fc",
+    "dist/types/node_modules/high-density-repair03/lib/solvers/GlobalDrcForceImproveSolver/types.d.ts": "0861303d7bd4a6434c17bf9ea5f54a5b6c870d680e6960a5858f62925aa71383",
+    "dist/types/node_modules/high-density-repair03/node_modules/circuit-json-to-connectivity-map/dist/index.d.ts": "5cde7c2c0d8630d9a4b2a815f0c67e497556c23c7ba7165ac66fbd9ea5a71ee4",
+    "dist/types/node_modules/high-density-repair03/node_modules/graphics-debug/dist/lib/types.d.ts": "715b6c75f054ac9152145e797e760736c330cabd96aca74d8701fdd7ce958be9",
+    "dist/types/node_modules/high-density-repair03/types/high-density-types.d.ts": "18f7b1938fbf8d26cc1a772ff010375a60ec74737e15150dc8816fc4cf20ddbc",
+    "dist/types/node_modules/high-density-repair03/types/srj-types.d.ts": "f77fbe76feba7ab3747b3237e5ac481943782ae360d74cce240950cc09543b82",
+    "dist/types/node_modules/high-density-repair03/utils/connection-point-utils.d.ts": "fc4a7c1401cb89ce0872a582d68b3925ea03fa7101f0e4c8f30feb25c7f21c80",
+    "dist/types/node_modules/pcb-poly-hyper-graph/lib/build-poly-hyper-graph.d.ts": "ee0e249150b9d3f7d6f27f695bbdd1de1efc9fc2e9935b351dd64d014a45d693",
+    "dist/types/node_modules/pcb-poly-hyper-graph/lib/types.d.ts": "470482bd1f6c16f9ad2933255a9eb59a09bde8ab9e42d0391d73d21f0d37906a",
+    "dist/types/node_modules/tiny-hypergraph-poly/lib/MinHeap.d.ts": "de3da81d34c7325057401aa60fc8d5fce4dc4d7177fc156299f6983ccbc2099f",
+    "dist/types/node_modules/tiny-hypergraph-poly/lib/core.d.ts": "9845c4772d4f30542da3f38f679d8c1e05c27c41c6e307be8e13c9fda8e0e2dc",
+    "dist/types/node_modules/tiny-hypergraph-poly/lib/poly-types.d.ts": "fd57b3541fc80e86d86ba4b1b3db52058b4f730e55f5a01b90be9e6a02276366",
+    "dist/types/node_modules/tiny-hypergraph-poly/lib/poly.d.ts": "b620e89e4c9cde5327b78de6c6e4dd6fa63e5ef388c82cb4bd7951f3a7a78747",
+    "dist/types/node_modules/tiny-hypergraph-poly/lib/section-solver/TinyHyperGraphSectionPipelineSolver.d.ts": "83faede9c1bdd32bf7d02c3949e97ebfb2f4bff46f720628e4c48991200b8669",
+    "dist/types/node_modules/tiny-hypergraph-poly/lib/section-solver/index.d.ts": "a808a06ca5825f9e1cce40eaeb271d3aa5d24c522fd52c673fe8af183b1918e7",
+    "dist/types/node_modules/tiny-hypergraph-poly/lib/section-solver/sectionCandidateFamilies.d.ts": "e36d4f1abd1826d33485af5fdb7cd75bc8b24db6f3bd58b0d8b3417b12b16204",
+    "dist/types/node_modules/tiny-hypergraph-poly/lib/static-reachability.d.ts": "a0169b5fb9a64f3a1703a474f921373e7cf2da49dfb7958c78a49463dd8b9e7b",
+    "dist/types/node_modules/tiny-hypergraph-poly/lib/types.d.ts": "931d847c52cbbe57020c9ef91c1b28e1c980e3082378baa97a98101d690248ae",
+    "package.json": "7736b84c90729e243e82c854b4b0f975d99965d25b257e5bf6da4a387ca23d99"
+  },
+  "sourcePatch": {
+    "file": "capacity-source.patch",
+    "sha256": "9fdbba17bbb5a1dae6df82e2829d86201a4787e2ef8398439f89a935bbe6f2f1",
+    "scope": "All text changes from baseCommit through sourceCommit; dependency binary archives are included in sourceArchive."
+  },
+  "packageFile": "tscircuit-capacity-autorouter-0.0.958-fa89cd01-f5348585.tgz",
+  "packageSha256": "f534858543c436d25785dcfc065d3f4737018b62cc5e62096bab8bd96e33ca41",
+  "bundleSha256": "fa89cd01182aa56e71cd1db472109a2f7c1dc0d1e7e97fd6351667d2384c0db2",
+  "packageVersion": "0.0.958",
+  "buildCommand": "NODE_OPTIONS=--max-old-space-size=4096 bun run build && npm pack --ignore-scripts",
+  "purpose": "Preserve native four-layer stack, restrict signal routing to Top/Bottom, and preserve immutable supplied copper"
+}

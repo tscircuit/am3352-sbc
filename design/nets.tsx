@@ -43,7 +43,7 @@ export const cpuPin = (signal: string) => {
 export const phaseForNet = (net: string) =>
   net === "GND"
     ? 7
-    : /^(VDD|V[13]|DDR_1V5|RTC_1V8|A3V3|VIN|SYS|PD_VBUS|USB[01]_VBUS)/.test(net)
+    : /^(VDD|V[13]|DDR_1V5|RTC_1V8|A3V3|VIN|SYS|PD_VBUS|PD_VDD|USB[01]_VBUS|HDMI_(TVDD|PVDD|5V))/.test(net)
       ? 6
       : 5;
 export function Link({

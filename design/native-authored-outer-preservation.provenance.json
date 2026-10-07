@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "scope": "Preserve existing authored outer-layer input copper from the user-requested registry clone; this is not routed-board acceptance or a solver-output route seed.",
+  "acceptedBoard": false,
+  "registrySource": {
+    "url": "https://tscircuit.com/astra/am3352-sbc",
+    "version": "0.1.19"
+  },
+  "runtime": {
+    "@tscircuit/core": "0.0.2095"
+  },
+  "sourceDataSha256": {
+    "remaining-routes.json": "34109fbc24ef9f7672afdf3e491a20e49b2d6d4dc09ebfcdaf4ed123c629cbfe",
+    "control-routes.json": "f45515910ed6673cd86e221fbe436a062b4544a1a968fef3692ca53b9fa8a965"
+  },
+  "remainingRoutesSourceSha256": "e79c75969baa5a8286a9ac5ca687239aeb9ec4923d97581bd843096a1ef3d7c9",
+  "classification": {
+    "remainingDeclarations": 309,
+    "authoredPcbPathDeclarations": 142,
+    "preservedAuthoredOuterDeclarations": 141,
+    "excludedControlReplayOutputs": 167,
+    "authoredInnerDeclarationRequiringFreshRouting": {
+      "name": "REMAINING_295",
+      "net": "RTC_1V8"
+    }
+  },
+  "nativeVerification": {
+    "originalPose": {
+      "ram": {
+        "x": -10,
+        "y": -32,
+        "rotation": 270
+      },
+      "circuitSha256": "9370652bd0a4b01b988f7159af393a051168655c77989410560f5bad3f33683f"
+    },
+    "candidatePose": {
+      "ram": {
+        "x": -4,
+        "y": -27,
+        "rotation": 0
+      },
+      "circuitSha256": "3a3e564043ae77f96345634db3af9d37b794fe66abd4bcd56182bb6b18dbcaea",
+      "promoted": false
+    },
+    "productionCaptureMatchesAuditedOriginalCircuitByteExactly": true,
+    "productionPhaseInputsMatchAuditedPreviewByteExactly": {
+      "DDR_FIRST": true,
+      "USB_AND_TMDS": true,
+      "LCD_BUS": true,
+      "CONTROL_AND_BOOT": true,
+      "POWER": true,
+      "GROUND": true
+    },
+    "preservedNativeWireGeometryAndWidthsMatchImportedAuthoredData": 141,
+    "candidatePosePreservesAll141StationaryAuthoredRoutes": true,
+    "nativeFixedTraces": 511,
+    "traceSelfShorts": 0,
+    "errorsOnPreservedTraces": 0,
+    "physicalVias": 398,
+    "manufacturedDrills": 452,
+    "viaAndDrillAuditPass": true,
+    "foreignPhysicalCopperContacts": 0,
+    "unanchoredNativePorts": 0,
+    "innerGroundPlanes": {
+      "layers": [
+        "inner1",
+        "inner2"
+      ],
+      "nativePhysicalConnectivityPass": true
+    }
+  },
+  "powerPhysicalLinkLowerBound": {
+    "beforePreservation": 151,
+    "afterPreservation": 46
+  },
+  "controlNativeDeclarations": {
+    "connections": 83,
+    "terminals": 220,
+    "changedByPreservation": false
+  },
+  "publicFixedTraceConversion": {
+    "api": "@tscircuit/core.getSimpleRouteJsonFromCircuitJson",
+    "fixedTraceCount": 511,
+    "fixedTracesSha256": "e76167afa019b25a4407bc050ffb5e037ececa9e74dbd886a4731b59f1e43d08",
+    "inlineViaEventsMatchedToExactNativeFullStackBarrels": 79,
+    "nativeCircuitInputUnchanged": true
+  },
+  "finalBoardAcceptanceRequires": "Fresh routing against the complete preserved native input, followed by all-terminal native connectivity, timing, clearance, drill and emitted-ground-polygon audits."
+}

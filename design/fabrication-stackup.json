@@ -3,11 +3,11 @@
   "nominalBoardThicknessMm": 1.6,
   "stackupCode": "JLC04161H-3313",
   "manufacturerTemplateId": "6381a6960c0a46dba4daf70c97bd5dce",
-  "status": "selected; dimensions calculated; copper migration and signoff incomplete",
+  "status": "material stack selected; outer-signal/inner-ground impedance calculation pending; routing and signoff incomplete",
   "layers": [
     {
       "name": "top",
-      "function": "DDR_1V5 reference plane and local component escapes",
+      "function": "signal routing, local component escapes and supply distribution",
       "copperThicknessMm": 0.035
     },
     {
@@ -17,7 +17,7 @@
     },
     {
       "name": "inner1",
-      "function": "signals",
+      "function": "dedicated GND reference plane",
       "copperThicknessMm": 0.0152
     },
     {
@@ -27,7 +27,7 @@
     },
     {
       "name": "inner2",
-      "function": "signals",
+      "function": "dedicated GND reference plane",
       "copperThicknessMm": 0.0152
     },
     {
@@ -37,7 +37,7 @@
     },
     {
       "name": "bottom",
-      "function": "GND reference plane",
+      "function": "signal routing, local component escapes and supply distribution",
       "copperThicknessMm": 0.035
     }
   ],
@@ -45,36 +45,36 @@
     "singleEnded": {
       "ohms": 50,
       "trackWidthMm": 0.14,
-      "calculatorOhms": 49.637857863
+      "geometryStatus": "provisional inherited width/gap; not verified for the outer-signal stackup"
     },
     "usb": {
       "ohms": 90,
       "trackWidthMm": 0.1,
       "edgeGapMm": 0.1,
-      "calculatorOhms": 90.0694608892
+      "geometryStatus": "provisional inherited width/gap; not verified for the outer-signal stackup"
     },
     "ddrClockAndStrobes": {
       "ohms": 100,
       "trackWidthMm": 0.1,
       "edgeGapMm": 0.18,
-      "calculatorOhms": 100.921304738
+      "geometryStatus": "provisional inherited width/gap; not verified for the outer-signal stackup"
     },
     "hdmi": {
       "ohms": 100,
       "trackWidthMm": 0.1,
       "edgeGapMm": 0.18,
-      "calculatorOhms": 100.921304738
+      "geometryStatus": "provisional inherited width/gap; not verified for the outer-signal stackup"
     }
   },
   "calculation": {
-    "provider": "JLCPCB calculator",
+    "status": "not calculated for the new layer assignment",
     "referencePlanes": [
-      "L1",
-      "L4"
+      "L2",
+      "L3"
     ],
-    "model": "OffsetStripline1B1A / DiffOffsetStripline1B1A",
-    "report": "references/jlcpcb/inner-signal-impedance-sweep.json",
-    "limitations": "Other signal layer is not a plane. Far-side mixed dielectric represented by series-effective permittivity; no solder mask, vias, pads, or plane discontinuities. Manufacturer coupon/engineering approval required."
+    "requiredModel": "outer-layer microstrip and differential microstrip, including soldermask and the selected material stack",
+    "historicalInnerSignalReport": "references/jlcpcb/inner-signal-impedance-sweep.json",
+    "limitations": "The historical offset-stripline calculation applies to the former inner-signal/outer-reference layout and does not establish impedance for this outer-signal/inner-GND board. Manufacturer coupon and engineering confirmation remain required."
   },
   "sources": [
     "https://jlcpcb.com/impedance",
@@ -83,9 +83,9 @@
   ],
   "fabricationReady": false,
   "remainingChecks": [
-    "Manufacturer must confirm actual four-layer outer-plane / inner-signal impedance coupon and TI +/-5 ohm single-ended tolerance.",
-    "Existing DDR copper is 0.10mm, not migrated to 0.14mm single-ended target.",
-    "Verify continuous top DDR_1V5 and bottom GND references, return-current stitching and pad/via discontinuities.",
-    "Independent native clearance/connectivity, timing, complete supply distribution and SI validation."
+    "Recalculate outer-layer single-ended and differential impedance with the actual selected dielectric, copper thickness and soldermask; confirm the manufacturer coupon and TI single-ended tolerance.",
+    "Confirm or revise provisional widths/gaps for DDR, USB and HDMI without weakening native clearance or declared timing constraints.",
+    "Verify both inner GND planes connect through full-stack GND barrels, with legal non-GND antipads and continuous reference paths under outer-layer signals.",
+    "Require complete native and independent connectivity, clearance, timing, supply-distribution and SI validation."
   ]
 }

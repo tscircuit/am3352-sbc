@@ -1,0 +1,4 @@
+node_modules/
+.tsci/
+.cache/
+work/
