@@ -1,3 +1,4 @@
+import { hdmiTransmitterModel } from "../models"
 import type { ChipProps } from "@tscircuit/props"
 import { Fragment } from "react"
 
@@ -123,6 +124,7 @@ export const Tfp410 = (props: ChipProps) => (
   <chip
     {...props}
     manufacturerPartNumber="TFP410PAP"
+      cadModel={hdmiTransmitterModel}
     pinLabels={TFP410_PIN_LABELS}
     footprint={
       <footprint>

@@ -1,3 +1,4 @@
+import { auxFuseModel } from "../models"
 import type { FuseProps } from "@tscircuit/props";
 
 /** Littelfuse 0467001.NRHF / C151139, fast 1 A, 32 V, 0603.
@@ -16,6 +17,7 @@ export function AuxInputFuse(
       voltageRating={32}
       manufacturerPartNumber="0467001.NRHF"
       supplierPartNumbers={{ jlcpcb: ["C151139"] }}
+      cadModel={auxFuseModel}
       footprint={
         <footprint>
           <smtpad portHints={["pin1"]} pcbX={-0.891} pcbY={0} width={0.762} height={1.09} shape="rect" />

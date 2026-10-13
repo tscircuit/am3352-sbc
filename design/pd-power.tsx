@@ -1,3 +1,4 @@
+import { testPadModel } from "../models"
 import { PmosSymbol } from "../components/pmos-symbol";
 import { sch } from "../schematic/layout";
 import { CH224K } from "../components/CH224K";
@@ -75,6 +76,7 @@ export function PdPower() {
       <Cap name="C_PD_OUT" net="VIN_5V" value="10uF" x={-38} y={-18} />
       <testpoint
         name="TP_5V" {...sch("TP_5V")}
+        cadModel={testPadModel(1.5)}
         footprintVariant="pad"
         padDiameter={1.5}
         pcbX={-33}

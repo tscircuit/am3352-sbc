@@ -1,3 +1,4 @@
+import { powerHeaderModel } from "../models"
 import type { PinHeaderProps } from "@tscircuit/props";
 
 /** XFCN PZ254V-11-03P: 3 A, 2.54 mm pitch, 7.62 × 2.50 mm body.
@@ -15,6 +16,7 @@ export function PowerSourceSelector(
       pitch={2.54}
       manufacturerPartNumber="PZ254V-11-03P"
       supplierPartNumbers={{ jlcpcb: ["C2937625"] }}
+      cadModel={powerHeaderModel}
       pinLabels={["USB", "VIN", "AUX"]}
       footprint={
         <footprint insertionDirection="from_above">

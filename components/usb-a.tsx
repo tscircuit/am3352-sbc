@@ -1,3 +1,4 @@
+import { usbAModel } from "../models"
 import { Fragment } from "react"
 import type { ConnectorProps } from "@tscircuit/props"
 
@@ -7,6 +8,7 @@ export function UsbA(props: ConnectorProps) {
   return <connector {...props} manufacturerPartNumber="SS-52100-001"
     pinLabels={{ pin1: "VBUS", pin2: "DM", pin3: "DP", pin4: "GND", pin5: "SHIELD", pin6: "SHIELD2" }}
     internallyConnectedPins={[["pin5", "pin6"]]}
+      cadModel={usbAModel}
     footprint={<footprint>
       {[0, 2.5, 4.5, 7].map((x, i) => <Fragment key={`signal_${i}`}>
         <platedhole portHints={[`pin${i+1}`]} pcbX={x-3.5} pcbY={0}

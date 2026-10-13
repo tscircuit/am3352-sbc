@@ -1,3 +1,4 @@
+import { dcdcInductorModel, crystal24Model, crystalRtcModel, testPadModel } from "../models"
 import { sch } from "../schematic/layout";
 import {ramPoint,ramPlacement,isRamRef} from "./ram-placement";
 import { Fragment } from "react";
@@ -180,6 +181,7 @@ export function ProcessorSupport() {
           <inductor
             name={`L${i + 1}`} {...sch(`L${i + 1}`)}
             manufacturerPartNumber="DFE201612E-2R2M=P2"
+            cadModel={dcdcInductorModel}
             inductance="2.2uH"
             footprint={
               <footprint>
@@ -288,6 +290,7 @@ export function ProcessorSupport() {
       <crystal
         name="Y1" {...sch("Y1")}
         manufacturerPartNumber="ABM3-24.000MHZ-D2Y-T"
+            cadModel={crystal24Model}
         frequency="24MHz"
         loadCapacitance="18pF"
         footprint={
@@ -338,6 +341,7 @@ export function ProcessorSupport() {
       <crystal
         name="Y2" {...sch("Y2")}
         manufacturerPartNumber="Q13FC13500004"
+            cadModel={crystalRtcModel}
         frequency="32.768kHz"
         loadCapacitance="12.5pF"
         footprint={
@@ -424,6 +428,7 @@ export function ProcessorSupport() {
       />
       <testpoint
         name="TP_PB" {...sch("TP_PB")}
+        cadModel={testPadModel(1)}
         footprintVariant="pad"
         padDiameter={1}
         pcbX={-30}

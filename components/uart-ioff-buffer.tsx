@@ -1,3 +1,4 @@
+import { uartBufferModel } from "../models"
 import type { ChipProps } from "@tscircuit/props";
 import { Fragment } from "react";
 
@@ -38,6 +39,7 @@ export function UartIoffBuffer(props: ChipProps<typeof pinLabels>) {
       pinAttributes={{ pin4: { requiresGround: true }, pin8: { requiresPower: true } }}
       manufacturerPartNumber="74LVC2G125DP,125"
       supplierPartNumbers={{ jlcpcb: ["C513290"] }}
+      cadModel={uartBufferModel}
       footprint={
         <footprint>
           {supplierPads.map(({ pin, x, y }) => {

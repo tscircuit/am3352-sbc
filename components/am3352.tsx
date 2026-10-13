@@ -1,3 +1,4 @@
+import { am3352Model } from "../models"
 import type { ChipProps } from "@tscircuit/props"
 import ballMap from "../design/am3352-ballmap.json"
 // TI SPRS717L, ZCZ top-view maps, pages 15–17. Numeric selectors preserve imported ordering.
@@ -333,6 +334,7 @@ export function AM3352(props: ChipProps<typeof pinLabels>) {
       {...props}
       manufacturerPartNumber="AM3352BZCZ100"
       supplierPartNumbers={{ jlcpcb: ["C468247"] }}
+      cadModel={am3352Model}
       pinLabels={pinLabels}
       footprint={
         <footprint>

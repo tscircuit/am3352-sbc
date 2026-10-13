@@ -1,3 +1,4 @@
+import { jtagHeaderModel, resetHeaderModel } from "../models"
 import { sch } from "../schematic/layout";
 import { Fragment } from "react";
 import { StandardJstUartUpward } from "../components/debug-uart";
@@ -81,6 +82,7 @@ export function DebugConnectors({
         pcbX={-36}
         pcbY={26.5}
         manufacturerPartNumber="PZ254V-12-20P"
+        cadModel={jtagHeaderModel}
         supplierPartNumbers={{ jlcpcb: ["C492427"] }}
         noConnect={["pin2", "pin17", "pin19"]}
         footprint={
@@ -111,6 +113,7 @@ export function DebugConnectors({
         pcbX={-31}
         pcbY={8}
         manufacturerPartNumber="PZ254V-11-02P"
+        cadModel={resetHeaderModel}
         supplierPartNumbers={{ jlcpcb: ["C492401"] }}
         footprint={
           <footprint insertionDirection="from_above">

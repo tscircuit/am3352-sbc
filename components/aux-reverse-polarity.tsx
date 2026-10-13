@@ -1,3 +1,4 @@
+import { auxPmosModel } from "../models"
 import { PmosSymbol } from "./pmos-symbol";
 import type { ChipProps } from "@tscircuit/props";
 
@@ -16,6 +17,7 @@ export function AuxReversePolarityPmos(props: ChipProps<typeof pinLabels>) {
       pinLabels={pinLabels}
       manufacturerPartNumber="SSM3J338R,LF"
       supplierPartNumbers={{ jlcpcb: ["C146352"] }}
+      cadModel={auxPmosModel}
       footprint={
         <footprint>
           <smtpad portHints={["pin1"]} pcbX={-1.05} pcbY={0.95} width={0.9} height={0.8} shape="rect" solderPasteMargin={0} />

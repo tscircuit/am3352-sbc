@@ -1,3 +1,4 @@
+import { buzzerModel } from "../models"
 import { sch } from "../schematic/layout";
 import { Fragment } from "react";
 import { AO3400A } from "../components/AO3400A";
@@ -37,6 +38,7 @@ export function Indicators() {
       <chip
         name="BZ1" {...sch("BZ1")}
         manufacturerPartNumber="PS1240P02BT"
+        cadModel={buzzerModel}
         pinLabels={{ pin1: "POS", pin2: "NEG" }}
         pcbX={-38}
         pcbY={-27}
