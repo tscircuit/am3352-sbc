@@ -1,3 +1,5 @@
+import { dcdcInductorModel, crystal24Model, crystalRtcModel, testPadModel } from "../models"
+import { sch } from "../schematic/layout";
 import {ramPoint,ramPlacement,isRamRef} from "./ram-placement";
 import { Fragment } from "react";
 import ballMap from "./am3352-ballmap.json";
@@ -6,6 +8,7 @@ import { TPS65217CRSLR } from "../components/pmic";
 import { TF_01A } from "../components/microsd";
 import { Cap as BasicCap, Res, link } from "./nets";
 import { ramNet, ramConnections } from "./ddr-netlist";
+import { DebugConnectors } from "./debug-connectors";
 function Cap(props: {
   name: string;
   net: string;
@@ -142,9 +145,9 @@ export function ProcessorSupport() {
   );
   return (
     <>
-      <TPS65217CRSLR name="U2" pcbX={-23} pcbY={-3} />
+      <TPS65217CRSLR name="U2" {...sch("U2")} pcbX={-23} pcbY={-3} />
       {link("U1", "G2", "DDR_RESETn")}
-      <TF_01A name="J_SD" pcbX={-23} pcbY={33} pcbRotation={180} />
+      <TF_01A name="J_SD" {...sch("J_SD")} pcbX={-23} pcbY={33} pcbRotation={180} />
       {Object.entries(ballMap)
         .filter(([, s]) => cpuPower(s) || usedSignals.has(s))
         .map(([ball, s]) => link("U1", ball, cpuSignal(s)))}
@@ -176,8 +179,9 @@ export function ProcessorSupport() {
       {["DDR_1V5", "VDD_MPU", "VDD_CORE"].map((rail, i) => (
         <Fragment key={rail}>
           <inductor
-            name={`L${i + 1}`}
+            name={`L${i + 1}`} {...sch(`L${i + 1}`)}
             manufacturerPartNumber="DFE201612E-2R2M=P2"
+            cadModel={dcdcInductorModel}
             inductance="2.2uH"
             footprint={
               <footprint>
@@ -284,8 +288,9 @@ export function ProcessorSupport() {
         />
       ))}
       <crystal
-        name="Y1"
+        name="Y1" {...sch("Y1")}
         manufacturerPartNumber="ABM3-24.000MHZ-D2Y-T"
+            cadModel={crystal24Model}
         frequency="24MHz"
         loadCapacitance="18pF"
         footprint={
@@ -334,8 +339,9 @@ export function ProcessorSupport() {
         allowPlacements
       />
       <crystal
-        name="Y2"
+        name="Y2" {...sch("Y2")}
         manufacturerPartNumber="Q13FC13500004"
+            cadModel={crystalRtcModel}
         frequency="32.768kHz"
         loadCapacitance="12.5pF"
         footprint={
@@ -416,51 +422,13 @@ export function ProcessorSupport() {
         <Cap key={i} name={`C_DDR${i}`} net="DDR_1V5" bottom />
       ))}
       <Cap name="C_SYS_LOCAL" net="SYS_5V" value="4.7uF" x={-17.5} y={-1.5} />
-      <pinheader name="J_UART" pinCount={4} pitch={2.54} pcbX={-8} pcbY={34} />
-      {["GND", "UART0_TXD", "UART0_RXD", "V3V3"].map((n, i) =>
-        link("J_UART", `pin${i + 1}`, n),
-      )}
-      <pinheader
-        name="J_JTAG"
-        pinCount={14}
-        pcbX={2}
-        pcbY={31}
-        footprint={
-          <footprint>
-            {Array.from({ length: 14 }, (_, i) => (
-              <platedhole
-                portHints={[`pin${i + 1}`]}
-                shape="circle"
-                pcbX={((i % 2) - 0.5) * 1.27}
-                pcbY={(Math.floor(i / 2) - 3) * 1.27}
-                holeDiameter={0.6}
-                outerDiameter={1}
-              />
-            ))}
-          </footprint>
-        }
+      <DebugConnectors
+        uartBuffer={{ pcbX: -8, pcbY: 25 }}
+        uartDecoupler={{ pcbX: -6.5, pcbY: 27.8, pcbRotation: 90 }}
       />
-      {[
-        "V3V3",
-        "TMS",
-        "GND",
-        "TCK",
-        "GND",
-        "TDO",
-        "GND",
-        "TDI",
-        "TRSTn",
-        "GND",
-        "EMU0",
-        "EMU1",
-        "WARMRSTn",
-        "GND",
-      ].map((n, i) => link("J_JTAG", `pin${i + 1}`, n))}
-      <pinheader name="J_RESET" pinCount={2} pitch={2.54} pcbX={-31} pcbY={8} />
-      {link("J_RESET", "pin1", "WARMRSTn")}
-      {link("J_RESET", "pin2", "GND")}
       <testpoint
-        name="TP_PB"
+        name="TP_PB" {...sch("TP_PB")}
+        cadModel={testPadModel(1)}
         footprintVariant="pad"
         padDiameter={1}
         pcbX={-30}

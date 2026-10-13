@@ -1,3 +1,6 @@
+import { testPadModel } from "../models"
+import { PmosSymbol } from "../components/pmos-symbol";
+import { sch } from "../schematic/layout";
 import { CH224K } from "../components/CH224K";
 import { TYPE_C_31_M_12 } from "../components/usb-c";
 import { Cap, Res, link } from "./nets";
@@ -9,13 +12,13 @@ export function PdPower() {
   return (
     <>
       <TYPE_C_31_M_12
-        name="J_PD"
+        name="J_PD" {...sch("J_PD")}
         pcbX={-46}
         pcbY={0}
         pcbRotation={270}
         noConnect={["SBU1", "SBU2", "DP1", "DP2", "DM1", "DM2"]}
       />
-      <CH224K name="U_PD" pcbX={-35} pcbY={1} noConnect={["DP", "DM"]} />
+      <CH224K name="U_PD" {...sch("U_PD")} pcbX={-35} pcbY={1} noConnect={["DP", "DM"]} />
       {["VBUS1", "VBUS2"].map((p) => link("J_PD", p, "PD_VBUS"))}
       {["GND1", "GND2", "SHELL1", "SHELL2", "SHELL3", "SHELL4"].map((p) =>
         link("J_PD", p, "GND"),
@@ -43,7 +46,8 @@ export function PdPower() {
       <Cap name="C_PD_VDD" net="PD_VDD" value="1uF" x={-40} y={-9} />
       <Cap name="C_PD_IN" net="PD_VBUS" value="1uF" x={-44} y={-7} />
       <chip
-        name="Q_PD"
+        name="Q_PD" {...sch("Q_PD")}
+        symbol={<PmosSymbol name="Q_PD" value="AO3401A" />}
         manufacturerPartNumber="AO3401A"
         footprint="sot23"
         pinLabels={{ pin1: "G", pin2: "S", pin3: "D" }}
@@ -51,7 +55,7 @@ export function PdPower() {
         pcbY={-14}
       />
       {link("Q_PD", "S", "PD_VBUS")}
-      {link("Q_PD", "D", "VIN_5V")}
+      {link("Q_PD", "D", "USB_PD_SWITCHED")}
       {link("Q_PD", "G", "PD_GATE")}
       <Res
         name="R_PD_GATE"
@@ -71,7 +75,8 @@ export function PdPower() {
       />
       <Cap name="C_PD_OUT" net="VIN_5V" value="10uF" x={-38} y={-18} />
       <testpoint
-        name="TP_5V"
+        name="TP_5V" {...sch("TP_5V")}
+        cadModel={testPadModel(1.5)}
         footprintVariant="pad"
         padDiameter={1.5}
         pcbX={-33}

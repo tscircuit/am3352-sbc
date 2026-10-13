@@ -5,10 +5,17 @@
     "moduleResolution": "Bundler",
     "jsx": "react-jsx",
     "strict": true,
-    "skipLibCheck": true,
     "resolveJsonModule": true,
     "esModuleInterop": true,
-    "types": ["bun", "@tscircuit/core"]
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": [
+      "bun",
+      "@tscircuit/core"
+    ]
   },
-  "include": ["*.tsx", "components", "design", "scripts"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx"
+  ]
 }
