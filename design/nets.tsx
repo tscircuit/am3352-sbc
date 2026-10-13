@@ -1,38 +1,11 @@
 import decouplerFootprints from "./decoupler-footprints.json";
 import type { TraceProps } from "@tscircuit/props";
-import { Fragment, createContext, useContext } from "react";
-import { escapeByTrace } from "./power-escapes";
+import { Fragment } from "react";
 import ballMap from "./am3352-ballmap.json";
+import { sch } from "../schematic/layout";
 
-export const PeripheralRoutingContext = createContext<boolean | number[]>(true);
 export function SignalTrace(props: TraceProps) {
-  const mode = useContext(PeripheralRoutingContext);
-  const enabled = Array.isArray(mode) ? mode.includes(props.routingPhaseIndex ?? -1) : mode;
-  const escape = process.env.SBC_SIGNAL_ROUTING === "1" ? undefined : props.name ? escapeByTrace.get(props.name) : undefined;
-  if (escape) {
-    const endpoint=(escape as {directPlaneEndpoint?: {x:number;y:number}|null}).directPlaneEndpoint;
-    const end=endpoint ? {...endpoint,layer:escape.layer as "top"|"bottom"} : `.${escape.via} > .${escape.layer}`;
-    return (
-      <trace
-        {...props}
-        pcbPath={[
-          escape.from,
-          ...((escape as typeof escape & {waypoints?: {x:number;y:number}[]}).waypoints ?? []).map(w => ({
-            ...w,
-            layer: escape.layer as "top" | "bottom",
-          })),
-          end,
-        ]}
-        routingPhaseIndex={undefined}
-      />
-    );
-  }
-  return (
-    <trace
-      {...props}
-      routingPhaseIndex={enabled ? props.routingPhaseIndex : undefined}
-    />
-  );
+  return <trace {...props} />;
 }
 
 export const cpuPin = (signal: string) => {
@@ -43,7 +16,7 @@ export const cpuPin = (signal: string) => {
 export const phaseForNet = (net: string) =>
   net === "GND"
     ? 7
-    : /^(VDD|V[13]|DDR_1V5|RTC_1V8|A3V3|VIN|SYS|PD_VBUS|PD_VDD|USB[01]_VBUS|HDMI_(TVDD|PVDD|5V))/.test(net)
+    : /^(VDD|V[13]|DDR_1V5|RTC_1V8|A3V3|VIN|SYS|AUX_5V|USB_PD_SWITCHED|PD_VBUS|PD_VDD|USB[01]_VBUS|HDMI_(TVDD|PVDD|5V))/.test(net)
       ? 6
       : 5;
 export function Link({
@@ -100,6 +73,7 @@ export function Cap({
         pcbY={y}
         layer={layer}
         pcbRotation={rotation}
+        {...sch(name)}
       />
       {link(name, "pin1", net)}
       {link(name, "pin2", "GND")}
@@ -135,6 +109,7 @@ export function Res({
         pcbY={y}
         layer={layer}
         pcbRotation={rotation}
+        {...sch(name)}
       />
       {link(name, "pin1", a)}
       {link(name, "pin2", b)}

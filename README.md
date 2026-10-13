@@ -1,59 +1,23 @@
-# AM3352 SBC — partial outer-layer routing
+# AM3352 SBC
 
-This repository was created as `tscircuit/am3552-sbc` from the current
-[`astra/am3352-sbc`](https://tscircuit.com/astra/am3352-sbc) source, version
-`0.1.19`. The processor is the AM3352; the repository name follows the requested
-destination.
-
-The four-layer board is configured for new signal routing on **Top and Bottom**,
-with **inner1 and inner2 declared as unbroken GND planes**. Layer transitions use
-full-stack through vias on the 1.6 mm board. The RAM remains below the processor
-at `(-10, -32)`, rotated 270 degrees. Local Top power pours and Bottom GND are
-also retained.
-
-**This is a partial routing checkpoint.** The inherited 47 DDR paths still use
-inner layers and must be replaced before the board satisfies this layer plan.
-The accepted outer-route cache is empty. DDR length matching, USB/TMDS pairs,
-LCD and control routing, power connectivity and both ground-plane audits still
-need whole-board acceptance. The existing files in `output/` belong to the
-imported source checkpoint, not an accepted Top/Bottom reroute.
-
-The branch includes separate native routing phases for DDR, USB/TMDS, LCD,
-control/boot, power and ground. The adapters hydrate authored copper as fixed
-geometry and retain independent connectivity, clearance, timing and through-via
-checks. They provide the routing infrastructure; they do not establish that the
-complete board has been routed.
-
-Install and check the committed dependency packages:
+Conventional TSX source project using tscircuit 0.0.2857 / core 0.0.2141. `index.circuit.tsx` generates the PCB and a native 15-sheet schematic. Parts, nets, placements, pours, stitching and schematic pin banks are source declarations.
 
 ```sh
 bun install --frozen-lockfile
-bun run check:autorouter-vendor
-bun run check:fanout-vendor
-bun run typecheck
-bun run test:routing
-bun run build:placement
+bun run dev
+bun run build
+bun run check:routing
+bun run build:site
 ```
 
-`build:placement` saves a placement checkpoint under `work/builds/placement/`.
-Automatic PR checks verify dependencies, types, routing tests and that placement
-render. The workflow's optional `full_board_signoff` dispatch input runs the
-complete build and physical audit when a full reroute is available.
+The default `routingMode="saved"` retains the accepted autorouted copper through ordinary `<autoroutingphase />` algorithms. `routing/accepted-routes.ts` contains source routing inputs keyed by component pins, with placement checks. It contains no generated Circuit JSON IDs; its data is encoded as text to keep compiler memory small. `routing/vias.json` defines native stitching and escape vias.
 
-To continue routing, `bun run route:ddr-outer` must produce all 47 validated
-Top/Bottom DDR paths before `bun run build` can route and audit the remaining
-phases. The full build deliberately rejects the inherited inner-layer DDR paths.
-Failed and partial attempts stay in `work/`; only a complete audited board can
-replace the published routing output. `bun run cache:routing` records a
-successful build for native phase replay.
+To reroute changed placement or connectivity, run `tsci build index.circuit.tsx --inject-props '{"routingMode":"fresh"}'` or render `<Board routingMode="fresh" />`. The phases then use tscircuit's native autorouter. DDR runs first, followed by USB/TMDS, LCD, controls, power and ground. New routing requires renewed electrical and geometry validation.
 
-PCB visual regression tests replay the saved DDR checkpoint on all four copper
-layers. `bun run test:pcb` compares the rendered images with the committed
-baselines. After changing placement or accepted routes, run
-`bun run snapshot:pcb`, inspect the PNGs under `tests/__snapshots__/`, and commit
-both the SVG and PNG files. CI uploads magenta-highlighted diff images when a
-snapshot changes. The initial baselines show the inherited checkpoint, whose DDR still fails
-Top/Bottom routing acceptance. Visual snapshots document geometry; DDR routing
-acceptance and complete-board signoff remain mandatory separate checks.
-See [the PCB snapshot gallery](docs/pcb-snapshots/README.md) for the images and
-the DDR regeneration result.
+`build.tsx` renders the TSX with core’s event-driven `renderUntilSettled()` API. This avoids the current CLI’s repeated full-tree polling on this dense board. It writes unmodified native output, then invokes `tsci build` (with `--site --use-cdn-javascript` for the viewer, keeping each hosted file below the Sites limit). The parts engine is disabled because the footprints are declared in source. `bun run check:routing` runs all 20 default routing checks in separate processes on the generated output to avoid concurrent geometry checks exceeding memory; native placement, netlist and schematic checks remain enabled. Temporary geometry is garbage-collected at phase boundaries.
+
+There is no prebuilt board entry, Circuit JSON authoring input, schematic-output patcher, or copper/silkscreen post-processing.
+
+Standard JST SH UART: **1 RX, 2 GND, 3 TX**, 3.3 V TTL / 115200 8N1. Power JST: external regulated **5 V**, selected with JP_PWR. The standard programmer's 50 mA output cannot power this SBC. AM3352 uses JTAG; ST-LINK V2/SWD is incompatible. See [BRINGUP-JST.md](BRINGUP-JST.md) and [ROUTING_ADVICE.md](ROUTING_ADVICE.md).
+
+**Four-layer draft; do not fabricate yet.** The separate eight-layer corrections remain unfinished. The accepted routing also retains six supplemental LCD path findings; power-path current/thermal qualification and JLC manufacturing clearance review remain open.
