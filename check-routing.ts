@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url"
 import type { AnyCircuitElement } from "circuit-json"
 import { getFullConnectivityMapFromCircuitJson } from "circuit-json-to-connectivity-map"
 
-/** All default runAllRoutingChecks checks in @tscircuit/checks 0.0.252.
+/** All default runAllRoutingChecks checks in @tscircuit/checks 0.0.254.
  * Run sequentially in fresh processes so geometry allocations are released
  * between checks. This is validation only: no generated files are modified.
  *

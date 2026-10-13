@@ -5,6 +5,23 @@ on:
     branches: [main]
   workflow_dispatch:
 jobs:
+  models:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - run: bun install --frozen-lockfile
+      - run: bun run build:model-fixture
+      - run: bun run check:models:fixture
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: model-validation
+          path: .tscircuit/model-check-report.json
+          if-no-files-found: ignore
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -17,6 +34,8 @@ jobs:
       - run: bun run typecheck
       - run: bun run build:site
       - run: bun run check:routing
+      - run: bun run check:vias
+      - run: bun run check:models
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -113,6 +113,6 @@ const routedNets = [
   "XTALOUT"
 ] as const
 
-export function RoutingNets() {
-  return <>{routedNets.map(name => <Fragment key={name}><net name={name} routingPhaseIndex={phaseForNet(name)} /></Fragment>)}</>
+export function RoutingNets({ retainedNets = new Set<string>() }: { retainedNets?: ReadonlySet<string> } = {}) {
+  return <>{routedNets.map(name => <Fragment key={name}><net name={name} routingPhaseIndex={retainedNets.has(name) ? 0 : phaseForNet(name)} /></Fragment>)}</>
 }
