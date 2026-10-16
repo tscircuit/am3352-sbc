@@ -147,7 +147,7 @@ export function ProcessorSupport() {
     <>
       <TPS65217CRSLR name="U2" {...sch("U2")} pcbX={-23} pcbY={-3} />
       {link("U1", "G2", "DDR_RESETn")}
-      <TF_01A name="J_SD" {...sch("J_SD")} pcbX={-23} pcbY={33} pcbRotation={180} />
+      <TF_01A name="J_SD" {...sch("J_SD")} allowOffBoard pcbX={-23} pcbY={33} pcbRotation={180} />
       {Object.entries(ballMap)
         .filter(([, s]) => cpuPower(s) || usedSignals.has(s))
         .map(([ball, s]) => link("U1", ball, cpuSignal(s)))}

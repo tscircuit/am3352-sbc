@@ -36,7 +36,7 @@ export function Display() {
         pcbRotation={270}
       />
       <HDMI_001_19PCBTP
-        name="J_HDMI" {...sch("J_HDMI")}
+        name="J_HDMI" {...sch("J_HDMI")} allowOffBoard
         pcbX={44}
         pcbY={-16}
         pcbRotation={90}

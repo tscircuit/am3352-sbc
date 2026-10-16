@@ -1,0 +1,35 @@
+bun test v1.4.0 (34cbb9a40)
+
+baseline/tests/component-dogbone-layer.test.ts:
+83 | 
+84 | test("BOTTOM pad over a TOP dogbone stub leaves a clear via candidate", () => {
+85 |   // The rectangle intersects the wire interior. Its nearest corner is over
+86 |   // 0.388 mm from the via center, exceeding the required 0.35 mm via clearance.
+87 |   const { buses, rules } = fixture(obstacle("bottom", { x: -0.1, y: -0.1 }))
+88 |   expect(getComponentDogboneViaSiteCandidates(buses, rules)).toEqual([
+                                                                  ^
+error: expect(received).toEqual(expected)
+
+- [
+-   {
+-     "connectionIndex": 0,
+-     "point": {
+-       "x": -0.4,
+-       "y": -0.4,
+-     },
+-   },
+- ]
++ []
+
+- Expected  - 9
++ Received  + 1
+
+      at <anonymous> (/workspace/work/am3352-fanout-layer-repro/baseline/tests/component-dogbone-layer.test.ts:88:62)
+(fail) BOTTOM pad over a TOP dogbone stub leaves a clear via candidate [1.94ms]
+(pass) TOP pad at the same position blocks the TOP dogbone stub [0.66ms]
+(pass) BOTTOM pad at the through-via site still blocks the TOP dogbone [0.28ms]
+
+ 2 pass
+ 1 fail
+ 5 expect() calls
+Ran 3 tests across 1 file. [9.00ms]

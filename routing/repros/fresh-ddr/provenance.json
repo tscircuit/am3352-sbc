@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Unmodified native CLI inputs for solver reproduction only; these files are never loaded by board source or build",
+  "release": {
+    "tscircuit": "0.0.2908",
+    "core": "0.0.2164",
+    "cli": "0.1.2347",
+    "standaloneBusLanes": "0.0.25"
+  },
+  "nativeBusLanes": "Core inlines its bus-lanes implementation; direct standalone dependency does not replace it",
+  "viaDrillMm": 0.3,
+  "viaPadMm": 0.5,
+  "manualRouting": false,
+  "circuitJsonPostProcessing": false,
+  "inputs": [
+    {
+      "file": "whole-ddr.simple-route.json.gz",
+      "nativeInputSha256": "3aaecdebece8150ea60c95e17995996e2d84f71d035df51603d5a8e136f15164",
+      "gzipSha256": "3b34bdde4d7dd6d7b8424a09c8cb53be7074dae4c6135d89dac396cfdc1c4aed",
+      "nativeInputBytes": 12701466,
+      "connections": 46,
+      "obstacles": 1144,
+      "previousTraces": 0,
+      "ramPose": {
+        "x": -10,
+        "y": -32,
+        "rotation": 270
+      },
+      "observedOutcome": "No collision-free local dogbone assignment after 113.501 phase seconds"
+    },
+    {
+      "file": "byte0-layer-cohorts.simple-route.json.gz",
+      "nativeInputSha256": "c939f7275683ea7d61f0a329c136519c7299ed865cc780e8a6b6dd307fa0e64b",
+      "gzipSha256": "d759de78b38d4a00d82fd0d4d9706a3686019d7a7e81d1de0efbc7cf1b8ddb80",
+      "nativeInputBytes": 12680885,
+      "connections": 11,
+      "obstacles": 1144,
+      "previousTraces": 0,
+      "ramPose": {
+        "x": 0,
+        "y": -27,
+        "rotation": 0
+      },
+      "observedOutcome": "Native CLI phase timeout after 1800.592 seconds in lanes_route, 572200 steps; exit 1; zero complete phases accepted",
+      "processSeconds": 1916.6811752630165,
+      "peakNativeRssMiB": 1826.76171875,
+      "peakSharedGiB": 13.723731994628906,
+      "lastCandidateProgress": 0.45454545454545453,
+      "bestLoggedCandidateProgress": 0.7272727272727273
+    }
+  ],
+  "diagnostics": [
+    {
+      "file": "byte0-timeout.json.gz",
+      "nativeBytesSha256": "77da290edafcdad615c3e24f96fda77641890613880842650669e6928bb9658b"
+    }
+  ],
+  "typecheck": {
+    "command": "bun run typecheck",
+    "exitCode": 0,
+    "seconds": 7.749203667975962
+  }
+}

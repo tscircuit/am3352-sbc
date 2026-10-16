@@ -11,7 +11,7 @@ import { convertCircuitJsonTo3D } from "circuit-json-to-gltf"
  * PCB drill/texture geometry.
  * The native board file is never changed.
  */
-const input = resolve(process.argv[2] ?? ".tscircuit/generated/index.circuit.json")
+const input = resolve(process.argv[2] ?? "dist/index/circuit.json")
 const report = resolve(process.argv[3] ?? ".tscircuit/model-check-report.json")
 const origin = process.argv[4] ?? "https://tscircuit.com"
 const bytes = readFileSync(input)

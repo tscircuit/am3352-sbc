@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url"
 import type { AnyCircuitElement } from "circuit-json"
 import { getFullConnectivityMapFromCircuitJson } from "circuit-json-to-connectivity-map"
 
-/** All default runAllRoutingChecks checks in @tscircuit/checks 0.0.252.
+/** All default runAllRoutingChecks checks in @tscircuit/checks 0.0.256.
  * Run sequentially in fresh processes so geometry allocations are released
  * between checks. This is validation only: no generated files are modified.
  *
@@ -78,7 +78,7 @@ async function runWorker() {
 }
 
 async function runChecks() {
-  const nativePath = resolve(process.argv[2] ?? ".tscircuit/generated/index.circuit.json")
+  const nativePath = resolve(process.argv[2] ?? "dist/index/circuit.json")
   const nativeSha256 = sha256(readFileSync(nativePath))
   const scriptPath = fileURLToPath(import.meta.url)
   let officialCheckInput: string | undefined

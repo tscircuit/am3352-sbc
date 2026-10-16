@@ -4,7 +4,7 @@ import type { CircuitJson } from "circuit-json"
 import { VIA_RULES } from "./routing/via-rules"
 
 /** Check the actual generated barrels, not just declared board defaults. */
-const input = process.argv[2] ?? ".tscircuit/generated/index.circuit.json"
+const input = process.argv[2] ?? "dist/index/circuit.json"
 const bytes = readFileSync(input)
 const native = JSON.parse(bytes.toString("utf8")) as CircuitJson
 const vias = native.filter(row => row.type === "pcb_via")

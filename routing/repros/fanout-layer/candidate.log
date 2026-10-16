@@ -1,0 +1,11 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/component-dogbone-layer.test.ts:
+(pass) BOTTOM pad over a TOP dogbone stub leaves a clear via candidate [2.82ms]
+(pass) TOP pad at the same position blocks the TOP dogbone stub [0.47ms]
+(pass) BOTTOM pad at the through-via site still blocks the TOP dogbone [0.28ms]
+
+ 3 pass
+ 0 fail
+ 6 expect() calls
+Ran 3 tests across 1 file. [9.00ms]

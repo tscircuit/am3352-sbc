@@ -50,7 +50,13 @@ const ddrNets = new Set(sharedNets)
 export function phaseForNet(net: string): number {
   if (net === "GND") return 7
   if (net === "DDR_RESETn" || net === "DDR_RESETn_SIGNAL") return 1.9
-  if (ddrNets.has(net)) return 1
+  if (ddrNets.has(net)) {
+    const bit = /^DDR_D(\d+)$/.exec(net)
+    if (bit) return Number(bit[1]) < 8 ? 1 : 1.1
+    if (/^DDR_D(?:QM|QS|QSn)0$/.test(net)) return 1
+    if (/^DDR_D(?:QM|QS|QSn)1$/.test(net)) return 1.1
+    return 1.2
+  }
   if (/^(?:LCD_DATA(?:[0-9]|1[0-5])(?:_SIGNAL)?|(?:ROUTED_)?LCD_(?:AC_BIAS_EN|HSYNC|PCLK|VSYNC))$/.test(net) || net.startsWith("BOOT_")) return 4
   if (/^(?:USB[01]_(?:DP|DM)_(?:CPU|PORT)|TMDS_(?:CK|D[012])_[PN]_(?:TX|PORT))$/.test(net)) return 3
   const phase = phaseByNet.get(net)
@@ -60,15 +66,17 @@ export function phaseForNet(net: string): number {
 
 export function AutoroutingPlan() {
   return <>
-    <autoroutingphase name="DDR_MATCHED" phaseIndex={1} autorouter="bus_lanes" />
+    <autoroutingphase name="DDR_DATA_BYTE0" phaseIndex={1} autorouter="bus_lanes" />
+    <autoroutingphase name="DDR_DATA_BYTE1" phaseIndex={1.1} autorouter="bus_lanes" />
+    <autoroutingphase name="DDR_ADDRESS_CONTROL_CLOCK" phaseIndex={1.2} autorouter="bus_lanes" />
     <autoroutingphase name="DDR_RESET" phaseIndex={1.9} />
     {earlyPhases.map(phase => <Fragment key={phase.name}>
-      <autoroutingphase name={phase.name} phaseIndex={phase.index} />
+      <autoroutingphase name={`ROUTE_${phase.name}`} phaseIndex={phase.index} />
     </Fragment>)}
     <autoroutingphase name="USB_AND_TMDS" phaseIndex={3} autorouter="bus_lanes" />
     <autoroutingphase name="LCD_AND_BOOT" phaseIndex={4} />
     {[...controlPhases, ...powerPhases].map(phase => <Fragment key={phase.name}>
-      <autoroutingphase name={phase.name} phaseIndex={phase.index} />
+      <autoroutingphase name={`ROUTE_${phase.name}`} phaseIndex={phase.index} />
     </Fragment>)}
     <autoroutingphase name="GROUND" phaseIndex={7} autorouter="fanout"
       fanoutRoutingLayers={["top", "bottom"]} fanoutPourNetMap={{ inner1: ["GND"] }} />

@@ -1,0 +1,120 @@
+diff --git a/lib/match-component-dogbone-via-sites.ts b/lib/match-component-dogbone-via-sites.ts
+--- a/lib/match-component-dogbone-via-sites.ts
++++ b/lib/match-component-dogbone-via-sites.ts
+@@ -330,6 +330,7 @@
+   return obstacles.every(
+     (obstacle) =>
+       obstacle === sourceObstacle ||
++      !obstacle.layers.includes(segment.layer) ||
+       distanceSegmentToObstacle(segment, obstacle) >=
+         requiredClearance - EPSILON,
+   )
+diff --git a/tests/component-dogbone-layer.test.ts b/tests/component-dogbone-layer.test.ts
+new file mode 100644
+--- /dev/null
++++ b/tests/component-dogbone-layer.test.ts
+@@ -0,0 +1,104 @@
++import { expect, test } from "bun:test"
++import type { Obstacle } from "@tscircuit/capacity-autorouter"
++import {
++  getComponentDogboneViaSiteCandidates,
++  matchComponentDogboneViaSites,
++} from "../lib/match-component-dogbone-via-sites"
++import type { PreparedBus, PreparedConnection } from "../lib/types"
++
++// Board-world XY in mm, +X right and +Y up. These are positions, not vectors.
++// The wire stays on TOP; its via occupies every physical copper layer.
++const via = { x: -0.4, y: -0.4 }
++
++function fixture(blocker: Obstacle) {
++  const pads: (Obstacle & { shape: "circle" })[] = [
++    { x: 0, y: 0 },
++    { x: 0, y: 0.8 },
++    { x: 0.8, y: 0 },
++    { x: 0.8, y: 0.8 },
++  ].map((center, index) => ({
++    obstacleId: `pad-${index}`,
++    componentId: "U1",
++    type: "rect",
++    shape: "circle",
++    center,
++    width: 0.4,
++    height: 0.4,
++    layers: ["top"],
++    connectedTo: [`signal-${index}`],
++  }))
++  const connection: PreparedConnection = {
++    connection: {
++      name: "signal-0",
++      pointsToConnect: [
++        { x: 0, y: 0, layer: "top", pointId: "source", pcb_port_id: "port" },
++        { x: -3, y: 0, layer: "inner1", pointId: "target" },
++      ],
++    },
++    connectionIndex: 0,
++    sourcePoint: { x: 0, y: 0, layer: "top", pointId: "source", pcb_port_id: "port" },
++    sourcePointIndex: 0,
++    sourceLayer: "top",
++    sourceObstacle: pads[0]!,
++    targetPoint: { x: -3, y: 0, layer: "inner1", pointId: "target" },
++  }
++  const buses: PreparedBus[] = [{
++    busId: "DATA",
++    direction: "left",
++    termination: { type: "boundary" },
++    componentId: "U1",
++    componentObstacles: pads,
++    componentBounds: { minX: -0.2, maxX: 1, minY: -0.2, maxY: 1 },
++    sharedBoundary: { minX: -3, maxX: 3, minY: -3, maxY: 3 },
++    xCoordinates: [0, 0.8],
++    yCoordinates: [0, 0.8],
++    pitchX: 0.8,
++    pitchY: 0.8,
++    connections: [connection],
++  }]
++  const rules = {
++    viaDiameter: 0.5,
++    viaHoleDiameter: 0.3,
++    traceWidth: 0.1,
++    clearance: 0.1,
++    maximumSearchStates: 10,
++    fixedViaPointsByConnectionIndex: new Map([[0, via]]),
++    additionalObstacles: [blocker],
++  }
++  return { buses, rules }
++}
++
++function obstacle(layer: "top" | "bottom", center: { x: number; y: number }): Obstacle {
++  return {
++    obstacleId: "foreign-pad",
++    componentId: "C1",
++    type: "rect",
++    center,
++    width: 0.05,
++    height: 0.05,
++    layers: [layer],
++    connectedTo: ["foreign-net"],
++  }
++}
++
++test("BOTTOM pad over a TOP dogbone stub leaves a clear via candidate", () => {
++  // The rectangle intersects the wire interior. Its nearest corner is over
++  // 0.388 mm from the via center, exceeding the required 0.35 mm via clearance.
++  const { buses, rules } = fixture(obstacle("bottom", { x: -0.1, y: -0.1 }))
++  expect(getComponentDogboneViaSiteCandidates(buses, rules)).toEqual([
++    { connectionIndex: 0, point: via },
++  ])
++  expect([...matchComponentDogboneViaSites(buses, rules)!]).toEqual([[0, via]])
++})
++
++test("TOP pad at the same position blocks the TOP dogbone stub", () => {
++  const { buses, rules } = fixture(obstacle("top", { x: -0.1, y: -0.1 }))
++  expect(getComponentDogboneViaSiteCandidates(buses, rules)).toEqual([])
++  expect(matchComponentDogboneViaSites(buses, rules)).toBeNull()
++})
++
++test("BOTTOM pad at the through-via site still blocks the TOP dogbone", () => {
++  const { buses, rules } = fixture(obstacle("bottom", via))
++  expect(getComponentDogboneViaSiteCandidates(buses, rules)).toEqual([])
++  expect(matchComponentDogboneViaSites(buses, rules)).toBeNull()
++})

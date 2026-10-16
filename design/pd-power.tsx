@@ -12,7 +12,7 @@ export function PdPower() {
   return (
     <>
       <TYPE_C_31_M_12
-        name="J_PD" {...sch("J_PD")}
+        name="J_PD" {...sch("J_PD")} allowOffBoard
         pcbX={-46}
         pcbY={0}
         pcbRotation={270}

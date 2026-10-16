@@ -39,7 +39,7 @@ export default function Board() {
     <TimingConstraints />
     {sharedNets.map((net) => <trace key={net}
       name={net === "DDR_RESETn" ? "DDR_RESETn_SIGNAL" : net}
-      routingPhaseIndex={net === "DDR_RESETn" ? phaseForNet(net) : 1}
+      routingPhaseIndex={phaseForNet(net)}
       from={`U1.${cpuConnections.find((c) => c.net === net)!.pin}`}
       to={`U3.${ramConnections.find((c) => c.net === net)!.pin}`} />)}
     <ProcessorSupport />

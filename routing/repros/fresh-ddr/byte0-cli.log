@@ -1,0 +1,207 @@
+Building 1 file(s)...
+Building index.circuit.tsx...
+Generating circuit JSON...
+trace: `key` is not a prop. Trying to access it will result in `undefined` being returned. If you need to access the same value within the child component, you should pass it as a different prop. (https://react.dev/link/special-props)
+Each child in a list should have a unique "key" prop.
+
+Check the render method of `Fragment`. It was passed a child from Display. See https://react.dev/link/warning-keys for more information.
+Wrote debug artifact: ../../../tmp/am3352-fresh-baseline-07-debug/phase-1.input.simple-route.json
+Autorouting phase 1/94 "DDR_DATA_BYTE0" has been running for 10.4s; enabling phase diagnostics. Re-run with --autorouter-debug for full autorouter logs from the start.
+Autorouting <board#4428 /> phase 1/94 "DDR_DATA_BYTE0" long-running start: connections=11, obstacles=1144, previous_traces=0, router=bus_lanes, solver=BusLanesPipelineSolver, cache=disabled(strategy_not_cacheable)
+  connections: DDR_D2, DDR_D6, DDR_D0, DDR_DQS0, DDR_DQSn0, DDR_D4, DDR_DQM0, DDR_D1, DDR_D7, DDR_D3, DDR_D5
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_coupled_pairs steps=2800 progress=0% elapsed=10.4s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_coupled_pairs steps=3000 progress=0% elapsed=11.3s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=4400 progress=18% elapsed=21.4s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=5800 progress=0% elapsed=32.0s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=6200 progress=18% elapsed=44.4s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=7400 progress=18% elapsed=55.3s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=8600 progress=18% elapsed=65.6s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=10400 progress=18% elapsed=76.0s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=13000 progress=18% elapsed=86.4s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=16600 progress=18% elapsed=96.9s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=21200 progress=18% elapsed=107.1s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=26800 progress=18% elapsed=117.1s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=34000 progress=18% elapsed=127.2s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=42200 progress=18% elapsed=137.4s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=50800 progress=18% elapsed=147.5s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=55200 progress=0% elapsed=164.1s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=56000 progress=45% elapsed=175.3s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=56800 progress=36% elapsed=187.4s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=57800 progress=18% elapsed=198.3s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=58200 progress=0% elapsed=209.3s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=58800 progress=45% elapsed=219.3s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=59600 progress=45% elapsed=229.8s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=60800 progress=45% elapsed=241.6s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=62200 progress=45% elapsed=252.1s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=64200 progress=45% elapsed=263.2s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=66800 progress=45% elapsed=273.2s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=70000 progress=45% elapsed=283.3s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=74400 progress=45% elapsed=293.5s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=79600 progress=45% elapsed=303.6s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=86000 progress=45% elapsed=313.7s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=93000 progress=45% elapsed=323.8s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=102600 progress=45% elapsed=334.2s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=107800 progress=0% elapsed=346.5s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=108400 progress=18% elapsed=359.0s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=109000 progress=36% elapsed=370.1s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=110200 progress=36% elapsed=382.2s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=111400 progress=36% elapsed=392.6s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=113000 progress=36% elapsed=403.3s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=115200 progress=36% elapsed=414.0s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=118200 progress=36% elapsed=424.4s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=122000 progress=36% elapsed=434.7s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=126800 progress=36% elapsed=444.7s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=132800 progress=36% elapsed=455.0s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=139800 progress=36% elapsed=465.0s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=148800 progress=36% elapsed=475.1s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=155000 progress=36% elapsed=485.2s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=158000 progress=0% elapsed=501.0s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=158400 progress=27% elapsed=511.8s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=159400 progress=27% elapsed=522.4s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=160400 progress=27% elapsed=532.4s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=162000 progress=27% elapsed=543.1s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=164200 progress=27% elapsed=553.7s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=167000 progress=27% elapsed=563.9s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=170600 progress=27% elapsed=574.0s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=175400 progress=27% elapsed=584.4s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=181200 progress=27% elapsed=594.7s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=188200 progress=27% elapsed=604.8s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=196400 progress=27% elapsed=614.9s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=203800 progress=27% elapsed=625.3s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=207400 progress=18% elapsed=639.2s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=207800 progress=18% elapsed=655.8s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=208800 progress=18% elapsed=667.5s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=209800 progress=18% elapsed=678.2s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=211400 progress=18% elapsed=689.1s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=213600 progress=18% elapsed=699.2s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=216400 progress=18% elapsed=709.6s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=219800 progress=18% elapsed=719.6s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=224400 progress=18% elapsed=729.9s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=230200 progress=18% elapsed=740.2s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=237600 progress=18% elapsed=750.3s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=246400 progress=18% elapsed=760.5s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=253800 progress=18% elapsed=770.7s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=257000 progress=9% elapsed=783.3s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=258000 progress=0% elapsed=794.5s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=259200 progress=55% elapsed=804.7s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=260400 progress=55% elapsed=819.3s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=261400 progress=73% elapsed=830.9s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=262600 progress=73% elapsed=841.6s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=264000 progress=73% elapsed=852.7s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=266000 progress=73% elapsed=863.1s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=268600 progress=73% elapsed=873.7s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=271800 progress=73% elapsed=883.8s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=276000 progress=73% elapsed=893.9s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=281400 progress=73% elapsed=904.2s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=288000 progress=73% elapsed=914.4s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=294200 progress=73% elapsed=924.4s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=303600 progress=73% elapsed=934.7s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=308000 progress=73% elapsed=944.9s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=310800 progress=55% elapsed=956.9s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=311400 progress=36% elapsed=968.9s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=312400 progress=27% elapsed=980.9s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=313200 progress=64% elapsed=993.2s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=314200 progress=64% elapsed=1004.5s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=315200 progress=64% elapsed=1014.5s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=316800 progress=64% elapsed=1025.3s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=318800 progress=64% elapsed=1035.4s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=321600 progress=64% elapsed=1045.6s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=325400 progress=64% elapsed=1056.2s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=330400 progress=64% elapsed=1066.4s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=336000 progress=64% elapsed=1076.5s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=343200 progress=64% elapsed=1086.5s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=352600 progress=64% elapsed=1096.6s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=359800 progress=64% elapsed=1106.9s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=362600 progress=0% elapsed=1121.6s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=363200 progress=0% elapsed=1134.1s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=363800 progress=45% elapsed=1145.8s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=364800 progress=45% elapsed=1156.8s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=366000 progress=45% elapsed=1167.9s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=367600 progress=45% elapsed=1178.2s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=369600 progress=45% elapsed=1188.3s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=372400 progress=45% elapsed=1198.5s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=376000 progress=45% elapsed=1208.8s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=380600 progress=45% elapsed=1218.9s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=386200 progress=45% elapsed=1229.2s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=393600 progress=45% elapsed=1239.4s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=402600 progress=45% elapsed=1249.5s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=409800 progress=45% elapsed=1259.5s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=413000 progress=9% elapsed=1277.2s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=413400 progress=18% elapsed=1291.3s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=414400 progress=18% elapsed=1301.8s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=415600 progress=18% elapsed=1313.2s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=417200 progress=18% elapsed=1323.4s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=419400 progress=18% elapsed=1333.8s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=422400 progress=18% elapsed=1343.9s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=426400 progress=18% elapsed=1354.5s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=431400 progress=18% elapsed=1364.7s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=437600 progress=18% elapsed=1374.8s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=444000 progress=18% elapsed=1384.8s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=453800 progress=18% elapsed=1394.8s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=460400 progress=18% elapsed=1405.2s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=462400 progress=0% elapsed=1417.1s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=463000 progress=9% elapsed=1430.5s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=463400 progress=27% elapsed=1443.9s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=464200 progress=27% elapsed=1454.2s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=465400 progress=27% elapsed=1465.2s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=467000 progress=27% elapsed=1476.0s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=469000 progress=27% elapsed=1486.3s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=471600 progress=27% elapsed=1496.5s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=475200 progress=27% elapsed=1507.0s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=479800 progress=27% elapsed=1517.2s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=485400 progress=27% elapsed=1527.2s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=492400 progress=27% elapsed=1537.5s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=501000 progress=27% elapsed=1547.6s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=509000 progress=27% elapsed=1557.9s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=512400 progress=9% elapsed=1569.8s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=512800 progress=0% elapsed=1586.6s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=513200 progress=18% elapsed=1597.8s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=514400 progress=18% elapsed=1609.5s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=515600 progress=18% elapsed=1620.0s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=517200 progress=18% elapsed=1630.6s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=519400 progress=18% elapsed=1641.2s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=522200 progress=18% elapsed=1651.7s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=525600 progress=18% elapsed=1661.9s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=530000 progress=18% elapsed=1672.0s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=535200 progress=18% elapsed=1682.0s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=542000 progress=18% elapsed=1692.1s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=550000 progress=18% elapsed=1702.3s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=558200 progress=18% elapsed=1712.4s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=562200 progress=27% elapsed=1724.1s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=563400 progress=0% elapsed=1737.9s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=564200 progress=45% elapsed=1750.3s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=565400 progress=45% elapsed=1761.9s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=566600 progress=45% elapsed=1773.5s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=568200 progress=45% elapsed=1784.1s
+  phase 1/94 "DDR_DATA_BYTE0" progress: solver=BusLanesPipelineSolver solver_phase=lanes_route steps=570600 progress=45% elapsed=1794.7s
+Wrote debug artifact: ../../../tmp/am3352-fresh-baseline-07-debug/phase-1.input.simple-route.json
+Wrote debug artifact: ../../../tmp/am3352-fresh-baseline-07-debug/phase-1.previous-output.traces.json
+Wrote debug artifact: ../../../tmp/am3352-fresh-baseline-07-debug/board.source-and-pcb.circuit.json
+Wrote debug artifact: ../../../tmp/am3352-fresh-baseline-07-debug/phase-1.timeout.json
+Autorouter timeout after 1800.6s in phase 1/94 "DDR_DATA_BYTE0". Set a different timeout with `--autorouter-timeout <duration>` (for example, `--autorouter-timeout 2m`).
+180631 |       return;
+180632 |     const artifactPath = this.writeTimeoutArtifact(this.activePhase, elapsedMs);
+180633 |     const phaseLabel = this.getPhaseLabel(this.activePhase);
+180634 |     const message = `Autorouter timeout after ${this.formatElapsed(elapsedMs)} in ${phaseLabel}. Set a different timeout with \`--autorouter-timeout <duration>\` (for example, \`--autorouter-timeout 2m\`).`;
+180635 |     this.log(kleur_default.red(message));
+180636 |     throw new AutorouterPhaseTimeoutError(message, artifactPath);
+                   ^
+AutorouterPhaseTimeoutError: Autorouter timeout after 1800.6s in phase 1/94 "DDR_DATA_BYTE0". Set a different timeout with `--autorouter-timeout <duration>` (for example, `--autorouter-timeout 2m`).
+ debugArtifactPath: "/tmp/am3352-fresh-baseline-07-debug/phase-1.timeout.json",
+
+      at checkTimeout (/tmp/am3352-fresh-runtime/node_modules/@tscircuit/cli/dist/cli/main.js:180636:11)
+      at generateCircuitJson (/tmp/am3352-fresh-runtime/node_modules/@tscircuit/cli/dist/cli/main.js:189687:27)
+
+[profile] index.circuit.tsx: 1912801.5ms
+Fatal error [circuit_generation_failed]: Autorouter timeout after 1800.6s in phase 1/94 "DDR_DATA_BYTE0". Set a different timeout with `--autorouter-timeout <duration>` (for example, `--autorouter-timeout 2m`).
+
+Profile Summary (slowest first)
+  1912801.5ms index.circuit.tsx
+
+Build complete
+  Circuits  0 passed 1 failed
+  Options   profile, autorouter-timeout, autorouter-dump-srj
+  Output    dist
+
+⚠ Build completed with errors
+Build exiting with code 1: fatal circuit build errors occurred

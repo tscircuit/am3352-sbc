@@ -32,7 +32,7 @@ export function UsbPorts() {
       {[0, 1].map((i) => (
         <Fragment key={i}>
           <UsbA
-            name={`J_USB${i}`} {...sch(`J_USB${i}`)}
+            name={`J_USB${i}`} {...sch(`J_USB${i}`)} allowOffBoard
             pcbX={16 + i * 20}
             pcbY={27}
             pcbRotation={180}

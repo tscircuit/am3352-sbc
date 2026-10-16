@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Reviewable diagnostic patch; not activated in board runtime",
+  "upstreamRepository": "https://github.com/tscircuit/fanout-solver",
+  "base": {
+    "package": "@tscircuit/fanout-solver",
+    "version": "0.0.78",
+    "npmIntegrity": "sha512-iYSKgbORYc5LgBjF8vRFdglP1AlCC7dSeU8fJaU81Pk4rBcWaRNAh0IHoCZ05h6JTX+eNvdDmZuBw7usl9iVnw==",
+    "packageJsonSha256": "90546b7e878e87fb593a89f53013fac4321349f4f0d3958ea555f2b288d501cd",
+    "matcherPath": "lib/match-component-dogbone-via-sites.ts",
+    "matcherSha256": "4d087054c545b05c7afb357f468e97349aba3a72497d61f01ef4749827a5bad8",
+    "upstreamGitCommit": null,
+    "currentUpstreamHeadApplicabilityVerified": false
+  },
+  "candidate": {
+    "matcherSha256": "406d76d29f2c338dabd4ce8f0c6e59aada388cd8381f0f82413bfaf486a57c26",
+    "testPath": "tests/component-dogbone-layer.test.ts",
+    "testSha256": "f1c59570a61c0934609d95a362cd0aeee0b537e6ceca04d032a064885d0deaef",
+    "testIdenticalForBaselineAndCandidate": true,
+    "libraryChange": "Ignore off-layer obstacles for source wire only; via-site predicate unchanged"
+  },
+  "observedTests": {
+    "executedBy": "ROOT",
+    "bunVersion": "1.4.0",
+    "bunRevision": "34cbb9a40",
+    "flags": [
+      "--smol"
+    ],
+    "baseline": {
+      "passed": 2,
+      "failed": 1,
+      "exitCode": 1,
+      "reason": "completed",
+      "log": "baseline.log",
+      "logSha256": "07a9e2c224342f511dcbc11e5f91b7af1a7db0814fbb7b158942b6ccaf10eeff",
+      "originalMonitorSha256": "aca972f3a942d2d5ffa4da5201c32035f5488a60c34df751cf78ffee55768c69",
+      "elapsedMonitorSeconds": 0.10036581102758646
+    },
+    "candidate": {
+      "passed": 3,
+      "failed": 0,
+      "exitCode": 0,
+      "reason": "completed",
+      "log": "candidate.log",
+      "logSha256": "d43d39604cc69c19175b2bab459a02390e012e6b86715334f9549924182568f7",
+      "originalMonitorSha256": "41158c66115bee341bf5e5ac9204104f4b8ce14b52c6fe8bb010e1fbdbdb1814",
+      "elapsedMonitorSeconds": 0.10039321705698967
+    }
+  },
+  "boardRuntimeModified": false,
+  "fullBoardRoutingImprovementEstablished": false,
+  "upstreamPullRequestCreated": false,
+  "files": {
+    "fanout-layer-upstream.patch": "15d661335573e0567f9a65ed51d0f06c8895f4c9879ace4f9829b717c887b001",
+    "baseline.log": "07a9e2c224342f511dcbc11e5f91b7af1a7db0814fbb7b158942b6ccaf10eeff",
+    "candidate.log": "d43d39604cc69c19175b2bab459a02390e012e6b86715334f9549924182568f7",
+    "README.md": "50593abe7a39235b606bac3fb7105b598794c4566c251fb63e1f88ade338103e"
+  }
+}

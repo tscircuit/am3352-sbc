@@ -1,0 +1,28 @@
+{
+  "stage": "Finite native worker resource observation only",
+  "command": [
+    "/workspace/.cloud-tools/node_modules/bun/bin/bun.exe",
+    "--smol",
+    "node_modules/tscircuit/cli.mjs",
+    "build",
+    "index.circuit.tsx",
+    "--disable-parts-engine",
+    "--autorouter-dump-srj",
+    "phase:1",
+    "--autorouter-debug-dir",
+    "/tmp/am3352-fresh-baseline-07-debug",
+    "--autorouter-timeout",
+    "30m",
+    "--profile"
+  ],
+  "exitCode": 1,
+  "reason": "completed",
+  "maximumRssMiB": 6144,
+  "maximumSeconds": 3600,
+  "maximumGroupGiB": 15.5,
+  "observedPeakRssMiB": 1826.76171875,
+  "observedPeakGroupGiB": 13.723731994628906,
+  "seconds": 1916.6811752630165,
+  "monitorSha256": "336bc2c499239d47b79e9cd64c60870bb77ca11d7d480f58f9b3a8ebcb7c2d74",
+  "wholeRoutingAccepted": false
+}
