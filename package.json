@@ -4,8 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsci dev",
-    "build": "bun --smol build.tsx",
-    "build:site": "bun --smol build.tsx --site",
+    "build": "tsci build index.circuit.tsx --disable-parts-engine",
+    "build:site": "tsci build index.circuit.tsx --disable-parts-engine --site",
     "typecheck": "tsc --noEmit",
     "check:routing": "bun --smol check-routing.ts",
     "check:models": "bun --smol check-models.ts",
@@ -14,12 +14,12 @@
     "check:vias": "bun --smol check-vias.ts"
   },
   "dependencies": {
-    "tscircuit": "0.0.2870",
-    "@tscircuit/core": "0.0.2146",
-    "@tscircuit/props": "0.0.702",
+    "tscircuit": "0.0.2908",
+    "@tscircuit/core": "0.0.2164",
+    "@tscircuit/props": "0.0.703",
     "react": "^19.1.0",
     "schematic-symbols": "0.0.248",
-    "@tscircuit/checks": "0.0.254",
+    "@tscircuit/checks": "0.0.256",
     "circuit-json": "0.0.525",
     "circuit-json-to-connectivity-map": "0.0.33",
     "@tscircuit/bus-lanes-solver": "https://jscdn.tscircuit.com/@tscircuit/bus-lanes-solver/0.0.25.tgz"

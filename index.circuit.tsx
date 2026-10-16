@@ -13,21 +13,23 @@ import { Indicators } from "./design/indicators"
 import { RoutingNets } from "./design/routing-nets"
 import { RemainingRoutes } from "./design/remaining-routes"
 import { PowerPlanes } from "./design/power-planes"
-import { StitchingVias } from "./routing/vias"
-import { createSavedAutorouter, type SavedRouteGroup } from "./routing/saved-autorouter"
-import acceptedRoutes from "./routing/accepted-routes"
 import { Schematic } from "./schematic"
 import { sch } from "./schematic/layout"
+import { AutoroutingPlan } from "./design/autorouting-plan"
+import { phaseForNet } from "./design/nets"
+import { VIA_RULES } from "./routing/via-rules"
 
-/** Source-first board. Saved phase input retains the accepted autorouted copper. */
-export default function Board({ routingMode = "saved" }: { routingMode?: "saved" | "fresh" } = {}) {
-  const savedAutorouter = createSavedAutorouter(acceptedRoutes as SavedRouteGroup[])
+/** Fresh routing with released native autorouters and manufacturing constraints. */
+export default function Board() {
   return <board
     width={100} height={80} thickness={1.6} layers={4}
     allowBlindAndBuriedVias={false} routeRemaining={false}
     minTraceWidth={0.1} minTraceToPadEdgeClearance={0.1}
-    minViaPadDiameter={0.3} minViaHoleDiameter={0.15}
-    pcbStyle={{ viaHoleDiameter: 0.15, viaPadDiameter: 0.3 }}
+    minViaPadDiameter={VIA_RULES.padDiameter} minViaHoleDiameter={VIA_RULES.holeDiameter}
+    minViaEdgeToPadEdgeClearance={VIA_RULES.copperClearance}
+    minViaHoleEdgeToViaHoleEdgeClearance={VIA_RULES.drillClearance}
+    minTraceToHoleEdgeClearance={VIA_RULES.drillClearance}
+    pcbStyle={{ viaHoleDiameter: VIA_RULES.holeDiameter, viaPadDiameter: VIA_RULES.padDiameter }}
     schAutoLayoutEnabled={false} schTraceAutoLabelEnabled schMaxTraceDistance={0.5}
     title="AM3352 SBC / four-layer draft" solderMaskColor="green"
   >
@@ -37,7 +39,7 @@ export default function Board({ routingMode = "saved" }: { routingMode?: "saved"
     <TimingConstraints />
     {sharedNets.map((net) => <trace key={net}
       name={net === "DDR_RESETn" ? "DDR_RESETn_SIGNAL" : net}
-      routingPhaseIndex={1}
+      routingPhaseIndex={net === "DDR_RESETn" ? phaseForNet(net) : 1}
       from={`U1.${cpuConnections.find((c) => c.net === net)!.pin}`}
       to={`U3.${ramConnections.find((c) => c.net === net)!.pin}`} />)}
     <ProcessorSupport />
@@ -51,14 +53,8 @@ export default function Board({ routingMode = "saved" }: { routingMode?: "saved"
     <Indicators />
     <RoutingNets />
     <RemainingRoutes />
-    <StitchingVias />
     <PowerPlanes />
-    <autoroutingphase name="DDR_FIRST" phaseIndex={1} algorithmFn={routingMode === "saved" ? savedAutorouter : undefined} />
-    <autoroutingphase name="USB_AND_TMDS" phaseIndex={3} algorithmFn={routingMode === "saved" ? savedAutorouter : undefined} />
-    <autoroutingphase name="LCD_BUS" phaseIndex={4} algorithmFn={routingMode === "saved" ? savedAutorouter : undefined} />
-    <autoroutingphase name="CONTROL_AND_BOOT" phaseIndex={5} algorithmFn={routingMode === "saved" ? savedAutorouter : undefined} />
-    <autoroutingphase name="POWER" phaseIndex={6} algorithmFn={routingMode === "saved" ? savedAutorouter : undefined} />
-    <autoroutingphase name="GROUND" phaseIndex={7} algorithmFn={routingMode === "saved" ? savedAutorouter : undefined} />
+    <AutoroutingPlan />
     <Schematic />
     {[-47.5, 47.5].flatMap((x) => [-36, 36].map((y) =>
       <Fragment key={`${x}_${y}`}><hole name={`H_${x}_${y}`} diameter={3.2} pcbX={x} pcbY={y} /></Fragment>))}

@@ -3,9 +3,16 @@ import type { TraceProps } from "@tscircuit/props";
 import { Fragment } from "react";
 import ballMap from "./am3352-ballmap.json";
 import { sch } from "../schematic/layout";
+import { phaseForNet } from "./autorouting-plan";
+
+export { phaseForNet } from "./autorouting-plan";
 
 export function SignalTrace(props: TraceProps) {
-  return <trace {...props} />;
+  // All branches to a named net share its phase, including auxiliary power links.
+  const net = "to" in props && typeof props.to === "string" && props.to.startsWith("net.")
+    ? props.to.slice(4)
+    : undefined;
+  return <trace {...props} routingPhaseIndex={net ? phaseForNet(net) : props.routingPhaseIndex} />;
 }
 
 export const cpuPin = (signal: string) => {
@@ -13,12 +20,6 @@ export const cpuPin = (signal: string) => {
   if (!ball) throw new Error(`Unknown AM3352 signal ${signal}`);
   return `U1.${ball}`;
 };
-export const phaseForNet = (net: string) =>
-  net === "GND"
-    ? 7
-    : /^(VDD|V[13]|DDR_1V5|RTC_1V8|A3V3|VIN|SYS|AUX_5V|USB_PD_SWITCHED|PD_VBUS|PD_VDD|USB[01]_VBUS|HDMI_(TVDD|PVDD|5V))/.test(net)
-      ? 6
-      : 5;
 export function Link({
   refdes,
   pin,

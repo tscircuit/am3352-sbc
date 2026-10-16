@@ -4,6 +4,5 @@
   ],
   "previewComponentPath": "index.circuit.tsx",
   "siteDefaultComponentPath": "index.circuit.tsx",
-  "alwaysUseLatestTscircuitOnCloud": true,
-  "buildCommand": "bun --smol build.tsx --site"
+  "alwaysUseLatestTscircuitOnCloud": false
 }
