@@ -1,1 +1,1 @@
-export { createSharedDdrAutorouter } from "./shared-ddr-runtime.js"
+export { createSharedDdrAutorouter } from "./shared-ddr-after-support-runtime.js"

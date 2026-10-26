@@ -1,0 +1,7 @@
+{
+  "bundleSha256": "9477caac48d025f2533bd541659765dee28281e1d66d1ba000f43123047cf338",
+  "source": "controllers/critical-ddr-after-support.ts",
+  "change": "Accept zero remaining support tasks after an earlier native support phase; preserve all native input copper. DDR search and declared constraints unchanged.",
+  "manualRouting": false,
+  "circuitJsonPostprocessing": false
+}

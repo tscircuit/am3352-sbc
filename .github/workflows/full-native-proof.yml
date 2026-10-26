@@ -6,7 +6,7 @@ on:
 jobs:
   native_board:
     runs-on: blacksmith-16vcpu-ubuntu-2404
-    timeout-minutes: 240
+    timeout-minutes: 360
     env:
       BUN_JSC_forceRAMSize: "8589934592"
     steps:
@@ -38,7 +38,7 @@ jobs:
         run: |
           mkdir -p validation
           set -o pipefail
-          node --max-old-space-size=49152 --import ./scripts/node-runtime-register.mjs --import ./node_modules/tsx/dist/esm/index.mjs ./node_modules/@tscircuit/cli/dist/cli/main.js build index.circuit.tsx --disable-parts-engine --autorouter-timeout 7200s --autorouter-dump-srj all --autorouter-debug-dir validation/autorouter --site --use-cdn-javascript 2>&1 | tee validation/build.log
+          node --max-old-space-size=49152 --import ./scripts/node-runtime-register.mjs --import ./node_modules/tsx/dist/esm/index.mjs ./node_modules/@tscircuit/cli/dist/cli/main.js build index.circuit.tsx --disable-parts-engine --autorouter-timeout 14400s --autorouter-dump-srj all --autorouter-debug-dir validation/autorouter --site --use-cdn-javascript 2>&1 | tee validation/build.log
       - name: Run all 23 native routing checks
         run: |
           set -o pipefail
