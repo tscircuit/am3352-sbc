@@ -1,6 +1,6 @@
 {
   "description": "Native joint DDR/future-signal fanout assignment before paired routing. Release provisional ordinary fanouts before the pairs; route reset with original outer-layer restriction before ordinary DDR; preserve deferred support buses. All signal copper generated from native input, no replay or CircuitJSON rewriting.",
-  "ddrBundleSha256": "90569936c5709479c3709183440d79e9dc257ba18d9c105fe5d5780946f8df77",
+  "ddrBundleSha256": "6be64d31d10490d1b245580e983a5807708a8838813485f7153073d6e9ef1d84",
   "supportBundleSha256": "3996eaa9649468add36786ca25f0c549acd7984ebf09f0ff8d19be40e3f26c80",
   "placementChangesMm": {
     "C_U1_L5": [
@@ -500,5 +500,10 @@
     "passed": true
   },
   "strictDdrMatchingPreserved": true,
-  "wholeBoardProof": "Pending fullnative169; no independent-diagnostic routes imported."
+  "wholeBoardProof": "Pending fullnative169; no independent-diagnostic routes imported.",
+  "groupOrder": [
+    "controls",
+    "data"
+  ],
+  "experiment": "Same native board, pads, timing/layer/via rules and fanout planning; test controls before data to avoid expensive cross-group repairs. Whole-board proof pending."
 }

@@ -76,7 +76,7 @@ const earlyEscapeNets = new Set(["DDR_RESETn", "DDR_VREF", "DDR_VTP", "DDR_ZQ", 
 const earlyEscapePorts = [...cpuConnections.filter(c => earlyEscapeNets.has(c.net)).map(c => `.U1 > .${c.pin}`), ...ramConnections.filter(c => c.net && earlyEscapeNets.has(c.net)).map(c => `.U3 > .${c.pin}`)]
 const cachedSupportRouter = withAutorouterCache(createSupportNetTreeAutorouter, "am3352-support-four-layer-3996eaa9649468ad-v1")
 const cachedPreDdrSupportRouter = withAutorouterCache(createPreDdrSupportAutorouter, "am3352-pre-ddr-support-3996eaa9649468ad-v1")
-const cachedDdrRouter = withAutorouterCache(createSharedDdrAutorouter, "am3352-ddr-joint-future-90569936c5709479-v1", {
+const cachedDdrRouter = withAutorouterCache(createSharedDdrAutorouter, "am3352-ddr-controls-first-6be64d31d10490d1-v1", {
   followUpAutorouter: { preset: "bus_lanes", algorithmFn: cachedSupportRouter },
 })
 
