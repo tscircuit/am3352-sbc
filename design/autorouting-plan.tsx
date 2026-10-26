@@ -72,8 +72,10 @@ export function phaseForNet(net: string): number {
 
 const earlyEscapeNets = new Set(["DDR_RESETn", "DDR_VREF", "DDR_VTP", "DDR_ZQ", "CAP_VDD_RTC", "CAP_VDD_SRAM_CORE", "CAP_VDD_SRAM_MPU", "CAP_VBB_MPU"])
 const earlyEscapePorts = [...cpuConnections.filter(c => earlyEscapeNets.has(c.net)).map(c => `.U1 > .${c.pin}`), ...ramConnections.filter(c => c.net && earlyEscapeNets.has(c.net)).map(c => `.U3 > .${c.pin}`)]
-const cachedDdrRouter = withAutorouterCache(createSharedDdrAutorouter, "am3352-ddr-critical-bb213fc7ef717103-v1", {followUpAutorouter:"default"})
 const cachedSupportRouter = withAutorouterCache(createSupportNetTreeAutorouter, "am3352-support-critical-bb213fc7ef717103-v1")
+const cachedDdrRouter = withAutorouterCache(createSharedDdrAutorouter, "am3352-ddr-critical-bb213fc7ef717103-v1", {
+  followUpAutorouter: { preset: "bus_lanes", algorithmFn: cachedSupportRouter },
+})
 
 const cachedPeripheralRouter = withAutorouterCache(createPeripheralAutorouter, "am3352-peripheral-141340cca2de5f97-d77f0030965154dc-v1")
 
