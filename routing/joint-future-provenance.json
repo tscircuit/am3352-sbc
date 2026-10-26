@@ -1,6 +1,6 @@
 {
   "description": "Native joint DDR/future-signal fanout assignment before paired routing. Release provisional ordinary fanouts before the pairs; route reset with original outer-layer restriction before ordinary DDR; preserve deferred support buses. All signal copper generated from native input, no replay or CircuitJSON rewriting.",
-  "ddrBundleSha256": "b26a077e1759c403c99ca66679d3598191c1d00aea11256af2d04b99221dd83b",
+  "ddrBundleSha256": "90569936c5709479c3709183440d79e9dc257ba18d9c105fe5d5780946f8df77",
   "supportBundleSha256": "3996eaa9649468add36786ca25f0c549acd7984ebf09f0ff8d19be40e3f26c80",
   "placementChangesMm": {
     "C_U1_L5": [
@@ -489,5 +489,16 @@
       "y": 5.51,
       "rotation": 270
     }
-  }
+  },
+  "ramDataEdge": "Preserve native-generated RAMfront/right data-edge fanouts selected from ordinary data bus endpoint extrema. Preserve only those endpoints inordinarycarriers. No sites or paths prescribed.",
+  "reachabilityDiagnostic": {
+    "scope": "Diagnostic max-length/copper/layer data reachability only; no skew-matching or whole-board claim; no routes imported into Board",
+    "elapsedSeconds": 318.06117043499995,
+    "expected": 18,
+    "candidates": 18,
+    "missing": [],
+    "passed": true
+  },
+  "strictDdrMatchingPreserved": true,
+  "wholeBoardProof": "Pending fullnative169; no independent-diagnostic routes imported."
 }
