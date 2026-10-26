@@ -64,7 +64,8 @@ export function phaseForNet(net: string): number {
   if (byte1Nets.has(net)) return 1
   if (byte0Nets.has(net)) return 1
   if (ddrNets.has(net)) return 1
-  if (/^(?:LCD_DATA(?:[0-9]|1[0-5])(?:_SIGNAL)?|(?:ROUTED_)?LCD_(?:AC_BIAS_EN|HSYNC|PCLK|VSYNC))$/.test(net) || net.startsWith("BOOT_")) return 1
+  if (/^(?:LCD_DATA(?:[0-9]|1[0-5])(?:_SIGNAL)?|(?:ROUTED_)?LCD_(?:AC_BIAS_EN|HSYNC|PCLK|VSYNC))$/.test(net)) return 1
+  if (net.startsWith("BOOT_")) return 4
   if (/^(?:USB[01]_(?:DP|DM)_(?:CPU|PORT)|TMDS_(?:CK|D[012])_[PN]_(?:TX|PORT))$/.test(net)) return 3
   const phase = phaseByNet.get(net)
   if (phase === undefined) throw new Error(`No autorouting phase declared for net ${net}`)
@@ -88,7 +89,7 @@ const cachedLateLcdEscapes=withAutorouterCache(createEarlyLcdEscapes,"am3352-lat
 export function AutoroutingPlan() {
   return <>
     <autoroutingphase name="PRESERVE_VTP_ZQ_ACCESS" phaseIndex={0.75} connections={["net.DDR_VTP", "net.DDR_ZQ"]} autorouter="bus_lanes" algorithmFn={cachedPreDdrSupportRouter} />
-    <autoroutingphase name="DDR_CRITICAL_THEN_SUPPORT" phaseIndex={1} autorouter="bus_lanes" connections={[...ddrTimingGroups.flatMap(group => group.signals).map(name => "trace."+name), ...Array.from({length:16},(_,bit)=>"trace.LCD_DATA"+bit+"_SIGNAL"), ...["LCD_PCLK","LCD_HSYNC","LCD_VSYNC","LCD_AC_BIAS_EN"].map(name=>"trace."+name), ...["XTALIN","XTALOUT","RTC_XTALIN","RTC_XTALOUT","RTC_RESETn"].map(name=>"net."+name), "trace.DDR_RESETn_SIGNAL", ...[...earlyEscapeNets].filter(net => !["DDR_VTP", "DDR_ZQ"].includes(net)).map(net => "net."+net)]} algorithmFn={cachedDdrRouter} />
+    <autoroutingphase name="DDR_CRITICAL_THEN_SUPPORT" phaseIndex={1} autorouter="bus_lanes" connections={[...ddrTimingGroups.flatMap(group => group.signals).map(name => "trace."+name), ...Array.from({length:16},(_,bit)=>"trace.LCD_DATA"+bit+"_SIGNAL"), ...lcdNets.map(name => "net."+name), ...["LCD_PCLK","LCD_HSYNC","LCD_VSYNC","LCD_AC_BIAS_EN"].map(name=>"trace."+name), ...["XTALIN","XTALOUT","RTC_XTALIN","RTC_XTALOUT","RTC_RESETn"].map(name=>"net."+name), "trace.DDR_RESETn_SIGNAL", ...[...earlyEscapeNets].filter(net => !["DDR_VTP", "DDR_ZQ"].includes(net)).map(net => "net."+net)]} algorithmFn={cachedDdrRouter} />
     <autoroutingphase name="DDR_RESET" phaseIndex={1.9} autorouter="bus_lanes" algorithmFn={cachedSupportRouter} />
     {earlyPhases.map(phase => <Fragment key={phase.name}>
       <autoroutingphase name={`ROUTE_${phase.name}`} phaseIndex={phase.index} autorouter="bus_lanes" algorithmFn={cachedSupportRouter} />
