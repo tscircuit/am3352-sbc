@@ -122,7 +122,7 @@ export const USBLC6_2SC6 = (props: USBLC6_2SC6Props) => (
     }
     cadModel={{
       objUrl:
-        "https://modelcdn.tscircuit.com/easyeda_models/assets/C7519.obj?uuid=229b69761e2c45dba6a83d8866dec72d",
+        "https://modules.easyeda.com/3dmodel/229b69761e2c45dba6a83d8866dec72d",
       stepUrl:
         "https://modelcdn.tscircuit.com/easyeda_models/assets/C7519.step?uuid=229b69761e2c45dba6a83d8866dec72d",
       pcbRotationOffset: 90,

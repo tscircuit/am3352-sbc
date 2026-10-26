@@ -1,0 +1,35 @@
+{
+  "scope": "Generated browser runtime from solver source; contains no saved route outputs",
+  "baseBusLanesPr": "https://github.com/tscircuit/bus-lanes-solver/pull/95",
+  "fanoutFixPr": "https://github.com/tscircuit/fanout-solver/pull/259",
+  "changesPendingUpstream": [
+    "Associate each fanout handoff with the native pad that owns it",
+    "Fit coupled SMT corridor width within the actual rotated package gap",
+    "Consider a directed middle corridor when package fronts are close",
+    "Bevel common pair centerlines before offsetting both rails"
+  ],
+  "files": [
+    {
+      "path": "solver-smt-center-bevel-diagnostic/lib/coupled-pair-routing.ts",
+      "sha256": "3494be62ba88dc380e2213d342117bd1ddd2f7d68f62e500de48bb9c34344322"
+    },
+    {
+      "path": "solver-smt-center-bevel-diagnostic/lib/package-approach-regions.ts",
+      "sha256": "d559ea9e36dd6512921812ab8c37b623698251b437cc1cd358843ef5e13ac582"
+    },
+    {
+      "path": "fanout-peripheral-native-site-diagnostic/lib/match-component-dogbone-via-sites.ts",
+      "sha256": "f97f7dd10ff2a4b376843686db5199e0f7e4bf70c469b2a62c0fce30eb4934a1"
+    },
+    {
+      "path": "board-finished-review/routing/peripheral-runtime.js",
+      "sha256": "141340cca2de5f9774443e6f6f367fd2940955f486f980839a1f3ae835c26eab"
+    },
+    {
+      "path": "board-finished-review/routing/peripheral-runtime.js.map",
+      "sha256": "8dcf2292f56daa83b3f3e1a5807d4e30955cd81eefacc11f00ab35d470971718"
+    }
+  ],
+  "controllerSha256": "d77f0030965154dc956973d5677b6c9436830c0d1dac00f268a532da6ba06856",
+  "validatedScope": "Eight HDMI connector signals were independently validated in an earlier isolated native test. This is not proof of the complete current board."
+}

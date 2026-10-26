@@ -1,0 +1,133 @@
+{
+  "sources": {
+    "controllers/pr6-joint-support-pad-surfaces-critical-ddr-stage.ts": "53c8233517d799d9aefbdb1ea0dfe4f30b1b8c6e25f34306f1c5ce51f5b36d69",
+    "controllers/support-net-tree-generator-pad-surfaces.ts": "f7d07cb78c41c3386f93248dd33b47d010e9835c77de6c002153a2828a6f6e6a",
+    "controllers/feasible-support-fanouts.ts": "5913749f27d1079b60a1dd9af289fa8eeeb3251e356546251513e53e60483599",
+    "repair-ordinary-conflicts-whole-path.ts": "4cd3b0715d2291e6f0ad915ce6831fd41c979391ccad05194f20ca585740ef24",
+    "repair-ordinary-conflicts-adaptive-whole-path.ts": "0563f728c09e35de22ce940747d21f148408cac8385edf79b0a6d98883f8ef6c"
+  },
+  "bundleSha256": "caa5e23dc1d2b6eb0d18c08d5bce989bd5e9540c457ca926c7a6500a728e45b9",
+  "bytes": 3084779,
+  "diagnosticRemoval": {
+    "sourceSha256": "f1da0d8a2529926f191df610228db870a9c8d0fc0709c4bab2e2a663c3554a7b",
+    "portableSha256": "fd828c6352b580634be3700ea58b48c24c1268ee3850814d314af6203236b96a",
+    "removedDiagnosticStatements": 6,
+    "exactSpans": [
+      {
+        "start": 8666,
+        "end": 8788
+      },
+      {
+        "start": 10470,
+        "end": 10589
+      },
+      {
+        "start": 10769,
+        "end": 10886
+      },
+      {
+        "start": 12607,
+        "end": 12729
+      },
+      {
+        "start": 13875,
+        "end": 14036
+      },
+      {
+        "start": 14564,
+        "end": 14717
+      }
+    ],
+    "remainingRoutingAstIdentical": true
+  },
+  "copperPostprocessing": false,
+  "manualRouting": false,
+  "description": "Native DDR stage reserves support fanouts, solves all critical data/address pairs and bodies, then checks original timing/coupling/DRC/via rules. Core caches that accepted stage and routes residual unconstrained support tasks with a native four-layer follow-up.",
+  "installedBundleSha256": "bb213fc7ef717103698b7ba1d62419dacaade83f5cd4dba86cb60370ec72bdfb",
+  "declaredDdrConstraintsChanged": false,
+  "repairBudgetSeconds": 7200,
+  "repairNodeBudget": 2048,
+  "coreRevision": "7614ab6f",
+  "capacityTopologyRevision": "3a49fd46",
+  "capacityPreloadRevision": "42976000",
+  "rectdiffRevision": "9f6800cb",
+  "variant": "Reserve native BGA support fanouts before DDR, finish full support-net trees after the timing-constrained DDR body; no task omitted; original hard rules unchanged",
+  "sourceTransforms": [
+    {
+      "path": "/workspace/work/am3352-retry-after-pr74/route-hybrid-ordinary-boundary-selfclear.ts",
+      "sourceSha256": "5b5fad6fb243ef94ca62899dbd030fb78364c806ca79ee14a65ff590f3be9167",
+      "transformedSha256": "8f99f7ca2e33775abc52e06f04b0d3ddc67bec9260325fe5c7e3317ac56b0062"
+    },
+    {
+      "path": "/workspace/work/am3352-retry-after-pr74/route-hybrid-ordinary-boundary-cached.ts",
+      "sourceSha256": "46ebc740ceede9c897f6b9ae228260758d8199d260a650c5131b071912cafd6a",
+      "transformedSha256": "eaeb676c57eee7e7007d7fe52ebfaf70431574524acb26a2f4ae1c27f1d46976"
+    }
+  ],
+  "syntheticSmoke": "adaptive-whole-path-repair-smoke.json",
+  "syntheticTargetViaSmoke": "target-via-faces-smoke.json",
+  "fanoutVersion": "0.0.81",
+  "localSignalApiCompatibilityRevision": "15857f17beed0f228b2e29544f7ce393af297c86",
+  "compatibilitySources": {
+    "fanout-local-signal-compat/fit-local-via-grid.ts": "c8329aea254ff5940d2627ca1dcf17afbe459018667063085eb444431eb31eda",
+    "fanout-local-signal-compat/index.ts": "03aea3c7ce9e12e61c40b4ec07848e2e4725790bfb67432b2c64d4bf8a3c1d35",
+    "fanout-local-signal-compat/route-local-signal-dogbones.ts": "095e8a9ca443a5711b237b705586cd4b6659aeb43bcbfd531d60ec73b806a92e"
+  },
+  "fanoutResolution": {
+    "version": "0.0.81",
+    "sourceFiles": [
+      "../../native-compact-streaming-sdk/node_modules/@tscircuit/fanout-solver/lib/geometry.ts",
+      "../../native-compact-streaming-sdk/node_modules/@tscircuit/fanout-solver/lib/net-identity.ts",
+      "../../native-compact-streaming-sdk/node_modules/@tscircuit/fanout-solver/lib/layer-names.ts",
+      "../../native-compact-streaming-sdk/node_modules/@tscircuit/fanout-solver/lib/validate-routed-copper-drc.ts",
+      "../../native-compact-streaming-sdk/node_modules/@tscircuit/fanout-solver/lib/fanout-exit-position.ts",
+      "../../native-compact-streaming-sdk/node_modules/@tscircuit/fanout-solver/lib/boundary-exit.ts",
+      "../../native-compact-streaming-sdk/node_modules/@tscircuit/fanout-solver/lib/match-component-dogbone-via-sites.ts",
+      "../../native-compact-streaming-sdk/node_modules/@tscircuit/fanout-solver/node_modules/@tscircuit/capacity-autorouter/dist/index.js",
+      "../../native-compact-streaming-sdk/node_modules/@tscircuit/fanout-solver/lib/prepare-buses.ts",
+      "../../native-compact-streaming-sdk/node_modules/@tscircuit/fanout-solver/lib/match-angularly-ordered-local-vias.ts",
+      "../../native-compact-streaming-sdk/node_modules/@tscircuit/fanout-solver/lib/route-single-layer-adaptive-exits.ts",
+      "../../native-compact-streaming-sdk/node_modules/@tscircuit/fanout-solver/lib/runtime-process.ts",
+      "../../native-compact-streaming-sdk/node_modules/@tscircuit/fanout-solver/lib/visualize-simple-route-json.ts",
+      "../../native-compact-streaming-sdk/node_modules/@tscircuit/fanout-solver/lib/fanout-solver.ts"
+    ]
+  },
+  "engineCacheIdentity": "am3352-ddr-critical-bb213fc7ef717103-v1",
+  "installedSourceMapSha256": "c039eb4f94b081beb804ecefe9fd30ceabba3cce4c709f72f19bc5918709cfe0",
+  "supportPriority": "reserve native support escapes before DDR; route residual support tasks in an explicit native four-layer follow-up stage",
+  "corePreview": "0.0.2203-am3352-consumed-graph.10",
+  "nativePostPourViaStitchingFix": "https://github.com/tscircuit/via-stitch-solver/pull/12",
+  "coreFollowUpRevision": "d450f7f05cb0aa221d02201611601f33ee98ca5f",
+  "capacityPreview": "0.0.1006-am3352-compact-streaming.15",
+  "capacityTargetRestorationRevision": "0786b28520b83967565d6fd91c3c4042515bf23f",
+  "coreLazyProgressRevision": "f6e674e4573e6c136688ea593a317b22da855370",
+  "installedRuntimeSha256": "bb213fc7ef717103698b7ba1d62419dacaade83f5cd4dba86cb60370ec72bdfb",
+  "capacityTargetEdgeCompletionRevision": "10ec8e378f59d3cb79f3903cc3837cee3613e45e",
+  "capacityOwnedTargetRoutingAccessRevision": "0810c733bb43a60faf0e19e3fdf4ff7e651d7002",
+  "capacityCrampedPortSearchRevision": "fe9bddef723af4748defd0cd5110c548c01e58e8",
+  "capacityPathingEffortRevision": "01aa8b8b883e5cb6b903b6d2b17b5cae9cb8cbc9",
+  "fanoutCompiledPreview": "0.0.81-am3352-compiled.5",
+  "fanoutAlgorithmChanged": false,
+  "fanoutCompiledArchiveSha256": "595aa43bc855f5a69304dbe305a6fd9622a38bf9b75dfb3fac8a9e37c14a0b1d",
+  "capacityCrampedPortSetupRevision": "3cd26adc41933aa18f1d05a250dc2d50a8bdd140",
+  "runtimePackaging": "Runtime-only metadata; omit development dependencies/workspaces. Core/fanout algorithm JS unchanged from validated native154. Capacity differs only in version label.",
+  "portableVendorArchives": {
+    "tscircuit-core-0.0.2203-am3352-consumed-graph.10.tgz": "befd702f478b808d15bdcee029723df0d5f487c74ddf7ec7cae016947afd2446",
+    "tscircuit-bus-lanes-solver-0.0.34-am3352-terminal-via.1.tgz": "318122d5afe03e9ca5fd85d28800dfc1bf813c0863964a9b950fd6ffa45bfb3c",
+    "tscircuit-fanout-solver-0.0.81-am3352-compiled.5.tgz": "9c6dfbe5a732f0d9dc2e4e77868f8d49ef3582ccb35ecd67c018e9c17729a0b9",
+    "tscircuit-cli-0.1.2406-am3352-idle-polls.1.tgz": "706fbfb5cd0c2ce04ee9b414022722e7607c3d57676095a8b8cb5e824129ddff",
+    "tscircuit-capacity-autorouter-0.0.1006-am3352-compact-streaming.13.tgz": "52393f5cf582512bbc15d04e8bfe9d9917a1bc104ed8fbf62f0308f83c365f25"
+  },
+  "capacityLazyLookupRevision": "2a7d1320248a02ff2b75d6cbeead5449a3056b84",
+  "capacityLazyLookupPR": "https://github.com/tscircuit/tscircuit-autorouter/pull/3285",
+  "cliPreview": "0.1.2406-am3352-idle-polls.1",
+  "capacityReleaseGraphConstructionState": true,
+  "capacityCompletedTopologyReleaseRevision": "1991b0a8d1fd8e9c449a8179b1199b7af91bcc1a",
+  "cliIdlePollingFixPR": "https://github.com/tscircuit/cli/pull/5580",
+  "capacitySingleRouteGuard": "157aca2d39b4b309914856a2823281353681a0ea",
+  "capacityGraphPruning": {
+    "scope": "Opt-in internal graph only; omit isolated zero-port nonterminal regions, free consumed capacity-node array",
+    "sourceSrjChanged": false,
+    "nativeCopperControls": "4 tests /37 assertions pass, including exact native copper and DRC with and without preloaded traces"
+  }
+}

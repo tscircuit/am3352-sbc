@@ -1,9 +1,10 @@
+import { sch } from "../schematic/layout";
 import { Fragment } from "react";
 import { Tfp410 } from "../components/tfp410";
 import { TPD12S521DBTR } from "../components/TPD12S521DBTR";
 import { HDMI_001_19PCBTP } from "../components/HDMI_001_19PCBTP";
 import { BLM18AG601SN1D } from "../components/BLM18AG601SN1D";
-import { SignalTrace, Cap, Res, cpuPin, link } from "./nets";
+import { SignalTrace, Cap, Res, cpuPin, link, phaseForNet } from "./nets";
 
 // RGB565 expands into the most significant bits of TFP410's 24-bit input.
 // TI SLDS145D: high-swing 3.3 V input requires VREF=DVDD (not a divider).
@@ -19,7 +20,7 @@ export function Display() {
     <>
       <Tfp410
         noConnect={["MSEN_PO1", "NC"]}
-        name="U_HDMI"
+        name="U_HDMI" {...sch("U_HDMI")}
         pcbX={22}
         pcbY={-16}
       />
@@ -29,13 +30,13 @@ export function Display() {
           [`TMDS_${id}_POS1`, `TMDS_${id}_POS2`],
           [`TMDS_${id}_NEG1`, `TMDS_${id}_NEG2`],
         ])}
-        name="U_HDMI_ESD"
+        name="U_HDMI_ESD" {...sch("U_HDMI_ESD")}
         pcbX={35}
         pcbY={-16}
         pcbRotation={270}
       />
       <HDMI_001_19PCBTP
-        name="J_HDMI"
+        name="J_HDMI" {...sch("J_HDMI")} allowOffBoard
         pcbX={44}
         pcbY={-16}
         pcbRotation={90}
@@ -47,7 +48,7 @@ export function Display() {
             name={`LCD_DATA${i}_SIGNAL`}
             from={cpuPin(`LCD_DATA${i}`)}
             to={`U_HDMI.DATA${pin}`}
-            routingPhaseIndex={4}
+            routingPhaseIndex={phaseForNet(`LCD_DATA${i}_SIGNAL`)}
           />
           {link("U_HDMI", `DATA${pin}`, `LCD_DATA${i}`)}
         </Fragment>
@@ -66,7 +67,7 @@ export function Display() {
           name={signal}
           from={cpuPin(signal)}
           to={`U_HDMI.${pin}`}
-          routingPhaseIndex={4}
+          routingPhaseIndex={phaseForNet(signal)}
         />
       ))}
       {[
@@ -104,7 +105,7 @@ export function Display() {
       />
       {["TVDD", "PVDD"].map((rail, i) => (
         <Fragment key={rail}>
-          <BLM18AG601SN1D name={`FB_HDMI${i}`} pcbX={25 + i * 4} pcbY={-28} />
+          <BLM18AG601SN1D name={`FB_HDMI${i}`} {...sch(`FB_HDMI${i}`)} pcbX={25 + i * 4} pcbY={-28} />
           {link(`FB_HDMI${i}`, "pin1", "V3V3")}
           {link(`FB_HDMI${i}`, "pin2", `HDMI_${rail}`)}
           <Cap

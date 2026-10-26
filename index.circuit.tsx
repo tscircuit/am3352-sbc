@@ -1,179 +1,68 @@
-import { RemainingRoutes } from "./design/remaining-routes";
-import { peripheralBusLanes } from "./design/peripheral-router";
-import { ddrBusLanes } from "./design/bus-lanes";
-import { PowerPlanes, planeNetMap } from "./design/power-planes";
-import {ramPlacement} from "./design/ram-placement";
-import { PowerEscapes } from "./design/power-escapes";
-import savedDdrRoutes from "./design/ddr-routes.json";
-import savedOuterRoutes from "./design/accepted-outer-routes.json";
-import { PeripheralRoutingContext } from "./design/nets";
-import { AM3352 } from "./components/am3352";
-import { W631GG6MB_12 } from "./components/ddr3";
-import { TimingConstraints } from "./design/timing-constraints";
-import {
-  cpuConnections,
-  ramConnections,
-  sharedNets,
-} from "./design/ddr-netlist";
-import { ProcessorSupport } from "./design/processor-support";
-import { PdPower } from "./design/pd-power";
-import { UsbPorts } from "./design/usb";
-import { Display } from "./design/display";
-import { Indicators } from "./design/indicators";
-import type { AutoroutingPhaseProps, FanoutTracePath } from "@tscircuit/props";
-import { outerAutorouter } from "./design/outer-autorouter";
-import { lcdAutorouter } from "./design/lcd-router";
-import { controlAutorouter } from "./design/control-router";
-import { groundPlaneAutorouter } from "./design/ground-plane-router";
-import { hydrateNativeFixedCopper } from "./design/native-fixed-copper";
-import type { SimpleRouteJson } from "@tscircuit/core";
-import type { AnyCircuitElement } from "circuit-json";
+import { Fragment } from "react"
+import { AM3352 } from "./components/am3352"
+import { W631GG6MB_12 } from "./components/ddr3"
+import { cpuConnections, ramConnections, sharedNets } from "./design/ddr-netlist"
+import { ramPlacement } from "./design/ram-placement"
+import { TimingConstraints } from "./design/timing-constraints"
+import { ProcessorSupport } from "./design/processor-support"
+import { PdPower } from "./design/pd-power"
+import { AuxJstPower } from "./design/aux-jst-power"
+import { UsbPorts } from "./design/usb"
+import { Display } from "./design/display"
+import { Indicators } from "./design/indicators"
+import { RoutingNets } from "./design/routing-nets"
+import { RemainingRoutes } from "./design/remaining-routes"
+import { PowerPlanes } from "./design/power-planes"
+import { Schematic } from "./schematic"
+import { sch } from "./schematic/layout"
+import { AutoroutingPlan } from "./design/autorouting-plan"
+import { phaseForNet } from "./design/nets"
+import { VIA_RULES } from "./routing/via-rules"
 
-// The builder supplies paths produced by ddr.circuit.tsx's bus_lanes phase.
-// New peripheral routing receives these paths as fixed copper obstacles.
-export default function Board({
-  ddrRoutes = savedDdrRoutes as FanoutTracePath[],
-  routePeripherals = true,
-  peripheralRoutes = [],
-  solveDdr = false,
-  placementOnly = false,
-  freshRouting = Object.keys(savedOuterRoutes.phases).length === 0,
-  nativeCircuitJson,
-}: {
-  ddrRoutes?: FanoutTracePath[];
-  routePeripherals?: boolean;
-  peripheralRoutes?: FanoutTracePath[];
-  solveDdr?: boolean;
-  placementOnly?: boolean;
-  freshRouting?: boolean;
-  /** Native snapshot from this board's current routing event. */
-  nativeCircuitJson?: () => AnyCircuitElement[];
-} = {}) {
-  const cached: Record<string, FanoutTracePath[]> = freshRouting ? {} : savedOuterRoutes.phases as Record<string, FanoutTracePath[]>;
-  const pairRoutes = peripheralRoutes.length ? peripheralRoutes : routePeripherals ? cached.USB_AND_TMDS ?? [] : [];
-  const phaseRouting = (name: string, fallback: Pick<AutoroutingPhaseProps, "autorouter" | "algorithmFn">) =>
-    cached[name]?.length || (name === "GROUND" && Object.hasOwn(cached, name))
-      ? { autorouter: "fanout" as const, connections: [], pcbTracePaths: cached[name] }
-      : fallback;
-  const nativeAlgorithm = (algorithm: NonNullable<AutoroutingPhaseProps["algorithmFn"]>) => async (input: SimpleRouteJson) => {
-    if (!nativeCircuitJson) throw new Error("Fresh board routing requires the current native snapshot; use the board build script.");
-    const { input: fixed } = hydrateNativeFixedCopper(input, nativeCircuitJson());
-    return algorithm(fixed);
-  };
-  return (
-    <board pcbStyle={{viaHoleDiameter:0.15,viaPadDiameter:0.3}}
-      width={100}
-      height={80}
-      layers={4}
-      allowBlindAndBuriedVias={false}
-      thickness={1.6}
-      minTraceWidth={0.1}
-      minTraceToPadEdgeClearance={0.1}
-      minViaPadDiameter={0.3}
-      minViaHoleDiameter={0.15}
-      autorouterEffortLevel="10x"
-      routingDisabled={placementOnly}
-      routeRemaining={!placementOnly && (routePeripherals || solveDdr)}
-      schematicDisabled
-      schAutoLayoutEnabled={false}
-      schTraceAutoLabelEnabled
-      title="AM3352 SBC / outer signals, inner ground"
-      solderMaskColor="green"
-    >
-      <AM3352 name="U1" noSchematicRepresentation pcbX={0} pcbY={0} />
-      <W631GG6MB_12 name="U3" noSchematicRepresentation pcbX={ramPlacement.x} pcbY={ramPlacement.y} pcbRotation={ramPlacement.rotation} />
-      <TimingConstraints />
-      {sharedNets.map((net) => (
-        <trace
-          key={net}
-          name={net === "DDR_RESETn" ? "DDR_RESETn_SIGNAL" : net}
-          routingPhaseIndex={
-            ddrRoutes.length || routePeripherals || solveDdr ? 1 : undefined
-          }
-          from={`U1.${cpuConnections.find((c) => c.net === net)!.pin}`}
-          to={`U3.${ramConnections.find((c) => c.net === net)!.pin}`}
-        />
-      ))}
-      <autoroutingphase
-        name="DDR_FIRST"
-        phaseIndex={1}
-        fanoutRoutingLayers={["top", "bottom"]}
-        connections={
-          ddrRoutes.length || !(routePeripherals || solveDdr) ? [] : undefined
-        }
-        fanoutPourNetMap={planeNetMap}
-        autorouter={ddrRoutes.length ? "fanout" : "bus_lanes"}
-        algorithmFn={ddrRoutes.length ? undefined : nativeAlgorithm(ddrBusLanes)}
-        pcbTracePaths={
-          ddrRoutes.length || !(routePeripherals || solveDdr)
-            ? ddrRoutes
-            : undefined
-        }
-      />
-      <PeripheralRoutingContext.Provider value={routePeripherals ? true : pairRoutes.length ? [3] : false}>
-        <ProcessorSupport />
-        <PdPower />
-        <UsbPorts />
-        <Display />
-        <Indicators />
-      </PeripheralRoutingContext.Provider>
-      <PowerPlanes />
-      <RemainingRoutes routeFresh routingEnabled={routePeripherals} />
-      <PowerEscapes />
-      {(routePeripherals || pairRoutes.length > 0) && (
-        <>
-          <autoroutingphase
-            name="USB_AND_TMDS"
-            phaseIndex={3}
-            fanoutRoutingLayers={["top", "bottom"]}
-            autorouter={pairRoutes.length ? "fanout" : "bus_lanes"}
-            algorithmFn={pairRoutes.length ? undefined : nativeAlgorithm(peripheralBusLanes)}
-            pcbTracePaths={pairRoutes.length ? pairRoutes : undefined}
-            connections={pairRoutes.length ? [] : undefined}
-          />
-          {routePeripherals && <>
-          <autoroutingphase
-            name="LCD_BUS"
-            phaseIndex={4}
-            fanoutRoutingLayers={["top", "bottom"]}
-            {...phaseRouting("LCD_BUS", { autorouter: "default", algorithmFn: nativeAlgorithm(lcdAutorouter) })}
-          />
-          <autoroutingphase
-            name="CONTROL_AND_BOOT"
-            phaseIndex={5}
-            fanoutRoutingLayers={["top", "bottom"]}
-            {...phaseRouting("CONTROL_AND_BOOT", { autorouter: "default", algorithmFn: nativeAlgorithm(controlAutorouter) })}
-          />
-          <autoroutingphase name="POWER" phaseIndex={6} fanoutRoutingLayers={["top", "bottom"]} {...phaseRouting("POWER", { autorouter: "default", algorithmFn: nativeAlgorithm(outerAutorouter) })} />
-          <autoroutingphase
-            name="GROUND"
-            phaseIndex={7}
-            {...phaseRouting("GROUND", { autorouter: "default", algorithmFn: nativeAlgorithm(groundPlaneAutorouter) })}
-            fanoutPourNetMap={{ inner1: ["GND"] }}
-          />
-          </>}
-        </>
-      )}
-      {[-47.5, 47.5].flatMap((x) =>
-        [-36, 36].map((y) => (
-          <hole name={`H_${x}_${y}`} diameter={3.2} pcbX={x} pcbY={y} />
-        )),
-      )}
-      <silkscreentext
-        text="AM3352 / TOP-BOTTOM SIGNALS"
-        pcbX={0}
-        pcbY={-38}
-        fontSize={1}
-      />
-      <silkscreentext text="128 MiB DDR3" pcbX={0} pcbY={-35} fontSize={0.8} />
-      <silkscreentext text="USB HOST 0" pcbX={16} pcbY={38} fontSize={0.7} />
-      <silkscreentext text="USB HOST 1" pcbX={36} pcbY={38} fontSize={0.7} />
-      <silkscreentext
-        text="microSD / UART / JTAG"
-        pcbX={-17}
-        pcbY={38}
-        fontSize={0.7}
-      />
-    </board>
-  );
+/** Fresh native routing from source declarations and manufacturing constraints. */
+export default function Board() {
+  return <board
+    width={100} height={80} thickness={1.6} layers={4}
+    allowBlindAndBuriedVias={false} routeRemaining={false}
+    enableViaStitching viaStitchPitch={3}
+    minTraceWidth={0.1} minTraceToPadEdgeClearance={0.1}
+    minViaPadDiameter={VIA_RULES.padDiameter} minViaHoleDiameter={VIA_RULES.holeDiameter}
+    minViaEdgeToPadEdgeClearance={VIA_RULES.copperClearance}
+    minViaHoleEdgeToViaHoleEdgeClearance={VIA_RULES.drillClearance}
+    minTraceToHoleEdgeClearance={VIA_RULES.drillClearance}
+    pcbStyle={{ viaHoleDiameter: VIA_RULES.holeDiameter, viaPadDiameter: VIA_RULES.padDiameter }}
+    schAutoLayoutEnabled={false} schTraceAutoLabelEnabled schMaxTraceDistance={0.5}
+    title="AM3352 SBC / four-layer draft" solderMaskColor="green"
+  >
+    <AM3352 name="U1" {...sch("U1")} pcbX={0} pcbY={0} />
+    <W631GG6MB_12 name="U3" {...sch("U3")}
+      pcbX={ramPlacement.x} pcbY={ramPlacement.y} pcbRotation={ramPlacement.rotation} />
+    <TimingConstraints />
+    {sharedNets.map((net) => <trace key={net}
+      name={net === "DDR_RESETn" ? "DDR_RESETn_SIGNAL" : net}
+      routingPhaseIndex={phaseForNet(net)}
+      from={`U1.${cpuConnections.find((c) => c.net === net)!.pin}`}
+      to={`U3.${ramConnections.find((c) => c.net === net)!.pin}`} />)}
+    <ProcessorSupport />
+    <PdPower />
+    <AuxJstPower connector={{ pcbX: -40.8, pcbY: -36 }}
+      fuse={{ pcbX: -34.8, pcbY: -36 }}
+      reversePolarity={{ pcbX: -30.6, pcbY: -36 }}
+      selector={{ pcbX: -45, pcbY: -17.5, pcbRotation: 270 }} />
+    <UsbPorts />
+    <Display />
+    <Indicators />
+    <RoutingNets />
+    <RemainingRoutes />
+    <PowerPlanes />
+    <AutoroutingPlan />
+    <Schematic />
+    {[-47.5, 47.5].flatMap((x) => [-36, 36].map((y) =>
+      <Fragment key={`${x}_${y}`}><hole name={`H_${x}_${y}`} diameter={3.2} pcbX={x} pcbY={y} /></Fragment>))}
+    <silkscreentext text="microSD / UART / JTAG" pcbX={-7.5} pcbY={38.3} fontSize={0.7} />
+    <silkscreentext text="AM3352 SBC" pcbX={0} pcbY={-38} fontSize={1} />
+    <silkscreentext text="128 MiB DDR3" pcbX={0.38637033051562725} pcbY={-35.10352761804101} fontSize={0.8} />
+    <silkscreentext text="USB HOST 0" pcbX={16} pcbY={24.4} fontSize={0.7} />
+    <silkscreentext text="USB HOST 1" pcbX={36} pcbY={24.4} fontSize={0.7} />
+  </board>
 }

@@ -1,38 +1,18 @@
 import decouplerFootprints from "./decoupler-footprints.json";
 import type { TraceProps } from "@tscircuit/props";
-import { Fragment, createContext, useContext } from "react";
-import { escapeByTrace } from "./power-escapes";
+import { Fragment } from "react";
 import ballMap from "./am3352-ballmap.json";
+import { sch } from "../schematic/layout";
+import { phaseForNet } from "./autorouting-plan";
 
-export const PeripheralRoutingContext = createContext<boolean | number[]>(true);
+export { phaseForNet } from "./autorouting-plan";
+
 export function SignalTrace(props: TraceProps) {
-  const mode = useContext(PeripheralRoutingContext);
-  const enabled = Array.isArray(mode) ? mode.includes(props.routingPhaseIndex ?? -1) : mode;
-  const escape = process.env.SBC_SIGNAL_ROUTING === "1" ? undefined : props.name ? escapeByTrace.get(props.name) : undefined;
-  if (escape) {
-    const endpoint=(escape as {directPlaneEndpoint?: {x:number;y:number}|null}).directPlaneEndpoint;
-    const end=endpoint ? {...endpoint,layer:escape.layer as "top"|"bottom"} : `.${escape.via} > .${escape.layer}`;
-    return (
-      <trace
-        {...props}
-        pcbPath={[
-          escape.from,
-          ...((escape as typeof escape & {waypoints?: {x:number;y:number}[]}).waypoints ?? []).map(w => ({
-            ...w,
-            layer: escape.layer as "top" | "bottom",
-          })),
-          end,
-        ]}
-        routingPhaseIndex={undefined}
-      />
-    );
-  }
-  return (
-    <trace
-      {...props}
-      routingPhaseIndex={enabled ? props.routingPhaseIndex : undefined}
-    />
-  );
+  // All branches to a named net share its phase, including auxiliary power links.
+  const net = "to" in props && typeof props.to === "string" && props.to.startsWith("net.")
+    ? props.to.slice(4)
+    : undefined;
+  return <trace {...props} routingPhaseIndex={net ? phaseForNet(net) : props.routingPhaseIndex} />;
 }
 
 export const cpuPin = (signal: string) => {
@@ -40,12 +20,6 @@ export const cpuPin = (signal: string) => {
   if (!ball) throw new Error(`Unknown AM3352 signal ${signal}`);
   return `U1.${ball}`;
 };
-export const phaseForNet = (net: string) =>
-  net === "GND"
-    ? 7
-    : /^(VDD|V[13]|DDR_1V5|RTC_1V8|A3V3|VIN|SYS|PD_VBUS|PD_VDD|USB[01]_VBUS|HDMI_(TVDD|PVDD|5V))/.test(net)
-      ? 6
-      : 5;
 export function Link({
   refdes,
   pin,
@@ -100,6 +74,7 @@ export function Cap({
         pcbY={y}
         layer={layer}
         pcbRotation={rotation}
+        {...sch(name)}
       />
       {link(name, "pin1", net)}
       {link(name, "pin2", "GND")}
@@ -135,6 +110,7 @@ export function Res({
         pcbY={y}
         layer={layer}
         pcbRotation={rotation}
+        {...sch(name)}
       />
       {link(name, "pin1", a)}
       {link(name, "pin2", b)}

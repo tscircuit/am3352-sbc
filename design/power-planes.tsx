@@ -14,7 +14,7 @@ export function PowerPlanes() {
       clearance={0.13} boardEdgeMargin={0.4} />
     {(['inner1', 'inner2'] as const).map(layer => <Fragment key={layer}>
       <copperpour name={`GND_${layer.toUpperCase()}`} layer={layer}
-        connectsTo="net.GND" unbroken coveredWithSolderMask={true}
+        connectsTo="net.GND" coveredWithSolderMask={true}
         clearance={0.13} boardEdgeMargin={0.4} />
     </Fragment>)}
   </>;

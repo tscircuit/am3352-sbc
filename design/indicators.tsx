@@ -1,3 +1,5 @@
+import { buzzerModel } from "../models"
+import { sch } from "../schematic/layout";
 import { Fragment } from "react";
 import { AO3400A } from "../components/AO3400A";
 import { SN74AHCT1G125DBVR } from "../components/SN74AHCT1G125DBVR";
@@ -7,7 +9,7 @@ import { Cap, Res, link } from "./nets";
 export function Indicators() {
   return (
     <>
-      <SN74AHCT1G125DBVR name="U_RGB_BUF" pcbX={21} pcbY={7} />
+      <SN74AHCT1G125DBVR name="U_RGB_BUF" {...sch("U_RGB_BUF")} pcbX={21} pcbY={7} />
       {link("U_RGB_BUF", "pin1", "GND")}
       {link("U_RGB_BUF", "pin2", "SPI0_D0")}
       {link("U_RGB_BUF", "pin3", "GND")}
@@ -25,7 +27,7 @@ export function Indicators() {
       />
       {[0, 1].map((i) => (
         <Fragment key={i}>
-          <RgbLed name={`D_RGB${i}`} pcbX={31 + i * 7} pcbY={8} />
+          <RgbLed name={`D_RGB${i}`} noConnect={i === 1 ? ["DOU"] : undefined} {...sch(`D_RGB${i}`)} pcbX={31 + i * 7} pcbY={8} />
           {link(`D_RGB${i}`, "VDD", "VIN_5V")}
           {link(`D_RGB${i}`, "GND", "GND")}
           {link(`D_RGB${i}`, "DIN", i ? "RGB_CHAIN" : "RGB_DIN")}
@@ -34,8 +36,9 @@ export function Indicators() {
         </Fragment>
       ))}
       <chip
-        name="BZ1"
+        name="BZ1" {...sch("BZ1")}
         manufacturerPartNumber="PS1240P02BT"
+        cadModel={buzzerModel}
         pinLabels={{ pin1: "POS", pin2: "NEG" }}
         pcbX={-38}
         pcbY={-27}
@@ -60,7 +63,7 @@ export function Indicators() {
           </footprint>
         }
       />
-      <AO3400A name="Q_BUZZ" pcbX={-28} pcbY={-28} />
+      <AO3400A name="Q_BUZZ" {...sch("Q_BUZZ")} pcbX={-28} pcbY={-28} />
       {link("BZ1", "POS", "V3V3")}
       {link("BZ1", "NEG", "BUZZ_DRAIN")}
       {link("Q_BUZZ", "D", "BUZZ_DRAIN")}

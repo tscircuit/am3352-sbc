@@ -1,45 +1,50 @@
-name: Check partial routing
+name: Check native board
 on:
   pull_request:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      full_board_signoff:
-        description: Build and audit the complete routed board
-        required: false
-        default: false
-        type: boolean
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 540
+    env:
+      BUN_JSC_forceRAMSize: "8589934592"
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.2
+          bun-version: 1.4.0
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
-      - run: bun scripts/check-ddr-vendor.ts
-      - run: bun run check:autorouter-vendor
-      - run: bun run check:fanout-vendor
-      - run: bun run test:routing
+      - run: bun run build:site
+      - run: bun run check:routing
+      - run: bun run check:vias
+      - run: bun run check:models
       - uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
-          name: pcb-snapshot-diffs
-          path: tests/__snapshots__/*.diff.png
+          name: native-board
+          path: |
+            .tscircuit/generated/index.circuit.json
+            dist/
           if-no-files-found: ignore
-      - run: bun run build:placement
-  full-board-signoff:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_board_signoff }}
-    needs: check
+  models:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BUN_JSC_forceRAMSize: "8589934592"
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.4.2
+          bun-version: 1.4.0
       - run: bun install --frozen-lockfile
-      - run: bun run build --no-images
-      - run: bun run audit:routed-board output/board.circuit.json
+      - run: bun run build:model-fixture
+      - run: bun run check:models:fixture
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-model-coverage
+          path: .tscircuit/model-check-report.json
+          if-no-files-found: ignore

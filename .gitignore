@@ -1,7 +1,8 @@
-node_modules/
-.tsci/
-.cache/
-work/
+/node_modules
+dist/
+.tscircuit/
 
-# Visual mismatch diagnostics are uploaded by CI, not committed.
-tests/__snapshots__/*.diff.png
+/index.circuit.json
+
+*.log
+.config/

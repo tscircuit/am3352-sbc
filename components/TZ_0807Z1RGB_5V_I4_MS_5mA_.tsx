@@ -1,3 +1,4 @@
+import { rgbLedModel } from "../models"
 import type { ChipProps } from "@tscircuit/props"
 
 const pinLabels = {
@@ -23,6 +24,7 @@ export const TZ_0807Z1RGB_5V_I4_MS_5mA_ = (props: ChipProps<typeof pinLabels>) =
   ]
 }}
       manufacturerPartNumber="TZ-0807Z1RGB-5V-I4-MS(5mA)"
+      cadModel={rgbLedModel}
       footprint={<footprint>
         <smtpad portHints={["pin4"]} pcbX="-0.962914mm" pcbY="-0.55499mm" width="1.0750042mm" height="0.8999982mm" shape="rect" />
 <smtpad portHints={["pin3"]} pcbX="-0.962914mm" pcbY="0.55499mm" width="1.0750042mm" height="0.8999982mm" shape="rect" />

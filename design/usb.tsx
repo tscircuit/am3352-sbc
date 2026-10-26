@@ -1,3 +1,4 @@
+import { sch } from "../schematic/layout";
 import { KS227M016E07RR0VH2FP0 as UsbBulkCap } from "../components/bulk-capacitor";
 import { Fragment } from "react";
 import { UsbA } from "../components/usb-a";
@@ -9,7 +10,7 @@ export function UsbPorts() {
     <>
       {/* TI SLVS514P Table 5-2: active-high, independently limited host power. */}
       <chip
-        name="U_USB_PWR"
+        name="U_USB_PWR" {...sch("U_USB_PWR")}
         manufacturerPartNumber="TPS2052BDR"
         footprint="soic8"
         pcbX={24}
@@ -31,12 +32,12 @@ export function UsbPorts() {
       {[0, 1].map((i) => (
         <Fragment key={i}>
           <UsbA
-            name={`J_USB${i}`}
+            name={`J_USB${i}`} {...sch(`J_USB${i}`)} allowOffBoard
             pcbX={16 + i * 20}
             pcbY={27}
             pcbRotation={180}
           />
-          <USBLC6_2SC6 name={`U_USB_ESD${i}`} pcbX={16 + i * 20} pcbY={22} />
+          <USBLC6_2SC6 name={`U_USB_ESD${i}`} {...sch(`U_USB_ESD${i}`)} pcbX={16 + i * 20} pcbY={22} />
           {link(`J_USB${i}`, "VBUS", `USB${i}_VBUS`)}
           {link(`J_USB${i}`, "GND", "GND")}
           {link(`J_USB${i}`, "SHIELD", "GND")}
@@ -61,7 +62,7 @@ export function UsbPorts() {
             y={12}
           />
           <UsbBulkCap
-            name={`C_USB_BULK${i}`}
+            name={`C_USB_BULK${i}`} {...sch(`C_USB_BULK${i}`)}
             pcbX={i ? 42 : 9}
             pcbY={i ? 16 : 19}
           />
@@ -99,14 +100,16 @@ export function UsbPorts() {
             </Fragment>
           ))}
           {["CPU", "PORT"].map((segment) => (
-            <differentialpair
-              name={`USB${i}_${segment}`}
-              positiveConnection={`USB${i}_DP_${segment}`}
-              negativeConnection={`USB${i}_DM_${segment}`}
-              targetDifferentialImpedance="90ohm"
-              maxLengthSkew={0.15}
-              pcbTraceGap={0.1}
-            />
+            <Fragment key={segment}>
+              <differentialpair
+                name={`USB${i}_${segment}`}
+                positiveConnection={`USB${i}_DP_${segment}`}
+                negativeConnection={`USB${i}_DM_${segment}`}
+                targetDifferentialImpedance="90ohm"
+                maxLengthSkew={0.15}
+                pcbTraceGap={0.1}
+              />
+            </Fragment>
           ))}
         </Fragment>
       ))}
