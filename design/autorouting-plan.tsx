@@ -1,5 +1,5 @@
 import { withAutorouterCache } from "@tscircuit/core"
-import {createSupportNetTreeAutorouter} from "../routing/support-net-tree"
+import {createSupportNetTreeAutorouter, createPreDdrSupportAutorouter} from "../routing/support-net-tree"
 import {createEarlyLcdEscapes} from "../routing/early-lcd-escapes"
 import { createPeripheralAutorouter } from "../routing/peripheral-autorouter"
 import { Fragment } from "react"
@@ -57,7 +57,7 @@ const byte1Nets = new Set(ddrByteSignals(1))
 const byte0Nets = new Set(ddrByteSignals(0))
 
 export function phaseForNet(net: string): number {
-  if (["DDR_VREF", "DDR_VTP", "DDR_ZQ", "CAP_VDD_RTC", "CAP_VDD_SRAM_CORE", "CAP_VDD_SRAM_MPU", "CAP_VBB_MPU", "DDR_RESETn", "DDR_RESETn_SIGNAL"].includes(net)) return 0.75
+  if (["DDR_VTP", "DDR_ZQ"].includes(net)) return 0.75
   if(["LCD_DATA10_SIGNAL","LCD_DATA11_SIGNAL","LCD_VSYNC"].includes(net))return 0.5
   if (net === "GND") return 7
   if (net === "DDR_RESETn" || net === "DDR_RESETn_SIGNAL") return 1.9
@@ -73,7 +73,8 @@ export function phaseForNet(net: string): number {
 
 const earlyEscapeNets = new Set(["DDR_RESETn", "DDR_VREF", "DDR_VTP", "DDR_ZQ", "CAP_VDD_RTC", "CAP_VDD_SRAM_CORE", "CAP_VDD_SRAM_MPU", "CAP_VBB_MPU"])
 const earlyEscapePorts = [...cpuConnections.filter(c => earlyEscapeNets.has(c.net)).map(c => `.U1 > .${c.pin}`), ...ramConnections.filter(c => c.net && earlyEscapeNets.has(c.net)).map(c => `.U3 > .${c.pin}`)]
-const cachedSupportRouter = withAutorouterCache(createSupportNetTreeAutorouter, "am3352-support-four-layer-f58ea6ba248b8b4a-v1")
+const cachedSupportRouter = withAutorouterCache(createSupportNetTreeAutorouter, "am3352-support-four-layer-2b3ad227cabdb178-v1")
+const cachedPreDdrSupportRouter = withAutorouterCache(createPreDdrSupportAutorouter, "am3352-pre-ddr-support-2b3ad227cabdb178-v1")
 const cachedDdrRouter = withAutorouterCache(createSharedDdrAutorouter, "am3352-ddr-after-support-9477caac48d025f2-v1", {
   followUpAutorouter: { preset: "bus_lanes", algorithmFn: cachedSupportRouter },
 })
@@ -87,8 +88,8 @@ const cachedLateLcdEscapes=withAutorouterCache(createEarlyLcdEscapes,"am3352-lat
 export function AutoroutingPlan() {
   return <>
     <autoroutingphase name="EARLY_LCD_BGA_ESCAPES" phaseIndex={0.5} connections={["trace.LCD_DATA10_SIGNAL","trace.LCD_DATA11_SIGNAL","trace.LCD_VSYNC"]} autorouter="fanout" algorithmFn={cachedEarlyLcdEscapes} />
-    <autoroutingphase name="COMPLETE_DDR_SUPPORT_BEFORE_CRITICAL" phaseIndex={0.75} connections={["trace.DDR_RESETn_SIGNAL", ...[...earlyEscapeNets].map(net => "net."+net)]} autorouter="bus_lanes" algorithmFn={cachedSupportRouter} />
-    <autoroutingphase name="DDR_CRITICAL_THEN_SUPPORT" phaseIndex={1} autorouter="bus_lanes" connections={ddrTimingGroups.flatMap(group => group.signals).map(name => "trace."+name)} algorithmFn={cachedDdrRouter} />
+    <autoroutingphase name="PRESERVE_VTP_ZQ_ACCESS" phaseIndex={0.75} connections={["net.DDR_VTP", "net.DDR_ZQ"]} autorouter="bus_lanes" algorithmFn={cachedPreDdrSupportRouter} />
+    <autoroutingphase name="DDR_CRITICAL_THEN_SUPPORT" phaseIndex={1} autorouter="bus_lanes" connections={[...ddrTimingGroups.flatMap(group => group.signals).map(name => "trace."+name), "trace.DDR_RESETn_SIGNAL", ...[...earlyEscapeNets].filter(net => !["DDR_VTP", "DDR_ZQ"].includes(net)).map(net => "net."+net)]} algorithmFn={cachedDdrRouter} />
     <autoroutingphase name="DDR_RESET" phaseIndex={1.9} autorouter="bus_lanes" algorithmFn={cachedSupportRouter} />
     {earlyPhases.map(phase => <Fragment key={phase.name}>
       <autoroutingphase name={`ROUTE_${phase.name}`} phaseIndex={phase.index} autorouter="bus_lanes" algorithmFn={cachedSupportRouter} />

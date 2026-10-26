@@ -6,6 +6,7 @@ import { validateRoutedCopperDrc } from '../core-single/node_modules/@tscircuit/
 import { withFixedConnectionDefinitions } from '../infer-fixed-connections'
 import { connectivity, viaChecks } from '../routing-audit-helpers'
 import { routeHasSelfShort } from '../route-self-short-check'
+import { generateFeasibleSupportFanouts } from './feasible-support-fanouts'
 
 const layers = ['top', 'inner1', 'inner2', 'bottom']
 
@@ -101,4 +102,9 @@ export async function createSupportNetTreeAutorouter(native:any){
   const iterator=solve(),emit=(type:string,e:any)=>{for(const fn of listeners.get(type)??[])fn({type,...e})}
   const router={input:native,isRouting:false,on(type:string,fn:any){listeners.set(type,[...listeners.get(type)??[],fn])},start(){router.isRouting=true;const tick=()=>{if(stopped)return;try{let n:any;for(let i=0;i<10;i++){n=iterator.next();if(n.done)break}emit('progress',{solverName:'NativeFourLayerSupport',phase:current});if(n.done){router.isRouting=false;emit('complete',{traces:result})}else timer=setTimeout(tick,0)}catch(error){router.isRouting=false;emit('error',{error})}};timer=setTimeout(tick,0)},stop(){stopped=true;router.isRouting=false;clearTimeout(timer);iterator.return()},getOutputSimpleRouteJson(){if(!result)throw Error('Native support tree incomplete');return{...native,traces:result}}}
   return router
+}
+
+export async function createPreDdrSupportAutorouter(native:any){
+  const fans=generateFeasibleSupportFanouts({...withFixedConnectionDefinitions(native),connections:native.connections})
+  return createSupportNetTreeAutorouter({...native,traces:[...native.traces,...fans]})
 }

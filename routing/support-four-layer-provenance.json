@@ -1,7 +1,7 @@
 {
   "source": "controllers/support-four-layer.ts",
-  "sourceSha256": "9c4a44a97d76fbab7214ad3439238fcb773e24c55b4596236951022f20d58225",
-  "bundleSha256": "f58ea6ba248b8b4a365c64465c027296b78f7b96b2beef4fc8b5e70d2cd68b29",
+  "sourceSha256": "330be385ab8721670ea4b4710b902de22424b9eb843b77bdd9ff1f723b04b92c",
+  "bundleSha256": "2b3ad227cabdb1789b7a21d422173dbf4970d345e60f52716c0d84f5600bd7b0",
   "input": "Native Core SimpleRouteJson for each current phase",
   "manualRouting": false,
   "circuitJsonPostprocessing": false,
@@ -14,5 +14,6 @@
   "stepMm": 0.05,
   "viaHoleMm": 0.3,
   "viaLandMm": 0.5,
-  "strictCandidateCopperAudit": true
+  "strictCandidateCopperAudit": true,
+  "preDdrPhase": "Only VTP and ZQ, native dogbone site reservation followed by four-layer tree routing. All other support trees follow DDR."
 }

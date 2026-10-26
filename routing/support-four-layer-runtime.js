@@ -4659,6 +4659,378 @@ function validateRoutedCopperDrc(params) {
     issues
   };
 }
+// core-single/node_modules/@tscircuit/fanout-solver/lib/match-component-dogbone-via-sites.ts
+var EPSILON3 = 0.000000001;
+var DEFAULT_MAXIMUM_SEARCH_STATES = 1e5;
+function assertGeometryRules(rules) {
+  for (const [name, value] of [
+    ["viaDiameter", rules.viaDiameter],
+    ["traceWidth", rules.traceWidth]
+  ]) {
+    if (!Number.isFinite(value) || value <= 0) {
+      throw new Error(`FanoutSolver: dogbone ${name} must be a positive finite number, received ${value}`);
+    }
+  }
+  if (!Number.isFinite(rules.clearance) || rules.clearance < 0) {
+    throw new Error(`FanoutSolver: dogbone clearance must be a non-negative finite number, received ${rules.clearance}`);
+  }
+  if (rules.viaHoleDiameter !== undefined && (!Number.isFinite(rules.viaHoleDiameter) || rules.viaHoleDiameter <= 0)) {
+    throw new Error(`FanoutSolver: dogbone viaHoleDiameter must be a positive finite number, received ${rules.viaHoleDiameter}`);
+  }
+  if (rules.holeToHoleClearance !== undefined && (!Number.isFinite(rules.holeToHoleClearance) || rules.holeToHoleClearance < 0)) {
+    throw new Error(`FanoutSolver: dogbone holeToHoleClearance must be a non-negative finite number, received ${rules.holeToHoleClearance}`);
+  }
+  if (rules.holeToHoleClearance !== undefined && rules.viaHoleDiameter === undefined) {
+    throw new Error("FanoutSolver: dogbone holeToHoleClearance requires viaHoleDiameter");
+  }
+  const maximumSearchStates = rules.maximumSearchStates ?? DEFAULT_MAXIMUM_SEARCH_STATES;
+  if (!Number.isInteger(maximumSearchStates) || maximumSearchStates < 1) {
+    throw new Error(`FanoutSolver: dogbone maximumSearchStates must be a positive integer, received ${maximumSearchStates}`);
+  }
+  return maximumSearchStates;
+}
+function uniqueSortedCoordinates(values) {
+  const result = [];
+  for (const value of values.toSorted((first, second) => first - second)) {
+    if (!Number.isFinite(value))
+      continue;
+    if (result.length === 0 || Math.abs(result.at(-1) - value) > EPSILON3) {
+      result.push(value);
+    }
+  }
+  return result;
+}
+function getComponentMatchingInputs(preparedBuses) {
+  const byComponent = new Map;
+  const componentByConnectionIndex = new Map;
+  const obstacleSetByComponentId = new Map;
+  for (const bus of preparedBuses) {
+    let component = byComponent.get(bus.componentId);
+    if (!component) {
+      component = {
+        componentId: bus.componentId,
+        connections: [],
+        obstacles: [],
+        xCoordinates: [],
+        yCoordinates: [],
+        pitchX: Number.POSITIVE_INFINITY,
+        pitchY: Number.POSITIVE_INFINITY
+      };
+      byComponent.set(bus.componentId, component);
+      obstacleSetByComponentId.set(bus.componentId, new Set);
+    }
+    component.xCoordinates.push(...bus.xCoordinates);
+    component.yCoordinates.push(...bus.yCoordinates);
+    if (Number.isFinite(bus.pitchX) && bus.pitchX > EPSILON3) {
+      component.pitchX = Math.min(component.pitchX, bus.pitchX);
+    }
+    if (Number.isFinite(bus.pitchY) && bus.pitchY > EPSILON3) {
+      component.pitchY = Math.min(component.pitchY, bus.pitchY);
+    }
+    const obstacleSet = obstacleSetByComponentId.get(bus.componentId);
+    for (const obstacle of bus.componentObstacles) {
+      if (!obstacleSet.has(obstacle)) {
+        obstacleSet.add(obstacle);
+        component.obstacles.push(obstacle);
+      }
+    }
+    for (const preparedConnection of bus.connections) {
+      const existingComponent = componentByConnectionIndex.get(preparedConnection.connectionIndex);
+      if (existingComponent !== undefined) {
+        if (existingComponent !== bus.componentId) {
+          throw new Error(`FanoutSolver: connection index ${preparedConnection.connectionIndex} belongs to multiple components`);
+        }
+        continue;
+      }
+      componentByConnectionIndex.set(preparedConnection.connectionIndex, bus.componentId);
+      component.connections.push({
+        preparedConnection,
+        busId: bus.busId,
+        direction: bus.direction,
+        terminationType: bus.termination.type
+      });
+    }
+  }
+  return [...byComponent.values()].map((component) => ({
+    ...component,
+    connections: component.connections.toSorted((first, second) => first.preparedConnection.connectionIndex - second.preparedConnection.connectionIndex),
+    xCoordinates: uniqueSortedCoordinates(component.xCoordinates),
+    yCoordinates: uniqueSortedCoordinates(component.yCoordinates)
+  })).toSorted((first, second) => first.componentId.localeCompare(second.componentId));
+}
+function getInterstitialCoordinates(params) {
+  const { coordinates, pitch } = params;
+  if (coordinates.length === 0 || !Number.isFinite(pitch) || pitch <= EPSILON3) {
+    return [];
+  }
+  const interstitialCoordinates = [coordinates[0] - pitch / 2];
+  for (let index = 1;index < coordinates.length; index++) {
+    interstitialCoordinates.push((coordinates[index - 1] + coordinates[index]) / 2);
+  }
+  interstitialCoordinates.push(coordinates.at(-1) + pitch / 2);
+  return uniqueSortedCoordinates(interstitialCoordinates);
+}
+function getAdjacentInterstitialCoordinates(params) {
+  const { sourceCoordinate, coordinates, pitch } = params;
+  const interstitialCoordinates = getInterstitialCoordinates({
+    coordinates,
+    pitch
+  });
+  const before = interstitialCoordinates.filter((coordinate) => coordinate < sourceCoordinate - EPSILON3).at(-1);
+  const after = interstitialCoordinates.find((coordinate) => coordinate > sourceCoordinate + EPSILON3);
+  return [before, after].filter((coordinate) => coordinate !== undefined);
+}
+function directSegmentIsStraightOr45(start, end) {
+  const absoluteX = Math.abs(end.x - start.x);
+  const absoluteY = Math.abs(end.y - start.y);
+  return absoluteX <= EPSILON3 || absoluteY <= EPSILON3 || Math.abs(absoluteX - absoluteY) <= EPSILON3;
+}
+function getOutwardRank(params) {
+  const { source, site, direction } = params;
+  const outwardDisplacement = direction === "right" ? site.x - source.x : direction === "left" ? source.x - site.x : direction === "up" ? site.y - source.y : source.y - site.y;
+  return outwardDisplacement > EPSILON3 ? 0 : Math.abs(outwardDisplacement) <= EPSILON3 ? 1 : 2;
+}
+function viaSiteClearsObstacles(params) {
+  const { point, obstacles, viaDiameter, clearance } = params;
+  const requiredClearance = viaDiameter / 2 + clearance;
+  return obstacles.every((obstacle) => distancePointToObstacle(point, obstacle) >= requiredClearance - EPSILON3);
+}
+function sourceSegmentClearsOtherObstacles(params) {
+  const { segment, sourceObstacle, obstacles, clearance } = params;
+  const requiredClearance = segment.width / 2 + clearance;
+  return obstacles.every((obstacle) => obstacle === sourceObstacle || !obstacle.layers.includes(segment.layer) || distanceSegmentToObstacle(segment, obstacle) >= requiredClearance - EPSILON3);
+}
+function getConnectionCandidates(params) {
+  const { connection, component, rules } = params;
+  const { preparedConnection, direction } = connection;
+  const obstacles = rules.additionalObstacles ? [...new Set([...component.obstacles, ...rules.additionalObstacles])] : component.obstacles;
+  const source = {
+    x: preparedConnection.sourcePoint.x,
+    y: preparedConnection.sourcePoint.y
+  };
+  const adjacentX = getAdjacentInterstitialCoordinates({
+    sourceCoordinate: source.x,
+    coordinates: component.xCoordinates,
+    pitch: component.pitchX
+  });
+  const adjacentY = getAdjacentInterstitialCoordinates({
+    sourceCoordinate: source.y,
+    coordinates: component.yCoordinates,
+    pitch: component.pitchY
+  });
+  const rawPoints = [
+    ...adjacentX.map((x) => ({ x, y: source.y })),
+    ...adjacentY.map((y) => ({ x: source.x, y })),
+    ...adjacentX.flatMap((x) => adjacentY.map((y) => ({ x, y })))
+  ];
+  const uniquePoints = [];
+  for (const point of rawPoints) {
+    if (!uniquePoints.some((candidate) => distance2(candidate, point) <= EPSILON3)) {
+      uniquePoints.push(point);
+    }
+  }
+  const fixedViaPoint = rules.fixedViaPointsByConnectionIndex?.get(preparedConnection.connectionIndex);
+  const candidatePoints = fixedViaPoint ? [fixedViaPoint] : uniquePoints;
+  const candidates = [];
+  for (const point of candidatePoints) {
+    if (connection.terminationType === "plane" && !directSegmentIsStraightOr45(source, point)) {
+      continue;
+    }
+    if (!viaSiteClearsObstacles({
+      point,
+      obstacles,
+      viaDiameter: rules.viaDiameter,
+      clearance: rules.clearance
+    })) {
+      continue;
+    }
+    const sourceSegment = {
+      start: source,
+      end: point,
+      width: rules.traceWidth,
+      layer: preparedConnection.sourceLayer
+    };
+    if (!sourceSegmentClearsOtherObstacles({
+      segment: sourceSegment,
+      sourceObstacle: preparedConnection.sourceObstacle,
+      obstacles,
+      clearance: rules.clearance
+    })) {
+      continue;
+    }
+    const candidateClearsRoutedCopper = (rules.blockingSegments ?? []).every((blocker) => {
+      if (blocker.connectionIndex === preparedConnection.connectionIndex) {
+        return true;
+      }
+      if (rules.canShareCopper?.(preparedConnection.connectionIndex, blocker.connectionIndex)) {
+        return true;
+      }
+      const viaToTraceClearance = rules.viaDiameter / 2 + blocker.segment.width / 2 + rules.clearance;
+      if (distancePointToSegment(point, blocker.segment.start, blocker.segment.end) < viaToTraceClearance - EPSILON3) {
+        return false;
+      }
+      return blocker.segment.layer !== sourceSegment.layer || segmentsAreClear(sourceSegment, blocker.segment, rules.clearance);
+    });
+    if (!candidateClearsRoutedCopper)
+      continue;
+    const candidateClearsRoutedVias = (rules.blockingVias ?? []).every((blocker) => {
+      if (blocker.connectionIndex === preparedConnection.connectionIndex) {
+        return true;
+      }
+      if (distance2(point, blocker.center) < (rules.viaDiameter + blocker.diameter) / 2 + rules.clearance - EPSILON3) {
+        return false;
+      }
+      if (blocker.spanLayers.includes(sourceSegment.layer) && distancePointToSegment(blocker.center, sourceSegment.start, sourceSegment.end) < blocker.diameter / 2 + sourceSegment.width / 2 + rules.clearance - EPSILON3) {
+        return false;
+      }
+      return true;
+    });
+    if (!candidateClearsRoutedVias)
+      continue;
+    candidates.push({
+      connectionIndex: preparedConnection.connectionIndex,
+      point,
+      sourceSegment,
+      outwardRank: getOutwardRank({ source, site: point, direction })
+    });
+  }
+  const perpendicularCoordinates = direction === "left" || direction === "right" ? component.yCoordinates : component.xCoordinates;
+  const sourcePerpendicularCoordinate = direction === "left" || direction === "right" ? source.y : source.x;
+  const perpendicularGridIndex = perpendicularCoordinates.findIndex((coordinate) => Math.abs(coordinate - sourcePerpendicularCoordinate) <= EPSILON3);
+  const planeCheckerboardSide = perpendicularGridIndex >= 0 ? perpendicularGridIndex % 2 === 0 ? 1 : -1 : undefined;
+  const preferredPerpendicularSide = connection.terminationType === "boundary" ? rules.preferredBoundaryPerpendicularSideByBusId?.get(connection.busId) : rules.preferPlaneCheckerboardSites && connection.terminationType === "plane" && (direction === "left" || direction === "right") ? planeCheckerboardSide : undefined;
+  const preferOutward = connection.terminationType === "boundary" ? rules.preferBoundaryOutwardByBusId?.get(connection.busId) ?? true : true;
+  const preferredViaPoint = rules.preferredViaPointsByConnectionIndex?.get(preparedConnection.connectionIndex);
+  const getPerpendicularPreferenceRank = (candidate) => {
+    if (preferredPerpendicularSide === undefined)
+      return 0;
+    const displacement = direction === "left" || direction === "right" ? candidate.point.y - source.y : candidate.point.x - source.x;
+    return displacement * preferredPerpendicularSide > EPSILON3 ? 0 : Math.abs(displacement) <= EPSILON3 ? 1 : 2;
+  };
+  return candidates.toSorted((first, second) => (preferredViaPoint ? Number(distance2(first.point, preferredViaPoint) > EPSILON3) - Number(distance2(second.point, preferredViaPoint) > EPSILON3) : 0) || (preferOutward ? first.outwardRank - second.outwardRank : second.outwardRank - first.outwardRank) || getPerpendicularPreferenceRank(first) - getPerpendicularPreferenceRank(second) || distance2(source, first.point) - distance2(source, second.point) || first.point.x - second.point.x || first.point.y - second.point.y);
+}
+function candidatesAreMutuallyClear(params) {
+  const { first, second, rules } = params;
+  const canShareCopper = rules.canShareCopper?.(first.connectionIndex, second.connectionIndex) ?? false;
+  const requiredHoleSeparation = rules.viaHoleDiameter ? rules.viaHoleDiameter + (rules.holeToHoleClearance ?? rules.clearance) : 0;
+  const requiredViaSeparation = canShareCopper ? requiredHoleSeparation : Math.max(rules.viaDiameter + rules.clearance, requiredHoleSeparation);
+  if (distance2(first.point, second.point) < requiredViaSeparation - EPSILON3) {
+    return false;
+  }
+  const requiredViaToTraceClearance = rules.viaDiameter / 2 + rules.traceWidth / 2 + rules.clearance;
+  if (!canShareCopper) {
+    if (distancePointToSegment(first.point, second.sourceSegment.start, second.sourceSegment.end) < requiredViaToTraceClearance - EPSILON3 || distancePointToSegment(second.point, first.sourceSegment.start, first.sourceSegment.end) < requiredViaToTraceClearance - EPSILON3) {
+      return false;
+    }
+  }
+  if (canShareCopper)
+    return true;
+  return segmentsAreClear(first.sourceSegment, second.sourceSegment, rules.clearance);
+}
+function matchComponent(params) {
+  const { component, rules, consumeSearchState } = params;
+  const entries = component.connections.map((connection) => ({
+    connection,
+    candidates: getConnectionCandidates({ connection, component, rules })
+  }));
+  if (entries.some((entry) => entry.candidates.length === 0))
+    return null;
+  const compatibilityCache = new Map;
+  const candidatesAreCompatible = (first, second) => {
+    const cached = compatibilityCache.get(first)?.get(second);
+    if (cached !== undefined)
+      return cached;
+    const compatible = candidatesAreMutuallyClear({ first, second, rules });
+    const firstCache = compatibilityCache.get(first) ?? new Map;
+    firstCache.set(second, compatible);
+    compatibilityCache.set(first, firstCache);
+    const secondCache = compatibilityCache.get(second) ?? new Map;
+    secondCache.set(first, compatible);
+    compatibilityCache.set(second, secondCache);
+    return compatible;
+  };
+  const forcedCandidates = entries.flatMap((entry) => entry.candidates.length === 1 ? [entry.candidates[0]] : []);
+  for (let candidateIndex = 0;candidateIndex < forcedCandidates.length; candidateIndex++) {
+    const candidate = forcedCandidates[candidateIndex];
+    for (let previousIndex = 0;previousIndex < candidateIndex; previousIndex++) {
+      if (!candidatesAreCompatible(candidate, forcedCandidates[previousIndex])) {
+        return null;
+      }
+    }
+  }
+  const assignedCandidates = new Map(forcedCandidates.map((candidate) => [candidate.connectionIndex, candidate]));
+  const remaining = new Set(entries.flatMap((entry) => entry.candidates.length > 1 ? [entry.connection.preparedConnection.connectionIndex] : []));
+  const entryByConnectionIndex = new Map(entries.map((entry) => [
+    entry.connection.preparedConnection.connectionIndex,
+    entry
+  ]));
+  if (remaining.size === 0) {
+    return new Map([...assignedCandidates.entries()].map(([connectionIndex, candidate]) => [
+      connectionIndex,
+      { ...candidate.point }
+    ]));
+  }
+  const getViableCandidates = (entry) => entry.candidates.filter((candidate) => [...assignedCandidates.values()].every((assignedCandidate) => candidatesAreCompatible(candidate, assignedCandidate)));
+  const augmentMatching = () => {
+    if (!consumeSearchState())
+      return false;
+    if (remaining.size === 0)
+      return true;
+    let selectedEntry;
+    let selectedCandidates = [];
+    for (const connectionIndex2 of [...remaining].toSorted((first, second) => first - second)) {
+      const entry = entryByConnectionIndex.get(connectionIndex2);
+      const viableCandidates = getViableCandidates(entry);
+      if (viableCandidates.length === 0)
+        return false;
+      if (!selectedEntry || viableCandidates.length < selectedCandidates.length || viableCandidates.length === selectedCandidates.length && connectionIndex2 < selectedEntry.connection.preparedConnection.connectionIndex) {
+        selectedEntry = entry;
+        selectedCandidates = viableCandidates;
+      }
+    }
+    const connectionIndex = selectedEntry.connection.preparedConnection.connectionIndex;
+    remaining.delete(connectionIndex);
+    for (const candidate of selectedCandidates) {
+      assignedCandidates.set(connectionIndex, candidate);
+      if (augmentMatching())
+        return true;
+      assignedCandidates.delete(connectionIndex);
+    }
+    remaining.add(connectionIndex);
+    return false;
+  };
+  if (!augmentMatching())
+    return null;
+  return new Map([...assignedCandidates.entries()].toSorted(([first], [second]) => first - second).map(([connectionIndex, candidate]) => [
+    connectionIndex,
+    { ...candidate.point }
+  ]));
+}
+function matchComponentDogboneViaSites(preparedBuses, rules) {
+  const maximumSearchStates = assertGeometryRules(rules);
+  if (preparedBuses.length === 0)
+    return new Map;
+  let consumedSearchStates = 0;
+  const consumeSearchState = () => {
+    consumedSearchStates++;
+    return consumedSearchStates <= maximumSearchStates;
+  };
+  const result = new Map;
+  for (const component of getComponentMatchingInputs(preparedBuses)) {
+    const componentResult = matchComponent({
+      component,
+      rules,
+      consumeSearchState
+    });
+    if (!componentResult)
+      return null;
+    for (const [connectionIndex, point] of componentResult) {
+      result.set(connectionIndex, point);
+    }
+  }
+  return result;
+}
+
 // core-single/node_modules/@tscircuit/fanout-solver/node_modules/@tscircuit/capacity-autorouter/dist/index.js
 var import_object_hash = __toESM(require_object_hash(), 1);
 var import_object_hash2 = __toESM(require_object_hash(), 1);
@@ -35702,6 +36074,9423 @@ function routeHasSelfShort(trace, layerCount = 4) {
   const source = trace.source_trace_id ?? trace.connection_name ?? "candidate", route = trace.route.map((p2) => p2.route_type === "via" ? { ...p2, outer_diameter: p2.via_diameter, hole_diameter: p2.via_hole_diameter } : p2), vias = route.flatMap((p2, i2) => p2.route_type === "via" ? [{ type: "pcb_via", pcb_via_id: "check_via_" + i2, pcb_trace_id: trace.pcb_trace_id, source_trace_id: source, x: p2.x, y: p2.y, outer_diameter: p2.outer_diameter, hole_diameter: p2.hole_diameter, layers: p2.layers }] : []);
   return checkPcbTraceSelfShorts([{ type: "pcb_board", pcb_board_id: "check_board", num_layers: layerCount }, { type: "source_bus", source_bus_id: "candidate_check", max_length_skew: 0, source_trace_ids: [source] }, { ...trace, source_trace_id: source, route }, ...vias]).length > 0;
 }
+// core-single/node_modules/graphics-debug/dist/chunk-WDTSQY35.js
+var import_svgson3 = __toESM(require_svgson_umd(), 1);
+
+// core-single/node_modules/@tscircuit/solver-utils/dist/index.js
+var BaseSolver3 = class {
+  MAX_ITERATIONS = 1e5;
+  solved = false;
+  failed = false;
+  iterations = 0;
+  progress = 0;
+  error = null;
+  activeSubSolver;
+  failedSubSolvers;
+  timeToSolve;
+  stats = {};
+  _setupDone = false;
+  getSolverName() {
+    return this.constructor.name;
+  }
+  setup() {
+    if (this._setupDone)
+      return;
+    this._setup();
+    this._setupDone = true;
+  }
+  _setup() {}
+  step() {
+    if (!this._setupDone) {
+      this.setup();
+    }
+    if (this.solved)
+      return;
+    if (this.failed)
+      return;
+    this.iterations++;
+    try {
+      this._step();
+    } catch (e2) {
+      this.error = `${this.getSolverName()} error: ${e2}`;
+      this.failed = true;
+      throw e2;
+    }
+    if (!this.solved && this.iterations >= this.MAX_ITERATIONS) {
+      this.tryFinalAcceptance();
+    }
+    if (!this.solved && this.iterations >= this.MAX_ITERATIONS) {
+      this.error = `${this.getSolverName()} ran out of iterations`;
+      this.failed = true;
+    }
+    if ("computeProgress" in this) {
+      this.progress = this.computeProgress();
+    }
+  }
+  _step() {}
+  getConstructorParams() {
+    throw new Error("getConstructorParams not implemented");
+  }
+  getOutput() {
+    return null;
+  }
+  solve() {
+    const startTime = Date.now();
+    while (!this.solved && !this.failed) {
+      this.step();
+    }
+    const endTime = Date.now();
+    this.timeToSolve = endTime - startTime;
+  }
+  visualize() {
+    return {
+      lines: [],
+      points: [],
+      rects: [],
+      circles: []
+    };
+  }
+  tryFinalAcceptance() {}
+  preview() {
+    return {
+      lines: [],
+      points: [],
+      rects: [],
+      circles: []
+    };
+  }
+};
+
+// core-single/node_modules/format-si-unit/dist/index.js
+var SI_PREFIX_VALUES2 = /* @__PURE__ */ new Map([
+  ["T", 1000000000000],
+  ["G", 1e9],
+  ["M", 1e6],
+  ["K", 1000],
+  ["k", 1000],
+  ["", 1],
+  ["m", 0.001],
+  ["µ", 0.000001],
+  ["μ", 0.000001],
+  ["u", 0.000001],
+  ["n", 0.000000001],
+  ["p", 0.000000000001],
+  ["f", 0.000000000000001]
+]);
+var SI_PREFIXES3 = [...SI_PREFIX_VALUES2.keys()];
+function getSiPrefixMultiplier2(prefix) {
+  return SI_PREFIX_VALUES2.get(prefix);
+}
+var unitMappings2 = {
+  Hz: {
+    baseUnit: "Hz",
+    variants: {
+      MHz: 1e6,
+      kHz: 1000,
+      Hz: 1
+    }
+  },
+  g: {
+    baseUnit: "g",
+    variants: {
+      kg: 1000,
+      g: 1
+    }
+  },
+  Ω: {
+    baseUnit: "Ω",
+    variants: {
+      mΩ: 0.001,
+      mohm: 0.001,
+      mOhm: 0.001,
+      milliohm: 0.001,
+      Ω: 1,
+      ohm: 1,
+      Ohm: 1,
+      kΩ: 1000,
+      KΩ: 1000,
+      kohm: 1000,
+      kOhm: 1000,
+      KOhm: 1000,
+      Kohm: 1000,
+      MΩ: 1e6,
+      Mohm: 1e6,
+      MOhm: 1e6,
+      megohm: 1e6,
+      Megohm: 1e6,
+      GΩ: 1e9,
+      Gohm: 1e9,
+      GOhm: 1e9,
+      TΩ: 1000000000000,
+      Tohm: 1000000000000,
+      TOhm: 1000000000000
+    }
+  },
+  V: {
+    baseUnit: "V",
+    variants: {
+      mV: 0.001,
+      V: 1,
+      kV: 1000,
+      KV: 1000,
+      MV: 1e6,
+      GV: 1e9,
+      TV: 1000000000000
+    }
+  },
+  A: {
+    baseUnit: "A",
+    variants: {
+      µA: 0.000001,
+      μA: 0.000001,
+      mA: 0.001,
+      ma: 0.001,
+      A: 1,
+      kA: 1000,
+      MA: 1e6
+    }
+  },
+  F: {
+    baseUnit: "F",
+    variants: {
+      pF: 0.000000000001,
+      nF: 0.000000001,
+      µF: 0.000001,
+      μF: 0.000001,
+      uF: 0.000001,
+      mF: 0.001,
+      F: 1,
+      kF: 1000,
+      KF: 1000,
+      MF: 1e6
+    }
+  },
+  H: {
+    baseUnit: "H",
+    variants: {
+      pH: 0.000000000001,
+      nH: 0.000000001,
+      µH: 0.000001,
+      μH: 0.000001,
+      uH: 0.000001,
+      mH: 0.001,
+      H: 1,
+      kH: 1000,
+      KH: 1000,
+      MH: 1e6
+    }
+  },
+  ml: {
+    baseUnit: "ml",
+    variants: {
+      ml: 1,
+      mL: 1,
+      l: 1000,
+      L: 1000
+    }
+  },
+  deg: {
+    baseUnit: "deg",
+    variants: {
+      rad: 180 / Math.PI
+    }
+  },
+  ms: {
+    baseUnit: "ms",
+    variants: {
+      fs: 0.000000000001,
+      ps: 0.000000001,
+      ns: 0.000001,
+      us: 0.001,
+      µs: 0.001,
+      μs: 0.001,
+      ms: 1,
+      s: 1000
+    }
+  },
+  mm: {
+    baseUnit: "mm",
+    variants: {
+      nm: 0.000001,
+      µm: 0.001,
+      μm: 0.001,
+      um: 0.001,
+      mm: 1,
+      cm: 10,
+      dm: 100,
+      m: 1000,
+      km: 1e6,
+      in: 25.4,
+      ft: 304.8,
+      IN: 25.4,
+      FT: 304.8,
+      yd: 914.4,
+      mi: 1609344,
+      mil: 0.0254
+    }
+  }
+};
+var unitMappingAndVariantSuffixes2 = /* @__PURE__ */ new Set;
+for (const [baseUnit, info] of Object.entries(unitMappings2)) {
+  unitMappingAndVariantSuffixes2.add(baseUnit);
+  for (const variant of Object.keys(info.variants)) {
+    unitMappingAndVariantSuffixes2.add(variant);
+  }
+}
+function getBaseTscircuitUnit2(unit) {
+  for (const info of Object.values(unitMappings2)) {
+    if (unit in info.variants) {
+      return {
+        baseUnit: info.baseUnit,
+        conversionFactor: info.variants[unit]
+      };
+    }
+    for (const [variant, conversionFactor] of Object.entries(info.variants)) {
+      if (!unit.endsWith(variant))
+        continue;
+      const prefix = unit.slice(0, -variant.length);
+      const prefixMultiplier = getSiPrefixMultiplier2(prefix);
+      if (prefixMultiplier == null)
+        continue;
+      return {
+        baseUnit: info.baseUnit,
+        conversionFactor: prefixMultiplier * conversionFactor
+      };
+    }
+  }
+  return {
+    baseUnit: unit,
+    conversionFactor: 1
+  };
+}
+function parseAndConvertSiUnit2(v2, unitOfValue) {
+  if (v2 === undefined || v2 === null)
+    return { parsedUnit: null, unitOfValue: null, value: null };
+  if (typeof v2 === "string" && v2.match(/^-?[\d.]+$/))
+    return {
+      value: Number.parseFloat(v2),
+      parsedUnit: null,
+      unitOfValue: null
+    };
+  if (typeof v2 === "number")
+    return { value: v2, parsedUnit: null, unitOfValue: null };
+  if (typeof v2 === "object" && "x" in v2 && "y" in v2) {
+    const firstResult = parseAndConvertSiUnit2(v2.x, unitOfValue);
+    const xResult = parseAndConvertSiUnit2(v2.x, unitOfValue);
+    const yResult = parseAndConvertSiUnit2(v2.y, unitOfValue);
+    if (xResult.value === null || yResult.value === null) {
+      return { parsedUnit: null, unitOfValue: null, value: null };
+    }
+    return {
+      parsedUnit: firstResult.parsedUnit,
+      unitOfValue: firstResult.unitOfValue,
+      value: {
+        x: xResult.value,
+        y: yResult.value
+      }
+    };
+  }
+  const reversedInputString = v2.toString().split("").reverse().join("");
+  const unitReversed = reversedInputString.match(/[^\d\s]+/)?.[0];
+  if (!unitReversed) {
+    throw new Error(`Could not determine unit: "${v2}"`);
+  }
+  const unit = unitReversed.split("").reverse().join("");
+  const numberPart = v2.slice(0, -unit.length);
+  const bareSiPrefixMultiplier = getSiPrefixMultiplier2(unit);
+  if (unitOfValue && bareSiPrefixMultiplier != null) {
+    return {
+      parsedUnit: null,
+      unitOfValue,
+      value: Number.parseFloat(numberPart) * bareSiPrefixMultiplier
+    };
+  }
+  if (bareSiPrefixMultiplier != null && !unitMappingAndVariantSuffixes2.has(unit)) {
+    return {
+      parsedUnit: null,
+      unitOfValue: null,
+      value: Number.parseFloat(numberPart) * bareSiPrefixMultiplier
+    };
+  }
+  const { baseUnit, conversionFactor } = getBaseTscircuitUnit2(unit);
+  return {
+    parsedUnit: unit,
+    unitOfValue: baseUnit,
+    value: conversionFactor * Number.parseFloat(numberPart)
+  };
+}
+var SI_PREFIX_PATTERN2 = SI_PREFIXES3.filter((prefix) => prefix !== "").sort((a2, b2) => b2.length - a2.length).map((prefix) => prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+var SI_UNIT_PATTERN2 = new RegExp(`^([+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?)(?:(${SI_PREFIX_PATTERN2}))?$`);
+var SI_PREFIXES22 = [
+  { value: 1000000000000, symbol: "T" },
+  { value: 1e9, symbol: "G" },
+  { value: 1e6, symbol: "M" },
+  { value: 1000, symbol: "k" },
+  { value: 1, symbol: "" },
+  { value: 0.001, symbol: "m" },
+  { value: 0.000001, symbol: "µ" },
+  { value: 0.000000001, symbol: "n" },
+  { value: 0.000000000001, symbol: "p" }
+];
+var FALLBACK_PREFIX2 = SI_PREFIXES22[SI_PREFIXES22.length - 1];
+
+// core-single/node_modules/zod/v3/external.js
+var exports_external2 = {};
+__export(exports_external2, {
+  BRAND: () => BRAND2,
+  DIRTY: () => DIRTY2,
+  EMPTY_PATH: () => EMPTY_PATH2,
+  INVALID: () => INVALID2,
+  NEVER: () => NEVER2,
+  OK: () => OK2,
+  ParseStatus: () => ParseStatus2,
+  Schema: () => ZodType2,
+  ZodAny: () => ZodAny2,
+  ZodArray: () => ZodArray2,
+  ZodBigInt: () => ZodBigInt2,
+  ZodBoolean: () => ZodBoolean2,
+  ZodBranded: () => ZodBranded2,
+  ZodCatch: () => ZodCatch2,
+  ZodDate: () => ZodDate2,
+  ZodDefault: () => ZodDefault2,
+  ZodDiscriminatedUnion: () => ZodDiscriminatedUnion2,
+  ZodEffects: () => ZodEffects2,
+  ZodEnum: () => ZodEnum2,
+  ZodError: () => ZodError3,
+  ZodFirstPartyTypeKind: () => ZodFirstPartyTypeKind2,
+  ZodFunction: () => ZodFunction2,
+  ZodIntersection: () => ZodIntersection2,
+  ZodIssueCode: () => ZodIssueCode2,
+  ZodLazy: () => ZodLazy2,
+  ZodLiteral: () => ZodLiteral2,
+  ZodMap: () => ZodMap2,
+  ZodNaN: () => ZodNaN2,
+  ZodNativeEnum: () => ZodNativeEnum2,
+  ZodNever: () => ZodNever2,
+  ZodNull: () => ZodNull2,
+  ZodNullable: () => ZodNullable2,
+  ZodNumber: () => ZodNumber2,
+  ZodObject: () => ZodObject2,
+  ZodOptional: () => ZodOptional2,
+  ZodParsedType: () => ZodParsedType2,
+  ZodPipeline: () => ZodPipeline2,
+  ZodPromise: () => ZodPromise2,
+  ZodReadonly: () => ZodReadonly2,
+  ZodRecord: () => ZodRecord2,
+  ZodSchema: () => ZodType2,
+  ZodSet: () => ZodSet2,
+  ZodString: () => ZodString2,
+  ZodSymbol: () => ZodSymbol2,
+  ZodTransformer: () => ZodEffects2,
+  ZodTuple: () => ZodTuple2,
+  ZodType: () => ZodType2,
+  ZodUndefined: () => ZodUndefined2,
+  ZodUnion: () => ZodUnion2,
+  ZodUnknown: () => ZodUnknown2,
+  ZodVoid: () => ZodVoid2,
+  addIssueToContext: () => addIssueToContext2,
+  any: () => anyType2,
+  array: () => arrayType2,
+  bigint: () => bigIntType2,
+  boolean: () => booleanType2,
+  coerce: () => coerce2,
+  custom: () => custom2,
+  date: () => dateType2,
+  datetimeRegex: () => datetimeRegex2,
+  defaultErrorMap: () => en_default2,
+  discriminatedUnion: () => discriminatedUnionType2,
+  effect: () => effectsType2,
+  enum: () => enumType2,
+  function: () => functionType2,
+  getErrorMap: () => getErrorMap2,
+  getParsedType: () => getParsedType2,
+  instanceof: () => instanceOfType2,
+  intersection: () => intersectionType2,
+  isAborted: () => isAborted2,
+  isAsync: () => isAsync2,
+  isDirty: () => isDirty2,
+  isValid: () => isValid2,
+  late: () => late2,
+  lazy: () => lazyType2,
+  literal: () => literalType2,
+  makeIssue: () => makeIssue2,
+  map: () => mapType2,
+  nan: () => nanType2,
+  nativeEnum: () => nativeEnumType2,
+  never: () => neverType2,
+  null: () => nullType2,
+  nullable: () => nullableType2,
+  number: () => numberType2,
+  object: () => objectType2,
+  objectUtil: () => objectUtil2,
+  oboolean: () => oboolean2,
+  onumber: () => onumber2,
+  optional: () => optionalType2,
+  ostring: () => ostring2,
+  pipeline: () => pipelineType2,
+  preprocess: () => preprocessType2,
+  promise: () => promiseType2,
+  quotelessJson: () => quotelessJson2,
+  record: () => recordType2,
+  set: () => setType2,
+  setErrorMap: () => setErrorMap2,
+  strictObject: () => strictObjectType2,
+  string: () => stringType2,
+  symbol: () => symbolType2,
+  transformer: () => effectsType2,
+  tuple: () => tupleType2,
+  undefined: () => undefinedType2,
+  union: () => unionType2,
+  unknown: () => unknownType2,
+  util: () => util3,
+  void: () => voidType2
+});
+
+// core-single/node_modules/zod/v3/helpers/util.js
+var util3;
+(function(util4) {
+  util4.assertEqual = (_2) => {};
+  function assertIs(_arg) {}
+  util4.assertIs = assertIs;
+  function assertNever(_x2) {
+    throw new Error;
+  }
+  util4.assertNever = assertNever;
+  util4.arrayToEnum = (items) => {
+    const obj = {};
+    for (const item of items) {
+      obj[item] = item;
+    }
+    return obj;
+  };
+  util4.getValidEnumValues = (obj) => {
+    const validKeys = util4.objectKeys(obj).filter((k2) => typeof obj[obj[k2]] !== "number");
+    const filtered = {};
+    for (const k2 of validKeys) {
+      filtered[k2] = obj[k2];
+    }
+    return util4.objectValues(filtered);
+  };
+  util4.objectValues = (obj) => {
+    return util4.objectKeys(obj).map(function(e2) {
+      return obj[e2];
+    });
+  };
+  util4.objectKeys = typeof Object.keys === "function" ? (obj) => Object.keys(obj) : (object) => {
+    const keys = [];
+    for (const key2 in object) {
+      if (Object.prototype.hasOwnProperty.call(object, key2)) {
+        keys.push(key2);
+      }
+    }
+    return keys;
+  };
+  util4.find = (arr, checker) => {
+    for (const item of arr) {
+      if (checker(item))
+        return item;
+    }
+    return;
+  };
+  util4.isInteger = typeof Number.isInteger === "function" ? (val) => Number.isInteger(val) : (val) => typeof val === "number" && Number.isFinite(val) && Math.floor(val) === val;
+  function joinValues(array, separator = " | ") {
+    return array.map((val) => typeof val === "string" ? `'${val}'` : val).join(separator);
+  }
+  util4.joinValues = joinValues;
+  util4.jsonStringifyReplacer = (_2, value) => {
+    if (typeof value === "bigint") {
+      return value.toString();
+    }
+    return value;
+  };
+})(util3 || (util3 = {}));
+var objectUtil2;
+(function(objectUtil3) {
+  objectUtil3.mergeShapes = (first, second) => {
+    return {
+      ...first,
+      ...second
+    };
+  };
+})(objectUtil2 || (objectUtil2 = {}));
+var ZodParsedType2 = util3.arrayToEnum([
+  "string",
+  "nan",
+  "number",
+  "integer",
+  "float",
+  "boolean",
+  "date",
+  "bigint",
+  "symbol",
+  "function",
+  "undefined",
+  "null",
+  "array",
+  "object",
+  "unknown",
+  "promise",
+  "void",
+  "never",
+  "map",
+  "set"
+]);
+var getParsedType2 = (data) => {
+  const t48 = typeof data;
+  switch (t48) {
+    case "undefined":
+      return ZodParsedType2.undefined;
+    case "string":
+      return ZodParsedType2.string;
+    case "number":
+      return Number.isNaN(data) ? ZodParsedType2.nan : ZodParsedType2.number;
+    case "boolean":
+      return ZodParsedType2.boolean;
+    case "function":
+      return ZodParsedType2.function;
+    case "bigint":
+      return ZodParsedType2.bigint;
+    case "symbol":
+      return ZodParsedType2.symbol;
+    case "object":
+      if (Array.isArray(data)) {
+        return ZodParsedType2.array;
+      }
+      if (data === null) {
+        return ZodParsedType2.null;
+      }
+      if (data.then && typeof data.then === "function" && data.catch && typeof data.catch === "function") {
+        return ZodParsedType2.promise;
+      }
+      if (typeof Map !== "undefined" && data instanceof Map) {
+        return ZodParsedType2.map;
+      }
+      if (typeof Set !== "undefined" && data instanceof Set) {
+        return ZodParsedType2.set;
+      }
+      if (typeof Date !== "undefined" && data instanceof Date) {
+        return ZodParsedType2.date;
+      }
+      return ZodParsedType2.object;
+    default:
+      return ZodParsedType2.unknown;
+  }
+};
+
+// core-single/node_modules/zod/v3/ZodError.js
+var ZodIssueCode2 = util3.arrayToEnum([
+  "invalid_type",
+  "invalid_literal",
+  "custom",
+  "invalid_union",
+  "invalid_union_discriminator",
+  "invalid_enum_value",
+  "unrecognized_keys",
+  "invalid_arguments",
+  "invalid_return_type",
+  "invalid_date",
+  "invalid_string",
+  "too_small",
+  "too_big",
+  "invalid_intersection_types",
+  "not_multiple_of",
+  "not_finite"
+]);
+var quotelessJson2 = (obj) => {
+  const json = JSON.stringify(obj, null, 2);
+  return json.replace(/"([^"]+)":/g, "$1:");
+};
+
+class ZodError3 extends Error {
+  get errors() {
+    return this.issues;
+  }
+  constructor(issues) {
+    super();
+    this.issues = [];
+    this.addIssue = (sub) => {
+      this.issues = [...this.issues, sub];
+    };
+    this.addIssues = (subs = []) => {
+      this.issues = [...this.issues, ...subs];
+    };
+    const actualProto = new.target.prototype;
+    if (Object.setPrototypeOf) {
+      Object.setPrototypeOf(this, actualProto);
+    } else {
+      this.__proto__ = actualProto;
+    }
+    this.name = "ZodError";
+    this.issues = issues;
+  }
+  format(_mapper) {
+    const mapper = _mapper || function(issue) {
+      return issue.message;
+    };
+    const fieldErrors = { _errors: [] };
+    const processError = (error) => {
+      for (const issue of error.issues) {
+        if (issue.code === "invalid_union") {
+          issue.unionErrors.map(processError);
+        } else if (issue.code === "invalid_return_type") {
+          processError(issue.returnTypeError);
+        } else if (issue.code === "invalid_arguments") {
+          processError(issue.argumentsError);
+        } else if (issue.path.length === 0) {
+          fieldErrors._errors.push(mapper(issue));
+        } else {
+          let curr = fieldErrors;
+          let i2 = 0;
+          while (i2 < issue.path.length) {
+            const el = issue.path[i2];
+            const terminal = i2 === issue.path.length - 1;
+            if (!terminal) {
+              curr[el] = curr[el] || { _errors: [] };
+            } else {
+              curr[el] = curr[el] || { _errors: [] };
+              curr[el]._errors.push(mapper(issue));
+            }
+            curr = curr[el];
+            i2++;
+          }
+        }
+      }
+    };
+    processError(this);
+    return fieldErrors;
+  }
+  static assert(value) {
+    if (!(value instanceof ZodError3)) {
+      throw new Error(`Not a ZodError: ${value}`);
+    }
+  }
+  toString() {
+    return this.message;
+  }
+  get message() {
+    return JSON.stringify(this.issues, util3.jsonStringifyReplacer, 2);
+  }
+  get isEmpty() {
+    return this.issues.length === 0;
+  }
+  flatten(mapper = (issue) => issue.message) {
+    const fieldErrors = {};
+    const formErrors = [];
+    for (const sub of this.issues) {
+      if (sub.path.length > 0) {
+        const firstEl = sub.path[0];
+        fieldErrors[firstEl] = fieldErrors[firstEl] || [];
+        fieldErrors[firstEl].push(mapper(sub));
+      } else {
+        formErrors.push(mapper(sub));
+      }
+    }
+    return { formErrors, fieldErrors };
+  }
+  get formErrors() {
+    return this.flatten();
+  }
+}
+ZodError3.create = (issues) => {
+  const error = new ZodError3(issues);
+  return error;
+};
+
+// core-single/node_modules/zod/v3/locales/en.js
+var errorMap2 = (issue, _ctx) => {
+  let message;
+  switch (issue.code) {
+    case ZodIssueCode2.invalid_type:
+      if (issue.received === ZodParsedType2.undefined) {
+        message = "Required";
+      } else {
+        message = `Expected ${issue.expected}, received ${issue.received}`;
+      }
+      break;
+    case ZodIssueCode2.invalid_literal:
+      message = `Invalid literal value, expected ${JSON.stringify(issue.expected, util3.jsonStringifyReplacer)}`;
+      break;
+    case ZodIssueCode2.unrecognized_keys:
+      message = `Unrecognized key(s) in object: ${util3.joinValues(issue.keys, ", ")}`;
+      break;
+    case ZodIssueCode2.invalid_union:
+      message = `Invalid input`;
+      break;
+    case ZodIssueCode2.invalid_union_discriminator:
+      message = `Invalid discriminator value. Expected ${util3.joinValues(issue.options)}`;
+      break;
+    case ZodIssueCode2.invalid_enum_value:
+      message = `Invalid enum value. Expected ${util3.joinValues(issue.options)}, received '${issue.received}'`;
+      break;
+    case ZodIssueCode2.invalid_arguments:
+      message = `Invalid function arguments`;
+      break;
+    case ZodIssueCode2.invalid_return_type:
+      message = `Invalid function return type`;
+      break;
+    case ZodIssueCode2.invalid_date:
+      message = `Invalid date`;
+      break;
+    case ZodIssueCode2.invalid_string:
+      if (typeof issue.validation === "object") {
+        if ("includes" in issue.validation) {
+          message = `Invalid input: must include "${issue.validation.includes}"`;
+          if (typeof issue.validation.position === "number") {
+            message = `${message} at one or more positions greater than or equal to ${issue.validation.position}`;
+          }
+        } else if ("startsWith" in issue.validation) {
+          message = `Invalid input: must start with "${issue.validation.startsWith}"`;
+        } else if ("endsWith" in issue.validation) {
+          message = `Invalid input: must end with "${issue.validation.endsWith}"`;
+        } else {
+          util3.assertNever(issue.validation);
+        }
+      } else if (issue.validation !== "regex") {
+        message = `Invalid ${issue.validation}`;
+      } else {
+        message = "Invalid";
+      }
+      break;
+    case ZodIssueCode2.too_small:
+      if (issue.type === "array")
+        message = `Array must contain ${issue.exact ? "exactly" : issue.inclusive ? `at least` : `more than`} ${issue.minimum} element(s)`;
+      else if (issue.type === "string")
+        message = `String must contain ${issue.exact ? "exactly" : issue.inclusive ? `at least` : `over`} ${issue.minimum} character(s)`;
+      else if (issue.type === "number")
+        message = `Number must be ${issue.exact ? `exactly equal to ` : issue.inclusive ? `greater than or equal to ` : `greater than `}${issue.minimum}`;
+      else if (issue.type === "bigint")
+        message = `Number must be ${issue.exact ? `exactly equal to ` : issue.inclusive ? `greater than or equal to ` : `greater than `}${issue.minimum}`;
+      else if (issue.type === "date")
+        message = `Date must be ${issue.exact ? `exactly equal to ` : issue.inclusive ? `greater than or equal to ` : `greater than `}${new Date(Number(issue.minimum))}`;
+      else
+        message = "Invalid input";
+      break;
+    case ZodIssueCode2.too_big:
+      if (issue.type === "array")
+        message = `Array must contain ${issue.exact ? `exactly` : issue.inclusive ? `at most` : `less than`} ${issue.maximum} element(s)`;
+      else if (issue.type === "string")
+        message = `String must contain ${issue.exact ? `exactly` : issue.inclusive ? `at most` : `under`} ${issue.maximum} character(s)`;
+      else if (issue.type === "number")
+        message = `Number must be ${issue.exact ? `exactly` : issue.inclusive ? `less than or equal to` : `less than`} ${issue.maximum}`;
+      else if (issue.type === "bigint")
+        message = `BigInt must be ${issue.exact ? `exactly` : issue.inclusive ? `less than or equal to` : `less than`} ${issue.maximum}`;
+      else if (issue.type === "date")
+        message = `Date must be ${issue.exact ? `exactly` : issue.inclusive ? `smaller than or equal to` : `smaller than`} ${new Date(Number(issue.maximum))}`;
+      else
+        message = "Invalid input";
+      break;
+    case ZodIssueCode2.custom:
+      message = `Invalid input`;
+      break;
+    case ZodIssueCode2.invalid_intersection_types:
+      message = `Intersection results could not be merged`;
+      break;
+    case ZodIssueCode2.not_multiple_of:
+      message = `Number must be a multiple of ${issue.multipleOf}`;
+      break;
+    case ZodIssueCode2.not_finite:
+      message = "Number must be finite";
+      break;
+    default:
+      message = _ctx.defaultError;
+      util3.assertNever(issue);
+  }
+  return { message };
+};
+var en_default2 = errorMap2;
+
+// core-single/node_modules/zod/v3/errors.js
+var overrideErrorMap2 = en_default2;
+function setErrorMap2(map) {
+  overrideErrorMap2 = map;
+}
+function getErrorMap2() {
+  return overrideErrorMap2;
+}
+// core-single/node_modules/zod/v3/helpers/parseUtil.js
+var makeIssue2 = (params) => {
+  const { data, path, errorMaps, issueData } = params;
+  const fullPath = [...path, ...issueData.path || []];
+  const fullIssue = {
+    ...issueData,
+    path: fullPath
+  };
+  if (issueData.message !== undefined) {
+    return {
+      ...issueData,
+      path: fullPath,
+      message: issueData.message
+    };
+  }
+  let errorMessage = "";
+  const maps = errorMaps.filter((m2) => !!m2).slice().reverse();
+  for (const map of maps) {
+    errorMessage = map(fullIssue, { data, defaultError: errorMessage }).message;
+  }
+  return {
+    ...issueData,
+    path: fullPath,
+    message: errorMessage
+  };
+};
+var EMPTY_PATH2 = [];
+function addIssueToContext2(ctx, issueData) {
+  const overrideMap = getErrorMap2();
+  const issue = makeIssue2({
+    issueData,
+    data: ctx.data,
+    path: ctx.path,
+    errorMaps: [
+      ctx.common.contextualErrorMap,
+      ctx.schemaErrorMap,
+      overrideMap,
+      overrideMap === en_default2 ? undefined : en_default2
+    ].filter((x2) => !!x2)
+  });
+  ctx.common.issues.push(issue);
+}
+
+class ParseStatus2 {
+  constructor() {
+    this.value = "valid";
+  }
+  dirty() {
+    if (this.value === "valid")
+      this.value = "dirty";
+  }
+  abort() {
+    if (this.value !== "aborted")
+      this.value = "aborted";
+  }
+  static mergeArray(status, results) {
+    const arrayValue = [];
+    for (const s2 of results) {
+      if (s2.status === "aborted")
+        return INVALID2;
+      if (s2.status === "dirty")
+        status.dirty();
+      arrayValue.push(s2.value);
+    }
+    return { status: status.value, value: arrayValue };
+  }
+  static async mergeObjectAsync(status, pairs) {
+    const syncPairs = [];
+    for (const pair of pairs) {
+      const key2 = await pair.key;
+      const value = await pair.value;
+      syncPairs.push({
+        key: key2,
+        value
+      });
+    }
+    return ParseStatus2.mergeObjectSync(status, syncPairs);
+  }
+  static mergeObjectSync(status, pairs) {
+    const finalObject = {};
+    for (const pair of pairs) {
+      const { key: key2, value } = pair;
+      if (key2.status === "aborted")
+        return INVALID2;
+      if (value.status === "aborted")
+        return INVALID2;
+      if (key2.status === "dirty")
+        status.dirty();
+      if (value.status === "dirty")
+        status.dirty();
+      if (key2.value !== "__proto__" && (typeof value.value !== "undefined" || pair.alwaysSet)) {
+        finalObject[key2.value] = value.value;
+      }
+    }
+    return { status: status.value, value: finalObject };
+  }
+}
+var INVALID2 = Object.freeze({
+  status: "aborted"
+});
+var DIRTY2 = (value) => ({ status: "dirty", value });
+var OK2 = (value) => ({ status: "valid", value });
+var isAborted2 = (x2) => x2.status === "aborted";
+var isDirty2 = (x2) => x2.status === "dirty";
+var isValid2 = (x2) => x2.status === "valid";
+var isAsync2 = (x2) => typeof Promise !== "undefined" && x2 instanceof Promise;
+// core-single/node_modules/zod/v3/helpers/errorUtil.js
+var errorUtil2;
+(function(errorUtil3) {
+  errorUtil3.errToObj = (message) => typeof message === "string" ? { message } : message || {};
+  errorUtil3.toString = (message) => typeof message === "string" ? message : message?.message;
+})(errorUtil2 || (errorUtil2 = {}));
+
+// core-single/node_modules/zod/v3/types.js
+class ParseInputLazyPath2 {
+  constructor(parent, value, path, key2) {
+    this._cachedPath = [];
+    this.parent = parent;
+    this.data = value;
+    this._path = path;
+    this._key = key2;
+  }
+  get path() {
+    if (!this._cachedPath.length) {
+      if (Array.isArray(this._key)) {
+        this._cachedPath.push(...this._path, ...this._key);
+      } else {
+        this._cachedPath.push(...this._path, this._key);
+      }
+    }
+    return this._cachedPath;
+  }
+}
+var handleResult2 = (ctx, result) => {
+  if (isValid2(result)) {
+    return { success: true, data: result.value };
+  } else {
+    if (!ctx.common.issues.length) {
+      throw new Error("Validation failed but no issues detected.");
+    }
+    return {
+      success: false,
+      get error() {
+        if (this._error)
+          return this._error;
+        const error = new ZodError3(ctx.common.issues);
+        this._error = error;
+        return this._error;
+      }
+    };
+  }
+};
+function processCreateParams2(params) {
+  if (!params)
+    return {};
+  const { errorMap: errorMap3, invalid_type_error, required_error, description } = params;
+  if (errorMap3 && (invalid_type_error || required_error)) {
+    throw new Error(`Can't use "invalid_type_error" or "required_error" in conjunction with custom error map.`);
+  }
+  if (errorMap3)
+    return { errorMap: errorMap3, description };
+  const customMap = (iss, ctx) => {
+    const { message } = params;
+    if (iss.code === "invalid_enum_value") {
+      return { message: message ?? ctx.defaultError };
+    }
+    if (typeof ctx.data === "undefined") {
+      return { message: message ?? required_error ?? ctx.defaultError };
+    }
+    if (iss.code !== "invalid_type")
+      return { message: ctx.defaultError };
+    return { message: message ?? invalid_type_error ?? ctx.defaultError };
+  };
+  return { errorMap: customMap, description };
+}
+
+class ZodType2 {
+  get description() {
+    return this._def.description;
+  }
+  _getType(input) {
+    return getParsedType2(input.data);
+  }
+  _getOrReturnCtx(input, ctx) {
+    return ctx || {
+      common: input.parent.common,
+      data: input.data,
+      parsedType: getParsedType2(input.data),
+      schemaErrorMap: this._def.errorMap,
+      path: input.path,
+      parent: input.parent
+    };
+  }
+  _processInputParams(input) {
+    return {
+      status: new ParseStatus2,
+      ctx: {
+        common: input.parent.common,
+        data: input.data,
+        parsedType: getParsedType2(input.data),
+        schemaErrorMap: this._def.errorMap,
+        path: input.path,
+        parent: input.parent
+      }
+    };
+  }
+  _parseSync(input) {
+    const result = this._parse(input);
+    if (isAsync2(result)) {
+      throw new Error("Synchronous parse encountered promise.");
+    }
+    return result;
+  }
+  _parseAsync(input) {
+    const result = this._parse(input);
+    return Promise.resolve(result);
+  }
+  parse(data, params) {
+    const result = this.safeParse(data, params);
+    if (result.success)
+      return result.data;
+    throw result.error;
+  }
+  safeParse(data, params) {
+    const ctx = {
+      common: {
+        issues: [],
+        async: params?.async ?? false,
+        contextualErrorMap: params?.errorMap
+      },
+      path: params?.path || [],
+      schemaErrorMap: this._def.errorMap,
+      parent: null,
+      data,
+      parsedType: getParsedType2(data)
+    };
+    const result = this._parseSync({ data, path: ctx.path, parent: ctx });
+    return handleResult2(ctx, result);
+  }
+  "~validate"(data) {
+    const ctx = {
+      common: {
+        issues: [],
+        async: !!this["~standard"].async
+      },
+      path: [],
+      schemaErrorMap: this._def.errorMap,
+      parent: null,
+      data,
+      parsedType: getParsedType2(data)
+    };
+    if (!this["~standard"].async) {
+      try {
+        const result = this._parseSync({ data, path: [], parent: ctx });
+        return isValid2(result) ? {
+          value: result.value
+        } : {
+          issues: ctx.common.issues
+        };
+      } catch (err) {
+        if (err?.message?.toLowerCase()?.includes("encountered")) {
+          this["~standard"].async = true;
+        }
+        ctx.common = {
+          issues: [],
+          async: true
+        };
+      }
+    }
+    return this._parseAsync({ data, path: [], parent: ctx }).then((result) => isValid2(result) ? {
+      value: result.value
+    } : {
+      issues: ctx.common.issues
+    });
+  }
+  async parseAsync(data, params) {
+    const result = await this.safeParseAsync(data, params);
+    if (result.success)
+      return result.data;
+    throw result.error;
+  }
+  async safeParseAsync(data, params) {
+    const ctx = {
+      common: {
+        issues: [],
+        contextualErrorMap: params?.errorMap,
+        async: true
+      },
+      path: params?.path || [],
+      schemaErrorMap: this._def.errorMap,
+      parent: null,
+      data,
+      parsedType: getParsedType2(data)
+    };
+    const maybeAsyncResult = this._parse({ data, path: ctx.path, parent: ctx });
+    const result = await (isAsync2(maybeAsyncResult) ? maybeAsyncResult : Promise.resolve(maybeAsyncResult));
+    return handleResult2(ctx, result);
+  }
+  refine(check, message) {
+    const getIssueProperties = (val) => {
+      if (typeof message === "string" || typeof message === "undefined") {
+        return { message };
+      } else if (typeof message === "function") {
+        return message(val);
+      } else {
+        return message;
+      }
+    };
+    return this._refinement((val, ctx) => {
+      const result = check(val);
+      const setError = () => ctx.addIssue({
+        code: ZodIssueCode2.custom,
+        ...getIssueProperties(val)
+      });
+      if (typeof Promise !== "undefined" && result instanceof Promise) {
+        return result.then((data) => {
+          if (!data) {
+            setError();
+            return false;
+          } else {
+            return true;
+          }
+        });
+      }
+      if (!result) {
+        setError();
+        return false;
+      } else {
+        return true;
+      }
+    });
+  }
+  refinement(check, refinementData) {
+    return this._refinement((val, ctx) => {
+      if (!check(val)) {
+        ctx.addIssue(typeof refinementData === "function" ? refinementData(val, ctx) : refinementData);
+        return false;
+      } else {
+        return true;
+      }
+    });
+  }
+  _refinement(refinement) {
+    return new ZodEffects2({
+      schema: this,
+      typeName: ZodFirstPartyTypeKind2.ZodEffects,
+      effect: { type: "refinement", refinement }
+    });
+  }
+  superRefine(refinement) {
+    return this._refinement(refinement);
+  }
+  constructor(def) {
+    this.spa = this.safeParseAsync;
+    this._def = def;
+    this.parse = this.parse.bind(this);
+    this.safeParse = this.safeParse.bind(this);
+    this.parseAsync = this.parseAsync.bind(this);
+    this.safeParseAsync = this.safeParseAsync.bind(this);
+    this.spa = this.spa.bind(this);
+    this.refine = this.refine.bind(this);
+    this.refinement = this.refinement.bind(this);
+    this.superRefine = this.superRefine.bind(this);
+    this.optional = this.optional.bind(this);
+    this.nullable = this.nullable.bind(this);
+    this.nullish = this.nullish.bind(this);
+    this.array = this.array.bind(this);
+    this.promise = this.promise.bind(this);
+    this.or = this.or.bind(this);
+    this.and = this.and.bind(this);
+    this.transform = this.transform.bind(this);
+    this.brand = this.brand.bind(this);
+    this.default = this.default.bind(this);
+    this.catch = this.catch.bind(this);
+    this.describe = this.describe.bind(this);
+    this.pipe = this.pipe.bind(this);
+    this.readonly = this.readonly.bind(this);
+    this.isNullable = this.isNullable.bind(this);
+    this.isOptional = this.isOptional.bind(this);
+    this["~standard"] = {
+      version: 1,
+      vendor: "zod",
+      validate: (data) => this["~validate"](data)
+    };
+  }
+  optional() {
+    return ZodOptional2.create(this, this._def);
+  }
+  nullable() {
+    return ZodNullable2.create(this, this._def);
+  }
+  nullish() {
+    return this.nullable().optional();
+  }
+  array() {
+    return ZodArray2.create(this);
+  }
+  promise() {
+    return ZodPromise2.create(this, this._def);
+  }
+  or(option) {
+    return ZodUnion2.create([this, option], this._def);
+  }
+  and(incoming) {
+    return ZodIntersection2.create(this, incoming, this._def);
+  }
+  transform(transform9) {
+    return new ZodEffects2({
+      ...processCreateParams2(this._def),
+      schema: this,
+      typeName: ZodFirstPartyTypeKind2.ZodEffects,
+      effect: { type: "transform", transform: transform9 }
+    });
+  }
+  default(def) {
+    const defaultValueFunc = typeof def === "function" ? def : () => def;
+    return new ZodDefault2({
+      ...processCreateParams2(this._def),
+      innerType: this,
+      defaultValue: defaultValueFunc,
+      typeName: ZodFirstPartyTypeKind2.ZodDefault
+    });
+  }
+  brand() {
+    return new ZodBranded2({
+      typeName: ZodFirstPartyTypeKind2.ZodBranded,
+      type: this,
+      ...processCreateParams2(this._def)
+    });
+  }
+  catch(def) {
+    const catchValueFunc = typeof def === "function" ? def : () => def;
+    return new ZodCatch2({
+      ...processCreateParams2(this._def),
+      innerType: this,
+      catchValue: catchValueFunc,
+      typeName: ZodFirstPartyTypeKind2.ZodCatch
+    });
+  }
+  describe(description) {
+    const This = this.constructor;
+    return new This({
+      ...this._def,
+      description
+    });
+  }
+  pipe(target) {
+    return ZodPipeline2.create(this, target);
+  }
+  readonly() {
+    return ZodReadonly2.create(this);
+  }
+  isOptional() {
+    return this.safeParse(undefined).success;
+  }
+  isNullable() {
+    return this.safeParse(null).success;
+  }
+}
+var cuidRegex2 = /^c[^\s-]{8,}$/i;
+var cuid2Regex2 = /^[0-9a-z]+$/;
+var ulidRegex2 = /^[0-9A-HJKMNP-TV-Z]{26}$/i;
+var uuidRegex2 = /^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$/i;
+var nanoidRegex2 = /^[a-z0-9_-]{21}$/i;
+var jwtRegex2 = /^[A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]*$/;
+var durationRegex2 = /^[-+]?P(?!$)(?:(?:[-+]?\d+Y)|(?:[-+]?\d+[.,]\d+Y$))?(?:(?:[-+]?\d+M)|(?:[-+]?\d+[.,]\d+M$))?(?:(?:[-+]?\d+W)|(?:[-+]?\d+[.,]\d+W$))?(?:(?:[-+]?\d+D)|(?:[-+]?\d+[.,]\d+D$))?(?:T(?=[\d+-])(?:(?:[-+]?\d+H)|(?:[-+]?\d+[.,]\d+H$))?(?:(?:[-+]?\d+M)|(?:[-+]?\d+[.,]\d+M$))?(?:[-+]?\d+(?:[.,]\d+)?S)?)??$/;
+var emailRegex2 = /^(?!\.)(?!.*\.\.)([A-Z0-9_'+\-\.]*)[A-Z0-9_+-]@([A-Z0-9][A-Z0-9\-]*\.)+[A-Z]{2,}$/i;
+var _emojiRegex2 = `^(\\p{Extended_Pictographic}|\\p{Emoji_Component})+$`;
+var emojiRegex2;
+var ipv4Regex2 = /^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])$/;
+var ipv4CidrRegex2 = /^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\/(3[0-2]|[12]?[0-9])$/;
+var ipv6Regex2 = /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$/;
+var ipv6CidrRegex2 = /^(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))\/(12[0-8]|1[01][0-9]|[1-9]?[0-9])$/;
+var base64Regex2 = /^([0-9a-zA-Z+/]{4})*(([0-9a-zA-Z+/]{2}==)|([0-9a-zA-Z+/]{3}=))?$/;
+var base64urlRegex2 = /^([0-9a-zA-Z-_]{4})*(([0-9a-zA-Z-_]{2}(==)?)|([0-9a-zA-Z-_]{3}(=)?))?$/;
+var dateRegexSource2 = `((\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-((0[13578]|1[02])-(0[1-9]|[12]\\d|3[01])|(0[469]|11)-(0[1-9]|[12]\\d|30)|(02)-(0[1-9]|1\\d|2[0-8])))`;
+var dateRegex2 = new RegExp(`^${dateRegexSource2}$`);
+function timeRegexSource2(args) {
+  let secondsRegexSource = `[0-5]\\d`;
+  if (args.precision) {
+    secondsRegexSource = `${secondsRegexSource}\\.\\d{${args.precision}}`;
+  } else if (args.precision == null) {
+    secondsRegexSource = `${secondsRegexSource}(\\.\\d+)?`;
+  }
+  const secondsQuantifier = args.precision ? "+" : "?";
+  return `([01]\\d|2[0-3]):[0-5]\\d(:${secondsRegexSource})${secondsQuantifier}`;
+}
+function timeRegex2(args) {
+  return new RegExp(`^${timeRegexSource2(args)}$`);
+}
+function datetimeRegex2(args) {
+  let regex = `${dateRegexSource2}T${timeRegexSource2(args)}`;
+  const opts = [];
+  opts.push(args.local ? `Z?` : `Z`);
+  if (args.offset)
+    opts.push(`([+-]\\d{2}:?\\d{2})`);
+  regex = `${regex}(${opts.join("|")})`;
+  return new RegExp(`^${regex}$`);
+}
+function isValidIP2(ip2, version) {
+  if ((version === "v4" || !version) && ipv4Regex2.test(ip2)) {
+    return true;
+  }
+  if ((version === "v6" || !version) && ipv6Regex2.test(ip2)) {
+    return true;
+  }
+  return false;
+}
+function isValidJWT2(jwt, alg) {
+  if (!jwtRegex2.test(jwt))
+    return false;
+  try {
+    const [header] = jwt.split(".");
+    if (!header)
+      return false;
+    const base64 = header.replace(/-/g, "+").replace(/_/g, "/").padEnd(header.length + (4 - header.length % 4) % 4, "=");
+    const decoded = JSON.parse(atob(base64));
+    if (typeof decoded !== "object" || decoded === null)
+      return false;
+    if ("typ" in decoded && decoded?.typ !== "JWT")
+      return false;
+    if (!decoded.alg)
+      return false;
+    if (alg && decoded.alg !== alg)
+      return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+function isValidCidr2(ip2, version) {
+  if ((version === "v4" || !version) && ipv4CidrRegex2.test(ip2)) {
+    return true;
+  }
+  if ((version === "v6" || !version) && ipv6CidrRegex2.test(ip2)) {
+    return true;
+  }
+  return false;
+}
+
+class ZodString2 extends ZodType2 {
+  _parse(input) {
+    if (this._def.coerce) {
+      input.data = String(input.data);
+    }
+    const parsedType = this._getType(input);
+    if (parsedType !== ZodParsedType2.string) {
+      const ctx2 = this._getOrReturnCtx(input);
+      addIssueToContext2(ctx2, {
+        code: ZodIssueCode2.invalid_type,
+        expected: ZodParsedType2.string,
+        received: ctx2.parsedType
+      });
+      return INVALID2;
+    }
+    const status = new ParseStatus2;
+    let ctx = undefined;
+    for (const check of this._def.checks) {
+      if (check.kind === "min") {
+        if (input.data.length < check.value) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            code: ZodIssueCode2.too_small,
+            minimum: check.value,
+            type: "string",
+            inclusive: true,
+            exact: false,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "max") {
+        if (input.data.length > check.value) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            code: ZodIssueCode2.too_big,
+            maximum: check.value,
+            type: "string",
+            inclusive: true,
+            exact: false,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "length") {
+        const tooBig = input.data.length > check.value;
+        const tooSmall = input.data.length < check.value;
+        if (tooBig || tooSmall) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          if (tooBig) {
+            addIssueToContext2(ctx, {
+              code: ZodIssueCode2.too_big,
+              maximum: check.value,
+              type: "string",
+              inclusive: true,
+              exact: true,
+              message: check.message
+            });
+          } else if (tooSmall) {
+            addIssueToContext2(ctx, {
+              code: ZodIssueCode2.too_small,
+              minimum: check.value,
+              type: "string",
+              inclusive: true,
+              exact: true,
+              message: check.message
+            });
+          }
+          status.dirty();
+        }
+      } else if (check.kind === "email") {
+        if (!emailRegex2.test(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            validation: "email",
+            code: ZodIssueCode2.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "emoji") {
+        if (!emojiRegex2) {
+          emojiRegex2 = new RegExp(_emojiRegex2, "u");
+        }
+        if (!emojiRegex2.test(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            validation: "emoji",
+            code: ZodIssueCode2.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "uuid") {
+        if (!uuidRegex2.test(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            validation: "uuid",
+            code: ZodIssueCode2.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "nanoid") {
+        if (!nanoidRegex2.test(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            validation: "nanoid",
+            code: ZodIssueCode2.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "cuid") {
+        if (!cuidRegex2.test(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            validation: "cuid",
+            code: ZodIssueCode2.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "cuid2") {
+        if (!cuid2Regex2.test(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            validation: "cuid2",
+            code: ZodIssueCode2.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "ulid") {
+        if (!ulidRegex2.test(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            validation: "ulid",
+            code: ZodIssueCode2.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "url") {
+        try {
+          new URL(input.data);
+        } catch {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            validation: "url",
+            code: ZodIssueCode2.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "regex") {
+        check.regex.lastIndex = 0;
+        const testResult = check.regex.test(input.data);
+        if (!testResult) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            validation: "regex",
+            code: ZodIssueCode2.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "trim") {
+        input.data = input.data.trim();
+      } else if (check.kind === "includes") {
+        if (!input.data.includes(check.value, check.position)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            code: ZodIssueCode2.invalid_string,
+            validation: { includes: check.value, position: check.position },
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "toLowerCase") {
+        input.data = input.data.toLowerCase();
+      } else if (check.kind === "toUpperCase") {
+        input.data = input.data.toUpperCase();
+      } else if (check.kind === "startsWith") {
+        if (!input.data.startsWith(check.value)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            code: ZodIssueCode2.invalid_string,
+            validation: { startsWith: check.value },
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "endsWith") {
+        if (!input.data.endsWith(check.value)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            code: ZodIssueCode2.invalid_string,
+            validation: { endsWith: check.value },
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "datetime") {
+        const regex = datetimeRegex2(check);
+        if (!regex.test(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            code: ZodIssueCode2.invalid_string,
+            validation: "datetime",
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "date") {
+        const regex = dateRegex2;
+        if (!regex.test(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            code: ZodIssueCode2.invalid_string,
+            validation: "date",
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "time") {
+        const regex = timeRegex2(check);
+        if (!regex.test(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            code: ZodIssueCode2.invalid_string,
+            validation: "time",
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "duration") {
+        if (!durationRegex2.test(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            validation: "duration",
+            code: ZodIssueCode2.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "ip") {
+        if (!isValidIP2(input.data, check.version)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            validation: "ip",
+            code: ZodIssueCode2.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "jwt") {
+        if (!isValidJWT2(input.data, check.alg)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            validation: "jwt",
+            code: ZodIssueCode2.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "cidr") {
+        if (!isValidCidr2(input.data, check.version)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            validation: "cidr",
+            code: ZodIssueCode2.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "base64") {
+        if (!base64Regex2.test(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            validation: "base64",
+            code: ZodIssueCode2.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "base64url") {
+        if (!base64urlRegex2.test(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            validation: "base64url",
+            code: ZodIssueCode2.invalid_string,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else {
+        util3.assertNever(check);
+      }
+    }
+    return { status: status.value, value: input.data };
+  }
+  _regex(regex, validation, message) {
+    return this.refinement((data) => regex.test(data), {
+      validation,
+      code: ZodIssueCode2.invalid_string,
+      ...errorUtil2.errToObj(message)
+    });
+  }
+  _addCheck(check) {
+    return new ZodString2({
+      ...this._def,
+      checks: [...this._def.checks, check]
+    });
+  }
+  email(message) {
+    return this._addCheck({ kind: "email", ...errorUtil2.errToObj(message) });
+  }
+  url(message) {
+    return this._addCheck({ kind: "url", ...errorUtil2.errToObj(message) });
+  }
+  emoji(message) {
+    return this._addCheck({ kind: "emoji", ...errorUtil2.errToObj(message) });
+  }
+  uuid(message) {
+    return this._addCheck({ kind: "uuid", ...errorUtil2.errToObj(message) });
+  }
+  nanoid(message) {
+    return this._addCheck({ kind: "nanoid", ...errorUtil2.errToObj(message) });
+  }
+  cuid(message) {
+    return this._addCheck({ kind: "cuid", ...errorUtil2.errToObj(message) });
+  }
+  cuid2(message) {
+    return this._addCheck({ kind: "cuid2", ...errorUtil2.errToObj(message) });
+  }
+  ulid(message) {
+    return this._addCheck({ kind: "ulid", ...errorUtil2.errToObj(message) });
+  }
+  base64(message) {
+    return this._addCheck({ kind: "base64", ...errorUtil2.errToObj(message) });
+  }
+  base64url(message) {
+    return this._addCheck({
+      kind: "base64url",
+      ...errorUtil2.errToObj(message)
+    });
+  }
+  jwt(options) {
+    return this._addCheck({ kind: "jwt", ...errorUtil2.errToObj(options) });
+  }
+  ip(options) {
+    return this._addCheck({ kind: "ip", ...errorUtil2.errToObj(options) });
+  }
+  cidr(options) {
+    return this._addCheck({ kind: "cidr", ...errorUtil2.errToObj(options) });
+  }
+  datetime(options) {
+    if (typeof options === "string") {
+      return this._addCheck({
+        kind: "datetime",
+        precision: null,
+        offset: false,
+        local: false,
+        message: options
+      });
+    }
+    return this._addCheck({
+      kind: "datetime",
+      precision: typeof options?.precision === "undefined" ? null : options?.precision,
+      offset: options?.offset ?? false,
+      local: options?.local ?? false,
+      ...errorUtil2.errToObj(options?.message)
+    });
+  }
+  date(message) {
+    return this._addCheck({ kind: "date", message });
+  }
+  time(options) {
+    if (typeof options === "string") {
+      return this._addCheck({
+        kind: "time",
+        precision: null,
+        message: options
+      });
+    }
+    return this._addCheck({
+      kind: "time",
+      precision: typeof options?.precision === "undefined" ? null : options?.precision,
+      ...errorUtil2.errToObj(options?.message)
+    });
+  }
+  duration(message) {
+    return this._addCheck({ kind: "duration", ...errorUtil2.errToObj(message) });
+  }
+  regex(regex, message) {
+    return this._addCheck({
+      kind: "regex",
+      regex,
+      ...errorUtil2.errToObj(message)
+    });
+  }
+  includes(value, options) {
+    return this._addCheck({
+      kind: "includes",
+      value,
+      position: options?.position,
+      ...errorUtil2.errToObj(options?.message)
+    });
+  }
+  startsWith(value, message) {
+    return this._addCheck({
+      kind: "startsWith",
+      value,
+      ...errorUtil2.errToObj(message)
+    });
+  }
+  endsWith(value, message) {
+    return this._addCheck({
+      kind: "endsWith",
+      value,
+      ...errorUtil2.errToObj(message)
+    });
+  }
+  min(minLength, message) {
+    return this._addCheck({
+      kind: "min",
+      value: minLength,
+      ...errorUtil2.errToObj(message)
+    });
+  }
+  max(maxLength, message) {
+    return this._addCheck({
+      kind: "max",
+      value: maxLength,
+      ...errorUtil2.errToObj(message)
+    });
+  }
+  length(len, message) {
+    return this._addCheck({
+      kind: "length",
+      value: len,
+      ...errorUtil2.errToObj(message)
+    });
+  }
+  nonempty(message) {
+    return this.min(1, errorUtil2.errToObj(message));
+  }
+  trim() {
+    return new ZodString2({
+      ...this._def,
+      checks: [...this._def.checks, { kind: "trim" }]
+    });
+  }
+  toLowerCase() {
+    return new ZodString2({
+      ...this._def,
+      checks: [...this._def.checks, { kind: "toLowerCase" }]
+    });
+  }
+  toUpperCase() {
+    return new ZodString2({
+      ...this._def,
+      checks: [...this._def.checks, { kind: "toUpperCase" }]
+    });
+  }
+  get isDatetime() {
+    return !!this._def.checks.find((ch2) => ch2.kind === "datetime");
+  }
+  get isDate() {
+    return !!this._def.checks.find((ch2) => ch2.kind === "date");
+  }
+  get isTime() {
+    return !!this._def.checks.find((ch2) => ch2.kind === "time");
+  }
+  get isDuration() {
+    return !!this._def.checks.find((ch2) => ch2.kind === "duration");
+  }
+  get isEmail() {
+    return !!this._def.checks.find((ch2) => ch2.kind === "email");
+  }
+  get isURL() {
+    return !!this._def.checks.find((ch2) => ch2.kind === "url");
+  }
+  get isEmoji() {
+    return !!this._def.checks.find((ch2) => ch2.kind === "emoji");
+  }
+  get isUUID() {
+    return !!this._def.checks.find((ch2) => ch2.kind === "uuid");
+  }
+  get isNANOID() {
+    return !!this._def.checks.find((ch2) => ch2.kind === "nanoid");
+  }
+  get isCUID() {
+    return !!this._def.checks.find((ch2) => ch2.kind === "cuid");
+  }
+  get isCUID2() {
+    return !!this._def.checks.find((ch2) => ch2.kind === "cuid2");
+  }
+  get isULID() {
+    return !!this._def.checks.find((ch2) => ch2.kind === "ulid");
+  }
+  get isIP() {
+    return !!this._def.checks.find((ch2) => ch2.kind === "ip");
+  }
+  get isCIDR() {
+    return !!this._def.checks.find((ch2) => ch2.kind === "cidr");
+  }
+  get isBase64() {
+    return !!this._def.checks.find((ch2) => ch2.kind === "base64");
+  }
+  get isBase64url() {
+    return !!this._def.checks.find((ch2) => ch2.kind === "base64url");
+  }
+  get minLength() {
+    let min = null;
+    for (const ch2 of this._def.checks) {
+      if (ch2.kind === "min") {
+        if (min === null || ch2.value > min)
+          min = ch2.value;
+      }
+    }
+    return min;
+  }
+  get maxLength() {
+    let max = null;
+    for (const ch2 of this._def.checks) {
+      if (ch2.kind === "max") {
+        if (max === null || ch2.value < max)
+          max = ch2.value;
+      }
+    }
+    return max;
+  }
+}
+ZodString2.create = (params) => {
+  return new ZodString2({
+    checks: [],
+    typeName: ZodFirstPartyTypeKind2.ZodString,
+    coerce: params?.coerce ?? false,
+    ...processCreateParams2(params)
+  });
+};
+function floatSafeRemainder2(val, step) {
+  const valDecCount = (val.toString().split(".")[1] || "").length;
+  const stepDecCount = (step.toString().split(".")[1] || "").length;
+  const decCount = valDecCount > stepDecCount ? valDecCount : stepDecCount;
+  const valInt = Number.parseInt(val.toFixed(decCount).replace(".", ""));
+  const stepInt = Number.parseInt(step.toFixed(decCount).replace(".", ""));
+  return valInt % stepInt / 10 ** decCount;
+}
+
+class ZodNumber2 extends ZodType2 {
+  constructor() {
+    super(...arguments);
+    this.min = this.gte;
+    this.max = this.lte;
+    this.step = this.multipleOf;
+  }
+  _parse(input) {
+    if (this._def.coerce) {
+      input.data = Number(input.data);
+    }
+    const parsedType = this._getType(input);
+    if (parsedType !== ZodParsedType2.number) {
+      const ctx2 = this._getOrReturnCtx(input);
+      addIssueToContext2(ctx2, {
+        code: ZodIssueCode2.invalid_type,
+        expected: ZodParsedType2.number,
+        received: ctx2.parsedType
+      });
+      return INVALID2;
+    }
+    let ctx = undefined;
+    const status = new ParseStatus2;
+    for (const check of this._def.checks) {
+      if (check.kind === "int") {
+        if (!util3.isInteger(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            code: ZodIssueCode2.invalid_type,
+            expected: "integer",
+            received: "float",
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "min") {
+        const tooSmall = check.inclusive ? input.data < check.value : input.data <= check.value;
+        if (tooSmall) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            code: ZodIssueCode2.too_small,
+            minimum: check.value,
+            type: "number",
+            inclusive: check.inclusive,
+            exact: false,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "max") {
+        const tooBig = check.inclusive ? input.data > check.value : input.data >= check.value;
+        if (tooBig) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            code: ZodIssueCode2.too_big,
+            maximum: check.value,
+            type: "number",
+            inclusive: check.inclusive,
+            exact: false,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "multipleOf") {
+        if (floatSafeRemainder2(input.data, check.value) !== 0) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            code: ZodIssueCode2.not_multiple_of,
+            multipleOf: check.value,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "finite") {
+        if (!Number.isFinite(input.data)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            code: ZodIssueCode2.not_finite,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else {
+        util3.assertNever(check);
+      }
+    }
+    return { status: status.value, value: input.data };
+  }
+  gte(value, message) {
+    return this.setLimit("min", value, true, errorUtil2.toString(message));
+  }
+  gt(value, message) {
+    return this.setLimit("min", value, false, errorUtil2.toString(message));
+  }
+  lte(value, message) {
+    return this.setLimit("max", value, true, errorUtil2.toString(message));
+  }
+  lt(value, message) {
+    return this.setLimit("max", value, false, errorUtil2.toString(message));
+  }
+  setLimit(kind, value, inclusive, message) {
+    return new ZodNumber2({
+      ...this._def,
+      checks: [
+        ...this._def.checks,
+        {
+          kind,
+          value,
+          inclusive,
+          message: errorUtil2.toString(message)
+        }
+      ]
+    });
+  }
+  _addCheck(check) {
+    return new ZodNumber2({
+      ...this._def,
+      checks: [...this._def.checks, check]
+    });
+  }
+  int(message) {
+    return this._addCheck({
+      kind: "int",
+      message: errorUtil2.toString(message)
+    });
+  }
+  positive(message) {
+    return this._addCheck({
+      kind: "min",
+      value: 0,
+      inclusive: false,
+      message: errorUtil2.toString(message)
+    });
+  }
+  negative(message) {
+    return this._addCheck({
+      kind: "max",
+      value: 0,
+      inclusive: false,
+      message: errorUtil2.toString(message)
+    });
+  }
+  nonpositive(message) {
+    return this._addCheck({
+      kind: "max",
+      value: 0,
+      inclusive: true,
+      message: errorUtil2.toString(message)
+    });
+  }
+  nonnegative(message) {
+    return this._addCheck({
+      kind: "min",
+      value: 0,
+      inclusive: true,
+      message: errorUtil2.toString(message)
+    });
+  }
+  multipleOf(value, message) {
+    return this._addCheck({
+      kind: "multipleOf",
+      value,
+      message: errorUtil2.toString(message)
+    });
+  }
+  finite(message) {
+    return this._addCheck({
+      kind: "finite",
+      message: errorUtil2.toString(message)
+    });
+  }
+  safe(message) {
+    return this._addCheck({
+      kind: "min",
+      inclusive: true,
+      value: Number.MIN_SAFE_INTEGER,
+      message: errorUtil2.toString(message)
+    })._addCheck({
+      kind: "max",
+      inclusive: true,
+      value: Number.MAX_SAFE_INTEGER,
+      message: errorUtil2.toString(message)
+    });
+  }
+  get minValue() {
+    let min = null;
+    for (const ch2 of this._def.checks) {
+      if (ch2.kind === "min") {
+        if (min === null || ch2.value > min)
+          min = ch2.value;
+      }
+    }
+    return min;
+  }
+  get maxValue() {
+    let max = null;
+    for (const ch2 of this._def.checks) {
+      if (ch2.kind === "max") {
+        if (max === null || ch2.value < max)
+          max = ch2.value;
+      }
+    }
+    return max;
+  }
+  get isInt() {
+    return !!this._def.checks.find((ch2) => ch2.kind === "int" || ch2.kind === "multipleOf" && util3.isInteger(ch2.value));
+  }
+  get isFinite() {
+    let max = null;
+    let min = null;
+    for (const ch2 of this._def.checks) {
+      if (ch2.kind === "finite" || ch2.kind === "int" || ch2.kind === "multipleOf") {
+        return true;
+      } else if (ch2.kind === "min") {
+        if (min === null || ch2.value > min)
+          min = ch2.value;
+      } else if (ch2.kind === "max") {
+        if (max === null || ch2.value < max)
+          max = ch2.value;
+      }
+    }
+    return Number.isFinite(min) && Number.isFinite(max);
+  }
+}
+ZodNumber2.create = (params) => {
+  return new ZodNumber2({
+    checks: [],
+    typeName: ZodFirstPartyTypeKind2.ZodNumber,
+    coerce: params?.coerce || false,
+    ...processCreateParams2(params)
+  });
+};
+
+class ZodBigInt2 extends ZodType2 {
+  constructor() {
+    super(...arguments);
+    this.min = this.gte;
+    this.max = this.lte;
+  }
+  _parse(input) {
+    if (this._def.coerce) {
+      try {
+        input.data = BigInt(input.data);
+      } catch {
+        return this._getInvalidInput(input);
+      }
+    }
+    const parsedType = this._getType(input);
+    if (parsedType !== ZodParsedType2.bigint) {
+      return this._getInvalidInput(input);
+    }
+    let ctx = undefined;
+    const status = new ParseStatus2;
+    for (const check of this._def.checks) {
+      if (check.kind === "min") {
+        const tooSmall = check.inclusive ? input.data < check.value : input.data <= check.value;
+        if (tooSmall) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            code: ZodIssueCode2.too_small,
+            type: "bigint",
+            minimum: check.value,
+            inclusive: check.inclusive,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "max") {
+        const tooBig = check.inclusive ? input.data > check.value : input.data >= check.value;
+        if (tooBig) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            code: ZodIssueCode2.too_big,
+            type: "bigint",
+            maximum: check.value,
+            inclusive: check.inclusive,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "multipleOf") {
+        if (input.data % check.value !== BigInt(0)) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            code: ZodIssueCode2.not_multiple_of,
+            multipleOf: check.value,
+            message: check.message
+          });
+          status.dirty();
+        }
+      } else {
+        util3.assertNever(check);
+      }
+    }
+    return { status: status.value, value: input.data };
+  }
+  _getInvalidInput(input) {
+    const ctx = this._getOrReturnCtx(input);
+    addIssueToContext2(ctx, {
+      code: ZodIssueCode2.invalid_type,
+      expected: ZodParsedType2.bigint,
+      received: ctx.parsedType
+    });
+    return INVALID2;
+  }
+  gte(value, message) {
+    return this.setLimit("min", value, true, errorUtil2.toString(message));
+  }
+  gt(value, message) {
+    return this.setLimit("min", value, false, errorUtil2.toString(message));
+  }
+  lte(value, message) {
+    return this.setLimit("max", value, true, errorUtil2.toString(message));
+  }
+  lt(value, message) {
+    return this.setLimit("max", value, false, errorUtil2.toString(message));
+  }
+  setLimit(kind, value, inclusive, message) {
+    return new ZodBigInt2({
+      ...this._def,
+      checks: [
+        ...this._def.checks,
+        {
+          kind,
+          value,
+          inclusive,
+          message: errorUtil2.toString(message)
+        }
+      ]
+    });
+  }
+  _addCheck(check) {
+    return new ZodBigInt2({
+      ...this._def,
+      checks: [...this._def.checks, check]
+    });
+  }
+  positive(message) {
+    return this._addCheck({
+      kind: "min",
+      value: BigInt(0),
+      inclusive: false,
+      message: errorUtil2.toString(message)
+    });
+  }
+  negative(message) {
+    return this._addCheck({
+      kind: "max",
+      value: BigInt(0),
+      inclusive: false,
+      message: errorUtil2.toString(message)
+    });
+  }
+  nonpositive(message) {
+    return this._addCheck({
+      kind: "max",
+      value: BigInt(0),
+      inclusive: true,
+      message: errorUtil2.toString(message)
+    });
+  }
+  nonnegative(message) {
+    return this._addCheck({
+      kind: "min",
+      value: BigInt(0),
+      inclusive: true,
+      message: errorUtil2.toString(message)
+    });
+  }
+  multipleOf(value, message) {
+    return this._addCheck({
+      kind: "multipleOf",
+      value,
+      message: errorUtil2.toString(message)
+    });
+  }
+  get minValue() {
+    let min = null;
+    for (const ch2 of this._def.checks) {
+      if (ch2.kind === "min") {
+        if (min === null || ch2.value > min)
+          min = ch2.value;
+      }
+    }
+    return min;
+  }
+  get maxValue() {
+    let max = null;
+    for (const ch2 of this._def.checks) {
+      if (ch2.kind === "max") {
+        if (max === null || ch2.value < max)
+          max = ch2.value;
+      }
+    }
+    return max;
+  }
+}
+ZodBigInt2.create = (params) => {
+  return new ZodBigInt2({
+    checks: [],
+    typeName: ZodFirstPartyTypeKind2.ZodBigInt,
+    coerce: params?.coerce ?? false,
+    ...processCreateParams2(params)
+  });
+};
+
+class ZodBoolean2 extends ZodType2 {
+  _parse(input) {
+    if (this._def.coerce) {
+      input.data = Boolean(input.data);
+    }
+    const parsedType = this._getType(input);
+    if (parsedType !== ZodParsedType2.boolean) {
+      const ctx = this._getOrReturnCtx(input);
+      addIssueToContext2(ctx, {
+        code: ZodIssueCode2.invalid_type,
+        expected: ZodParsedType2.boolean,
+        received: ctx.parsedType
+      });
+      return INVALID2;
+    }
+    return OK2(input.data);
+  }
+}
+ZodBoolean2.create = (params) => {
+  return new ZodBoolean2({
+    typeName: ZodFirstPartyTypeKind2.ZodBoolean,
+    coerce: params?.coerce || false,
+    ...processCreateParams2(params)
+  });
+};
+
+class ZodDate2 extends ZodType2 {
+  _parse(input) {
+    if (this._def.coerce) {
+      input.data = new Date(input.data);
+    }
+    const parsedType = this._getType(input);
+    if (parsedType !== ZodParsedType2.date) {
+      const ctx2 = this._getOrReturnCtx(input);
+      addIssueToContext2(ctx2, {
+        code: ZodIssueCode2.invalid_type,
+        expected: ZodParsedType2.date,
+        received: ctx2.parsedType
+      });
+      return INVALID2;
+    }
+    if (Number.isNaN(input.data.getTime())) {
+      const ctx2 = this._getOrReturnCtx(input);
+      addIssueToContext2(ctx2, {
+        code: ZodIssueCode2.invalid_date
+      });
+      return INVALID2;
+    }
+    const status = new ParseStatus2;
+    let ctx = undefined;
+    for (const check of this._def.checks) {
+      if (check.kind === "min") {
+        if (input.data.getTime() < check.value) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            code: ZodIssueCode2.too_small,
+            message: check.message,
+            inclusive: true,
+            exact: false,
+            minimum: check.value,
+            type: "date"
+          });
+          status.dirty();
+        }
+      } else if (check.kind === "max") {
+        if (input.data.getTime() > check.value) {
+          ctx = this._getOrReturnCtx(input, ctx);
+          addIssueToContext2(ctx, {
+            code: ZodIssueCode2.too_big,
+            message: check.message,
+            inclusive: true,
+            exact: false,
+            maximum: check.value,
+            type: "date"
+          });
+          status.dirty();
+        }
+      } else {
+        util3.assertNever(check);
+      }
+    }
+    return {
+      status: status.value,
+      value: new Date(input.data.getTime())
+    };
+  }
+  _addCheck(check) {
+    return new ZodDate2({
+      ...this._def,
+      checks: [...this._def.checks, check]
+    });
+  }
+  min(minDate, message) {
+    return this._addCheck({
+      kind: "min",
+      value: minDate.getTime(),
+      message: errorUtil2.toString(message)
+    });
+  }
+  max(maxDate, message) {
+    return this._addCheck({
+      kind: "max",
+      value: maxDate.getTime(),
+      message: errorUtil2.toString(message)
+    });
+  }
+  get minDate() {
+    let min = null;
+    for (const ch2 of this._def.checks) {
+      if (ch2.kind === "min") {
+        if (min === null || ch2.value > min)
+          min = ch2.value;
+      }
+    }
+    return min != null ? new Date(min) : null;
+  }
+  get maxDate() {
+    let max = null;
+    for (const ch2 of this._def.checks) {
+      if (ch2.kind === "max") {
+        if (max === null || ch2.value < max)
+          max = ch2.value;
+      }
+    }
+    return max != null ? new Date(max) : null;
+  }
+}
+ZodDate2.create = (params) => {
+  return new ZodDate2({
+    checks: [],
+    coerce: params?.coerce || false,
+    typeName: ZodFirstPartyTypeKind2.ZodDate,
+    ...processCreateParams2(params)
+  });
+};
+
+class ZodSymbol2 extends ZodType2 {
+  _parse(input) {
+    const parsedType = this._getType(input);
+    if (parsedType !== ZodParsedType2.symbol) {
+      const ctx = this._getOrReturnCtx(input);
+      addIssueToContext2(ctx, {
+        code: ZodIssueCode2.invalid_type,
+        expected: ZodParsedType2.symbol,
+        received: ctx.parsedType
+      });
+      return INVALID2;
+    }
+    return OK2(input.data);
+  }
+}
+ZodSymbol2.create = (params) => {
+  return new ZodSymbol2({
+    typeName: ZodFirstPartyTypeKind2.ZodSymbol,
+    ...processCreateParams2(params)
+  });
+};
+
+class ZodUndefined2 extends ZodType2 {
+  _parse(input) {
+    const parsedType = this._getType(input);
+    if (parsedType !== ZodParsedType2.undefined) {
+      const ctx = this._getOrReturnCtx(input);
+      addIssueToContext2(ctx, {
+        code: ZodIssueCode2.invalid_type,
+        expected: ZodParsedType2.undefined,
+        received: ctx.parsedType
+      });
+      return INVALID2;
+    }
+    return OK2(input.data);
+  }
+}
+ZodUndefined2.create = (params) => {
+  return new ZodUndefined2({
+    typeName: ZodFirstPartyTypeKind2.ZodUndefined,
+    ...processCreateParams2(params)
+  });
+};
+
+class ZodNull2 extends ZodType2 {
+  _parse(input) {
+    const parsedType = this._getType(input);
+    if (parsedType !== ZodParsedType2.null) {
+      const ctx = this._getOrReturnCtx(input);
+      addIssueToContext2(ctx, {
+        code: ZodIssueCode2.invalid_type,
+        expected: ZodParsedType2.null,
+        received: ctx.parsedType
+      });
+      return INVALID2;
+    }
+    return OK2(input.data);
+  }
+}
+ZodNull2.create = (params) => {
+  return new ZodNull2({
+    typeName: ZodFirstPartyTypeKind2.ZodNull,
+    ...processCreateParams2(params)
+  });
+};
+
+class ZodAny2 extends ZodType2 {
+  constructor() {
+    super(...arguments);
+    this._any = true;
+  }
+  _parse(input) {
+    return OK2(input.data);
+  }
+}
+ZodAny2.create = (params) => {
+  return new ZodAny2({
+    typeName: ZodFirstPartyTypeKind2.ZodAny,
+    ...processCreateParams2(params)
+  });
+};
+
+class ZodUnknown2 extends ZodType2 {
+  constructor() {
+    super(...arguments);
+    this._unknown = true;
+  }
+  _parse(input) {
+    return OK2(input.data);
+  }
+}
+ZodUnknown2.create = (params) => {
+  return new ZodUnknown2({
+    typeName: ZodFirstPartyTypeKind2.ZodUnknown,
+    ...processCreateParams2(params)
+  });
+};
+
+class ZodNever2 extends ZodType2 {
+  _parse(input) {
+    const ctx = this._getOrReturnCtx(input);
+    addIssueToContext2(ctx, {
+      code: ZodIssueCode2.invalid_type,
+      expected: ZodParsedType2.never,
+      received: ctx.parsedType
+    });
+    return INVALID2;
+  }
+}
+ZodNever2.create = (params) => {
+  return new ZodNever2({
+    typeName: ZodFirstPartyTypeKind2.ZodNever,
+    ...processCreateParams2(params)
+  });
+};
+
+class ZodVoid2 extends ZodType2 {
+  _parse(input) {
+    const parsedType = this._getType(input);
+    if (parsedType !== ZodParsedType2.undefined) {
+      const ctx = this._getOrReturnCtx(input);
+      addIssueToContext2(ctx, {
+        code: ZodIssueCode2.invalid_type,
+        expected: ZodParsedType2.void,
+        received: ctx.parsedType
+      });
+      return INVALID2;
+    }
+    return OK2(input.data);
+  }
+}
+ZodVoid2.create = (params) => {
+  return new ZodVoid2({
+    typeName: ZodFirstPartyTypeKind2.ZodVoid,
+    ...processCreateParams2(params)
+  });
+};
+
+class ZodArray2 extends ZodType2 {
+  _parse(input) {
+    const { ctx, status } = this._processInputParams(input);
+    const def = this._def;
+    if (ctx.parsedType !== ZodParsedType2.array) {
+      addIssueToContext2(ctx, {
+        code: ZodIssueCode2.invalid_type,
+        expected: ZodParsedType2.array,
+        received: ctx.parsedType
+      });
+      return INVALID2;
+    }
+    if (def.exactLength !== null) {
+      const tooBig = ctx.data.length > def.exactLength.value;
+      const tooSmall = ctx.data.length < def.exactLength.value;
+      if (tooBig || tooSmall) {
+        addIssueToContext2(ctx, {
+          code: tooBig ? ZodIssueCode2.too_big : ZodIssueCode2.too_small,
+          minimum: tooSmall ? def.exactLength.value : undefined,
+          maximum: tooBig ? def.exactLength.value : undefined,
+          type: "array",
+          inclusive: true,
+          exact: true,
+          message: def.exactLength.message
+        });
+        status.dirty();
+      }
+    }
+    if (def.minLength !== null) {
+      if (ctx.data.length < def.minLength.value) {
+        addIssueToContext2(ctx, {
+          code: ZodIssueCode2.too_small,
+          minimum: def.minLength.value,
+          type: "array",
+          inclusive: true,
+          exact: false,
+          message: def.minLength.message
+        });
+        status.dirty();
+      }
+    }
+    if (def.maxLength !== null) {
+      if (ctx.data.length > def.maxLength.value) {
+        addIssueToContext2(ctx, {
+          code: ZodIssueCode2.too_big,
+          maximum: def.maxLength.value,
+          type: "array",
+          inclusive: true,
+          exact: false,
+          message: def.maxLength.message
+        });
+        status.dirty();
+      }
+    }
+    if (ctx.common.async) {
+      return Promise.all([...ctx.data].map((item, i2) => {
+        return def.type._parseAsync(new ParseInputLazyPath2(ctx, item, ctx.path, i2));
+      })).then((result2) => {
+        return ParseStatus2.mergeArray(status, result2);
+      });
+    }
+    const result = [...ctx.data].map((item, i2) => {
+      return def.type._parseSync(new ParseInputLazyPath2(ctx, item, ctx.path, i2));
+    });
+    return ParseStatus2.mergeArray(status, result);
+  }
+  get element() {
+    return this._def.type;
+  }
+  min(minLength, message) {
+    return new ZodArray2({
+      ...this._def,
+      minLength: { value: minLength, message: errorUtil2.toString(message) }
+    });
+  }
+  max(maxLength, message) {
+    return new ZodArray2({
+      ...this._def,
+      maxLength: { value: maxLength, message: errorUtil2.toString(message) }
+    });
+  }
+  length(len, message) {
+    return new ZodArray2({
+      ...this._def,
+      exactLength: { value: len, message: errorUtil2.toString(message) }
+    });
+  }
+  nonempty(message) {
+    return this.min(1, message);
+  }
+}
+ZodArray2.create = (schema, params) => {
+  return new ZodArray2({
+    type: schema,
+    minLength: null,
+    maxLength: null,
+    exactLength: null,
+    typeName: ZodFirstPartyTypeKind2.ZodArray,
+    ...processCreateParams2(params)
+  });
+};
+function deepPartialify2(schema) {
+  if (schema instanceof ZodObject2) {
+    const newShape = {};
+    for (const key2 in schema.shape) {
+      const fieldSchema = schema.shape[key2];
+      newShape[key2] = ZodOptional2.create(deepPartialify2(fieldSchema));
+    }
+    return new ZodObject2({
+      ...schema._def,
+      shape: () => newShape
+    });
+  } else if (schema instanceof ZodArray2) {
+    return new ZodArray2({
+      ...schema._def,
+      type: deepPartialify2(schema.element)
+    });
+  } else if (schema instanceof ZodOptional2) {
+    return ZodOptional2.create(deepPartialify2(schema.unwrap()));
+  } else if (schema instanceof ZodNullable2) {
+    return ZodNullable2.create(deepPartialify2(schema.unwrap()));
+  } else if (schema instanceof ZodTuple2) {
+    return ZodTuple2.create(schema.items.map((item) => deepPartialify2(item)));
+  } else {
+    return schema;
+  }
+}
+
+class ZodObject2 extends ZodType2 {
+  constructor() {
+    super(...arguments);
+    this._cached = null;
+    this.nonstrict = this.passthrough;
+    this.augment = this.extend;
+  }
+  _getCached() {
+    if (this._cached !== null)
+      return this._cached;
+    const shape = this._def.shape();
+    const keys = util3.objectKeys(shape);
+    this._cached = { shape, keys };
+    return this._cached;
+  }
+  _parse(input) {
+    const parsedType = this._getType(input);
+    if (parsedType !== ZodParsedType2.object) {
+      const ctx2 = this._getOrReturnCtx(input);
+      addIssueToContext2(ctx2, {
+        code: ZodIssueCode2.invalid_type,
+        expected: ZodParsedType2.object,
+        received: ctx2.parsedType
+      });
+      return INVALID2;
+    }
+    const { status, ctx } = this._processInputParams(input);
+    const { shape, keys: shapeKeys } = this._getCached();
+    const extraKeys = [];
+    if (!(this._def.catchall instanceof ZodNever2 && this._def.unknownKeys === "strip")) {
+      for (const key2 in ctx.data) {
+        if (!shapeKeys.includes(key2)) {
+          extraKeys.push(key2);
+        }
+      }
+    }
+    const pairs = [];
+    for (const key2 of shapeKeys) {
+      const keyValidator = shape[key2];
+      const value = ctx.data[key2];
+      pairs.push({
+        key: { status: "valid", value: key2 },
+        value: keyValidator._parse(new ParseInputLazyPath2(ctx, value, ctx.path, key2)),
+        alwaysSet: key2 in ctx.data
+      });
+    }
+    if (this._def.catchall instanceof ZodNever2) {
+      const unknownKeys = this._def.unknownKeys;
+      if (unknownKeys === "passthrough") {
+        for (const key2 of extraKeys) {
+          pairs.push({
+            key: { status: "valid", value: key2 },
+            value: { status: "valid", value: ctx.data[key2] }
+          });
+        }
+      } else if (unknownKeys === "strict") {
+        if (extraKeys.length > 0) {
+          addIssueToContext2(ctx, {
+            code: ZodIssueCode2.unrecognized_keys,
+            keys: extraKeys
+          });
+          status.dirty();
+        }
+      } else if (unknownKeys === "strip") {} else {
+        throw new Error(`Internal ZodObject error: invalid unknownKeys value.`);
+      }
+    } else {
+      const catchall = this._def.catchall;
+      for (const key2 of extraKeys) {
+        const value = ctx.data[key2];
+        pairs.push({
+          key: { status: "valid", value: key2 },
+          value: catchall._parse(new ParseInputLazyPath2(ctx, value, ctx.path, key2)),
+          alwaysSet: key2 in ctx.data
+        });
+      }
+    }
+    if (ctx.common.async) {
+      return Promise.resolve().then(async () => {
+        const syncPairs = [];
+        for (const pair of pairs) {
+          const key2 = await pair.key;
+          const value = await pair.value;
+          syncPairs.push({
+            key: key2,
+            value,
+            alwaysSet: pair.alwaysSet
+          });
+        }
+        return syncPairs;
+      }).then((syncPairs) => {
+        return ParseStatus2.mergeObjectSync(status, syncPairs);
+      });
+    } else {
+      return ParseStatus2.mergeObjectSync(status, pairs);
+    }
+  }
+  get shape() {
+    return this._def.shape();
+  }
+  strict(message) {
+    errorUtil2.errToObj;
+    return new ZodObject2({
+      ...this._def,
+      unknownKeys: "strict",
+      ...message !== undefined ? {
+        errorMap: (issue, ctx) => {
+          const defaultError = this._def.errorMap?.(issue, ctx).message ?? ctx.defaultError;
+          if (issue.code === "unrecognized_keys")
+            return {
+              message: errorUtil2.errToObj(message).message ?? defaultError
+            };
+          return {
+            message: defaultError
+          };
+        }
+      } : {}
+    });
+  }
+  strip() {
+    return new ZodObject2({
+      ...this._def,
+      unknownKeys: "strip"
+    });
+  }
+  passthrough() {
+    return new ZodObject2({
+      ...this._def,
+      unknownKeys: "passthrough"
+    });
+  }
+  extend(augmentation) {
+    return new ZodObject2({
+      ...this._def,
+      shape: () => ({
+        ...this._def.shape(),
+        ...augmentation
+      })
+    });
+  }
+  merge(merging) {
+    const merged = new ZodObject2({
+      unknownKeys: merging._def.unknownKeys,
+      catchall: merging._def.catchall,
+      shape: () => ({
+        ...this._def.shape(),
+        ...merging._def.shape()
+      }),
+      typeName: ZodFirstPartyTypeKind2.ZodObject
+    });
+    return merged;
+  }
+  setKey(key2, schema) {
+    return this.augment({ [key2]: schema });
+  }
+  catchall(index) {
+    return new ZodObject2({
+      ...this._def,
+      catchall: index
+    });
+  }
+  pick(mask) {
+    const shape = {};
+    for (const key2 of util3.objectKeys(mask)) {
+      if (mask[key2] && this.shape[key2]) {
+        shape[key2] = this.shape[key2];
+      }
+    }
+    return new ZodObject2({
+      ...this._def,
+      shape: () => shape
+    });
+  }
+  omit(mask) {
+    const shape = {};
+    for (const key2 of util3.objectKeys(this.shape)) {
+      if (!mask[key2]) {
+        shape[key2] = this.shape[key2];
+      }
+    }
+    return new ZodObject2({
+      ...this._def,
+      shape: () => shape
+    });
+  }
+  deepPartial() {
+    return deepPartialify2(this);
+  }
+  partial(mask) {
+    const newShape = {};
+    for (const key2 of util3.objectKeys(this.shape)) {
+      const fieldSchema = this.shape[key2];
+      if (mask && !mask[key2]) {
+        newShape[key2] = fieldSchema;
+      } else {
+        newShape[key2] = fieldSchema.optional();
+      }
+    }
+    return new ZodObject2({
+      ...this._def,
+      shape: () => newShape
+    });
+  }
+  required(mask) {
+    const newShape = {};
+    for (const key2 of util3.objectKeys(this.shape)) {
+      if (mask && !mask[key2]) {
+        newShape[key2] = this.shape[key2];
+      } else {
+        const fieldSchema = this.shape[key2];
+        let newField = fieldSchema;
+        while (newField instanceof ZodOptional2) {
+          newField = newField._def.innerType;
+        }
+        newShape[key2] = newField;
+      }
+    }
+    return new ZodObject2({
+      ...this._def,
+      shape: () => newShape
+    });
+  }
+  keyof() {
+    return createZodEnum2(util3.objectKeys(this.shape));
+  }
+}
+ZodObject2.create = (shape, params) => {
+  return new ZodObject2({
+    shape: () => shape,
+    unknownKeys: "strip",
+    catchall: ZodNever2.create(),
+    typeName: ZodFirstPartyTypeKind2.ZodObject,
+    ...processCreateParams2(params)
+  });
+};
+ZodObject2.strictCreate = (shape, params) => {
+  return new ZodObject2({
+    shape: () => shape,
+    unknownKeys: "strict",
+    catchall: ZodNever2.create(),
+    typeName: ZodFirstPartyTypeKind2.ZodObject,
+    ...processCreateParams2(params)
+  });
+};
+ZodObject2.lazycreate = (shape, params) => {
+  return new ZodObject2({
+    shape,
+    unknownKeys: "strip",
+    catchall: ZodNever2.create(),
+    typeName: ZodFirstPartyTypeKind2.ZodObject,
+    ...processCreateParams2(params)
+  });
+};
+
+class ZodUnion2 extends ZodType2 {
+  _parse(input) {
+    const { ctx } = this._processInputParams(input);
+    const options = this._def.options;
+    function handleResults(results) {
+      for (const result of results) {
+        if (result.result.status === "valid") {
+          return result.result;
+        }
+      }
+      for (const result of results) {
+        if (result.result.status === "dirty") {
+          ctx.common.issues.push(...result.ctx.common.issues);
+          return result.result;
+        }
+      }
+      const unionErrors = results.map((result) => new ZodError3(result.ctx.common.issues));
+      addIssueToContext2(ctx, {
+        code: ZodIssueCode2.invalid_union,
+        unionErrors
+      });
+      return INVALID2;
+    }
+    if (ctx.common.async) {
+      return Promise.all(options.map(async (option) => {
+        const childCtx = {
+          ...ctx,
+          common: {
+            ...ctx.common,
+            issues: []
+          },
+          parent: null
+        };
+        return {
+          result: await option._parseAsync({
+            data: ctx.data,
+            path: ctx.path,
+            parent: childCtx
+          }),
+          ctx: childCtx
+        };
+      })).then(handleResults);
+    } else {
+      let dirty = undefined;
+      const issues = [];
+      for (const option of options) {
+        const childCtx = {
+          ...ctx,
+          common: {
+            ...ctx.common,
+            issues: []
+          },
+          parent: null
+        };
+        const result = option._parseSync({
+          data: ctx.data,
+          path: ctx.path,
+          parent: childCtx
+        });
+        if (result.status === "valid") {
+          return result;
+        } else if (result.status === "dirty" && !dirty) {
+          dirty = { result, ctx: childCtx };
+        }
+        if (childCtx.common.issues.length) {
+          issues.push(childCtx.common.issues);
+        }
+      }
+      if (dirty) {
+        ctx.common.issues.push(...dirty.ctx.common.issues);
+        return dirty.result;
+      }
+      const unionErrors = issues.map((issues2) => new ZodError3(issues2));
+      addIssueToContext2(ctx, {
+        code: ZodIssueCode2.invalid_union,
+        unionErrors
+      });
+      return INVALID2;
+    }
+  }
+  get options() {
+    return this._def.options;
+  }
+}
+ZodUnion2.create = (types4, params) => {
+  return new ZodUnion2({
+    options: types4,
+    typeName: ZodFirstPartyTypeKind2.ZodUnion,
+    ...processCreateParams2(params)
+  });
+};
+var getDiscriminator2 = (type) => {
+  if (type instanceof ZodLazy2) {
+    return getDiscriminator2(type.schema);
+  } else if (type instanceof ZodEffects2) {
+    return getDiscriminator2(type.innerType());
+  } else if (type instanceof ZodLiteral2) {
+    return [type.value];
+  } else if (type instanceof ZodEnum2) {
+    return type.options;
+  } else if (type instanceof ZodNativeEnum2) {
+    return util3.objectValues(type.enum);
+  } else if (type instanceof ZodDefault2) {
+    return getDiscriminator2(type._def.innerType);
+  } else if (type instanceof ZodUndefined2) {
+    return [undefined];
+  } else if (type instanceof ZodNull2) {
+    return [null];
+  } else if (type instanceof ZodOptional2) {
+    return [undefined, ...getDiscriminator2(type.unwrap())];
+  } else if (type instanceof ZodNullable2) {
+    return [null, ...getDiscriminator2(type.unwrap())];
+  } else if (type instanceof ZodBranded2) {
+    return getDiscriminator2(type.unwrap());
+  } else if (type instanceof ZodReadonly2) {
+    return getDiscriminator2(type.unwrap());
+  } else if (type instanceof ZodCatch2) {
+    return getDiscriminator2(type._def.innerType);
+  } else {
+    return [];
+  }
+};
+
+class ZodDiscriminatedUnion2 extends ZodType2 {
+  _parse(input) {
+    const { ctx } = this._processInputParams(input);
+    if (ctx.parsedType !== ZodParsedType2.object) {
+      addIssueToContext2(ctx, {
+        code: ZodIssueCode2.invalid_type,
+        expected: ZodParsedType2.object,
+        received: ctx.parsedType
+      });
+      return INVALID2;
+    }
+    const discriminator = this.discriminator;
+    const discriminatorValue = ctx.data[discriminator];
+    const option = this.optionsMap.get(discriminatorValue);
+    if (!option) {
+      addIssueToContext2(ctx, {
+        code: ZodIssueCode2.invalid_union_discriminator,
+        options: Array.from(this.optionsMap.keys()),
+        path: [discriminator]
+      });
+      return INVALID2;
+    }
+    if (ctx.common.async) {
+      return option._parseAsync({
+        data: ctx.data,
+        path: ctx.path,
+        parent: ctx
+      });
+    } else {
+      return option._parseSync({
+        data: ctx.data,
+        path: ctx.path,
+        parent: ctx
+      });
+    }
+  }
+  get discriminator() {
+    return this._def.discriminator;
+  }
+  get options() {
+    return this._def.options;
+  }
+  get optionsMap() {
+    return this._def.optionsMap;
+  }
+  static create(discriminator, options, params) {
+    const optionsMap = new Map;
+    for (const type of options) {
+      const discriminatorValues = getDiscriminator2(type.shape[discriminator]);
+      if (!discriminatorValues.length) {
+        throw new Error(`A discriminator value for key \`${discriminator}\` could not be extracted from all schema options`);
+      }
+      for (const value of discriminatorValues) {
+        if (optionsMap.has(value)) {
+          throw new Error(`Discriminator property ${String(discriminator)} has duplicate value ${String(value)}`);
+        }
+        optionsMap.set(value, type);
+      }
+    }
+    return new ZodDiscriminatedUnion2({
+      typeName: ZodFirstPartyTypeKind2.ZodDiscriminatedUnion,
+      discriminator,
+      options,
+      optionsMap,
+      ...processCreateParams2(params)
+    });
+  }
+}
+function mergeValues2(a2, b2) {
+  const aType = getParsedType2(a2);
+  const bType = getParsedType2(b2);
+  if (a2 === b2) {
+    return { valid: true, data: a2 };
+  } else if (aType === ZodParsedType2.object && bType === ZodParsedType2.object) {
+    const bKeys = util3.objectKeys(b2);
+    const sharedKeys = util3.objectKeys(a2).filter((key2) => bKeys.indexOf(key2) !== -1);
+    const newObj = { ...a2, ...b2 };
+    for (const key2 of sharedKeys) {
+      const sharedValue = mergeValues2(a2[key2], b2[key2]);
+      if (!sharedValue.valid) {
+        return { valid: false };
+      }
+      newObj[key2] = sharedValue.data;
+    }
+    return { valid: true, data: newObj };
+  } else if (aType === ZodParsedType2.array && bType === ZodParsedType2.array) {
+    if (a2.length !== b2.length) {
+      return { valid: false };
+    }
+    const newArray = [];
+    for (let index = 0;index < a2.length; index++) {
+      const itemA = a2[index];
+      const itemB = b2[index];
+      const sharedValue = mergeValues2(itemA, itemB);
+      if (!sharedValue.valid) {
+        return { valid: false };
+      }
+      newArray.push(sharedValue.data);
+    }
+    return { valid: true, data: newArray };
+  } else if (aType === ZodParsedType2.date && bType === ZodParsedType2.date && +a2 === +b2) {
+    return { valid: true, data: a2 };
+  } else {
+    return { valid: false };
+  }
+}
+
+class ZodIntersection2 extends ZodType2 {
+  _parse(input) {
+    const { status, ctx } = this._processInputParams(input);
+    const handleParsed = (parsedLeft, parsedRight) => {
+      if (isAborted2(parsedLeft) || isAborted2(parsedRight)) {
+        return INVALID2;
+      }
+      const merged = mergeValues2(parsedLeft.value, parsedRight.value);
+      if (!merged.valid) {
+        addIssueToContext2(ctx, {
+          code: ZodIssueCode2.invalid_intersection_types
+        });
+        return INVALID2;
+      }
+      if (isDirty2(parsedLeft) || isDirty2(parsedRight)) {
+        status.dirty();
+      }
+      return { status: status.value, value: merged.data };
+    };
+    if (ctx.common.async) {
+      return Promise.all([
+        this._def.left._parseAsync({
+          data: ctx.data,
+          path: ctx.path,
+          parent: ctx
+        }),
+        this._def.right._parseAsync({
+          data: ctx.data,
+          path: ctx.path,
+          parent: ctx
+        })
+      ]).then(([left, right]) => handleParsed(left, right));
+    } else {
+      return handleParsed(this._def.left._parseSync({
+        data: ctx.data,
+        path: ctx.path,
+        parent: ctx
+      }), this._def.right._parseSync({
+        data: ctx.data,
+        path: ctx.path,
+        parent: ctx
+      }));
+    }
+  }
+}
+ZodIntersection2.create = (left, right, params) => {
+  return new ZodIntersection2({
+    left,
+    right,
+    typeName: ZodFirstPartyTypeKind2.ZodIntersection,
+    ...processCreateParams2(params)
+  });
+};
+
+class ZodTuple2 extends ZodType2 {
+  _parse(input) {
+    const { status, ctx } = this._processInputParams(input);
+    if (ctx.parsedType !== ZodParsedType2.array) {
+      addIssueToContext2(ctx, {
+        code: ZodIssueCode2.invalid_type,
+        expected: ZodParsedType2.array,
+        received: ctx.parsedType
+      });
+      return INVALID2;
+    }
+    if (ctx.data.length < this._def.items.length) {
+      addIssueToContext2(ctx, {
+        code: ZodIssueCode2.too_small,
+        minimum: this._def.items.length,
+        inclusive: true,
+        exact: false,
+        type: "array"
+      });
+      return INVALID2;
+    }
+    const rest = this._def.rest;
+    if (!rest && ctx.data.length > this._def.items.length) {
+      addIssueToContext2(ctx, {
+        code: ZodIssueCode2.too_big,
+        maximum: this._def.items.length,
+        inclusive: true,
+        exact: false,
+        type: "array"
+      });
+      status.dirty();
+    }
+    const items = [...ctx.data].map((item, itemIndex) => {
+      const schema = this._def.items[itemIndex] || this._def.rest;
+      if (!schema)
+        return null;
+      return schema._parse(new ParseInputLazyPath2(ctx, item, ctx.path, itemIndex));
+    }).filter((x2) => !!x2);
+    if (ctx.common.async) {
+      return Promise.all(items).then((results) => {
+        return ParseStatus2.mergeArray(status, results);
+      });
+    } else {
+      return ParseStatus2.mergeArray(status, items);
+    }
+  }
+  get items() {
+    return this._def.items;
+  }
+  rest(rest) {
+    return new ZodTuple2({
+      ...this._def,
+      rest
+    });
+  }
+}
+ZodTuple2.create = (schemas, params) => {
+  if (!Array.isArray(schemas)) {
+    throw new Error("You must pass an array of schemas to z.tuple([ ... ])");
+  }
+  return new ZodTuple2({
+    items: schemas,
+    typeName: ZodFirstPartyTypeKind2.ZodTuple,
+    rest: null,
+    ...processCreateParams2(params)
+  });
+};
+
+class ZodRecord2 extends ZodType2 {
+  get keySchema() {
+    return this._def.keyType;
+  }
+  get valueSchema() {
+    return this._def.valueType;
+  }
+  _parse(input) {
+    const { status, ctx } = this._processInputParams(input);
+    if (ctx.parsedType !== ZodParsedType2.object) {
+      addIssueToContext2(ctx, {
+        code: ZodIssueCode2.invalid_type,
+        expected: ZodParsedType2.object,
+        received: ctx.parsedType
+      });
+      return INVALID2;
+    }
+    const pairs = [];
+    const keyType = this._def.keyType;
+    const valueType = this._def.valueType;
+    for (const key2 in ctx.data) {
+      pairs.push({
+        key: keyType._parse(new ParseInputLazyPath2(ctx, key2, ctx.path, key2)),
+        value: valueType._parse(new ParseInputLazyPath2(ctx, ctx.data[key2], ctx.path, key2)),
+        alwaysSet: key2 in ctx.data
+      });
+    }
+    if (ctx.common.async) {
+      return ParseStatus2.mergeObjectAsync(status, pairs);
+    } else {
+      return ParseStatus2.mergeObjectSync(status, pairs);
+    }
+  }
+  get element() {
+    return this._def.valueType;
+  }
+  static create(first, second, third) {
+    if (second instanceof ZodType2) {
+      return new ZodRecord2({
+        keyType: first,
+        valueType: second,
+        typeName: ZodFirstPartyTypeKind2.ZodRecord,
+        ...processCreateParams2(third)
+      });
+    }
+    return new ZodRecord2({
+      keyType: ZodString2.create(),
+      valueType: first,
+      typeName: ZodFirstPartyTypeKind2.ZodRecord,
+      ...processCreateParams2(second)
+    });
+  }
+}
+
+class ZodMap2 extends ZodType2 {
+  get keySchema() {
+    return this._def.keyType;
+  }
+  get valueSchema() {
+    return this._def.valueType;
+  }
+  _parse(input) {
+    const { status, ctx } = this._processInputParams(input);
+    if (ctx.parsedType !== ZodParsedType2.map) {
+      addIssueToContext2(ctx, {
+        code: ZodIssueCode2.invalid_type,
+        expected: ZodParsedType2.map,
+        received: ctx.parsedType
+      });
+      return INVALID2;
+    }
+    const keyType = this._def.keyType;
+    const valueType = this._def.valueType;
+    const pairs = [...ctx.data.entries()].map(([key2, value], index) => {
+      return {
+        key: keyType._parse(new ParseInputLazyPath2(ctx, key2, ctx.path, [index, "key"])),
+        value: valueType._parse(new ParseInputLazyPath2(ctx, value, ctx.path, [index, "value"]))
+      };
+    });
+    if (ctx.common.async) {
+      const finalMap = new Map;
+      return Promise.resolve().then(async () => {
+        for (const pair of pairs) {
+          const key2 = await pair.key;
+          const value = await pair.value;
+          if (key2.status === "aborted" || value.status === "aborted") {
+            return INVALID2;
+          }
+          if (key2.status === "dirty" || value.status === "dirty") {
+            status.dirty();
+          }
+          finalMap.set(key2.value, value.value);
+        }
+        return { status: status.value, value: finalMap };
+      });
+    } else {
+      const finalMap = new Map;
+      for (const pair of pairs) {
+        const key2 = pair.key;
+        const value = pair.value;
+        if (key2.status === "aborted" || value.status === "aborted") {
+          return INVALID2;
+        }
+        if (key2.status === "dirty" || value.status === "dirty") {
+          status.dirty();
+        }
+        finalMap.set(key2.value, value.value);
+      }
+      return { status: status.value, value: finalMap };
+    }
+  }
+}
+ZodMap2.create = (keyType, valueType, params) => {
+  return new ZodMap2({
+    valueType,
+    keyType,
+    typeName: ZodFirstPartyTypeKind2.ZodMap,
+    ...processCreateParams2(params)
+  });
+};
+
+class ZodSet2 extends ZodType2 {
+  _parse(input) {
+    const { status, ctx } = this._processInputParams(input);
+    if (ctx.parsedType !== ZodParsedType2.set) {
+      addIssueToContext2(ctx, {
+        code: ZodIssueCode2.invalid_type,
+        expected: ZodParsedType2.set,
+        received: ctx.parsedType
+      });
+      return INVALID2;
+    }
+    const def = this._def;
+    if (def.minSize !== null) {
+      if (ctx.data.size < def.minSize.value) {
+        addIssueToContext2(ctx, {
+          code: ZodIssueCode2.too_small,
+          minimum: def.minSize.value,
+          type: "set",
+          inclusive: true,
+          exact: false,
+          message: def.minSize.message
+        });
+        status.dirty();
+      }
+    }
+    if (def.maxSize !== null) {
+      if (ctx.data.size > def.maxSize.value) {
+        addIssueToContext2(ctx, {
+          code: ZodIssueCode2.too_big,
+          maximum: def.maxSize.value,
+          type: "set",
+          inclusive: true,
+          exact: false,
+          message: def.maxSize.message
+        });
+        status.dirty();
+      }
+    }
+    const valueType = this._def.valueType;
+    function finalizeSet(elements2) {
+      const parsedSet = new Set;
+      for (const element of elements2) {
+        if (element.status === "aborted")
+          return INVALID2;
+        if (element.status === "dirty")
+          status.dirty();
+        parsedSet.add(element.value);
+      }
+      return { status: status.value, value: parsedSet };
+    }
+    const elements = [...ctx.data.values()].map((item, i2) => valueType._parse(new ParseInputLazyPath2(ctx, item, ctx.path, i2)));
+    if (ctx.common.async) {
+      return Promise.all(elements).then((elements2) => finalizeSet(elements2));
+    } else {
+      return finalizeSet(elements);
+    }
+  }
+  min(minSize, message) {
+    return new ZodSet2({
+      ...this._def,
+      minSize: { value: minSize, message: errorUtil2.toString(message) }
+    });
+  }
+  max(maxSize, message) {
+    return new ZodSet2({
+      ...this._def,
+      maxSize: { value: maxSize, message: errorUtil2.toString(message) }
+    });
+  }
+  size(size2, message) {
+    return this.min(size2, message).max(size2, message);
+  }
+  nonempty(message) {
+    return this.min(1, message);
+  }
+}
+ZodSet2.create = (valueType, params) => {
+  return new ZodSet2({
+    valueType,
+    minSize: null,
+    maxSize: null,
+    typeName: ZodFirstPartyTypeKind2.ZodSet,
+    ...processCreateParams2(params)
+  });
+};
+
+class ZodFunction2 extends ZodType2 {
+  constructor() {
+    super(...arguments);
+    this.validate = this.implement;
+  }
+  _parse(input) {
+    const { ctx } = this._processInputParams(input);
+    if (ctx.parsedType !== ZodParsedType2.function) {
+      addIssueToContext2(ctx, {
+        code: ZodIssueCode2.invalid_type,
+        expected: ZodParsedType2.function,
+        received: ctx.parsedType
+      });
+      return INVALID2;
+    }
+    function makeArgsIssue(args, error) {
+      return makeIssue2({
+        data: args,
+        path: ctx.path,
+        errorMaps: [ctx.common.contextualErrorMap, ctx.schemaErrorMap, getErrorMap2(), en_default2].filter((x2) => !!x2),
+        issueData: {
+          code: ZodIssueCode2.invalid_arguments,
+          argumentsError: error
+        }
+      });
+    }
+    function makeReturnsIssue(returns, error) {
+      return makeIssue2({
+        data: returns,
+        path: ctx.path,
+        errorMaps: [ctx.common.contextualErrorMap, ctx.schemaErrorMap, getErrorMap2(), en_default2].filter((x2) => !!x2),
+        issueData: {
+          code: ZodIssueCode2.invalid_return_type,
+          returnTypeError: error
+        }
+      });
+    }
+    const params = { errorMap: ctx.common.contextualErrorMap };
+    const fn = ctx.data;
+    if (this._def.returns instanceof ZodPromise2) {
+      const me2 = this;
+      return OK2(async function(...args) {
+        const error = new ZodError3([]);
+        const parsedArgs = await me2._def.args.parseAsync(args, params).catch((e2) => {
+          error.addIssue(makeArgsIssue(args, e2));
+          throw error;
+        });
+        const result = await Reflect.apply(fn, this, parsedArgs);
+        const parsedReturns = await me2._def.returns._def.type.parseAsync(result, params).catch((e2) => {
+          error.addIssue(makeReturnsIssue(result, e2));
+          throw error;
+        });
+        return parsedReturns;
+      });
+    } else {
+      const me2 = this;
+      return OK2(function(...args) {
+        const parsedArgs = me2._def.args.safeParse(args, params);
+        if (!parsedArgs.success) {
+          throw new ZodError3([makeArgsIssue(args, parsedArgs.error)]);
+        }
+        const result = Reflect.apply(fn, this, parsedArgs.data);
+        const parsedReturns = me2._def.returns.safeParse(result, params);
+        if (!parsedReturns.success) {
+          throw new ZodError3([makeReturnsIssue(result, parsedReturns.error)]);
+        }
+        return parsedReturns.data;
+      });
+    }
+  }
+  parameters() {
+    return this._def.args;
+  }
+  returnType() {
+    return this._def.returns;
+  }
+  args(...items) {
+    return new ZodFunction2({
+      ...this._def,
+      args: ZodTuple2.create(items).rest(ZodUnknown2.create())
+    });
+  }
+  returns(returnType) {
+    return new ZodFunction2({
+      ...this._def,
+      returns: returnType
+    });
+  }
+  implement(func) {
+    const validatedFunc = this.parse(func);
+    return validatedFunc;
+  }
+  strictImplement(func) {
+    const validatedFunc = this.parse(func);
+    return validatedFunc;
+  }
+  static create(args, returns, params) {
+    return new ZodFunction2({
+      args: args ? args : ZodTuple2.create([]).rest(ZodUnknown2.create()),
+      returns: returns || ZodUnknown2.create(),
+      typeName: ZodFirstPartyTypeKind2.ZodFunction,
+      ...processCreateParams2(params)
+    });
+  }
+}
+
+class ZodLazy2 extends ZodType2 {
+  get schema() {
+    return this._def.getter();
+  }
+  _parse(input) {
+    const { ctx } = this._processInputParams(input);
+    const lazySchema = this._def.getter();
+    return lazySchema._parse({ data: ctx.data, path: ctx.path, parent: ctx });
+  }
+}
+ZodLazy2.create = (getter, params) => {
+  return new ZodLazy2({
+    getter,
+    typeName: ZodFirstPartyTypeKind2.ZodLazy,
+    ...processCreateParams2(params)
+  });
+};
+
+class ZodLiteral2 extends ZodType2 {
+  _parse(input) {
+    if (input.data !== this._def.value) {
+      const ctx = this._getOrReturnCtx(input);
+      addIssueToContext2(ctx, {
+        received: ctx.data,
+        code: ZodIssueCode2.invalid_literal,
+        expected: this._def.value
+      });
+      return INVALID2;
+    }
+    return { status: "valid", value: input.data };
+  }
+  get value() {
+    return this._def.value;
+  }
+}
+ZodLiteral2.create = (value, params) => {
+  return new ZodLiteral2({
+    value,
+    typeName: ZodFirstPartyTypeKind2.ZodLiteral,
+    ...processCreateParams2(params)
+  });
+};
+function createZodEnum2(values, params) {
+  return new ZodEnum2({
+    values,
+    typeName: ZodFirstPartyTypeKind2.ZodEnum,
+    ...processCreateParams2(params)
+  });
+}
+
+class ZodEnum2 extends ZodType2 {
+  _parse(input) {
+    if (typeof input.data !== "string") {
+      const ctx = this._getOrReturnCtx(input);
+      const expectedValues = this._def.values;
+      addIssueToContext2(ctx, {
+        expected: util3.joinValues(expectedValues),
+        received: ctx.parsedType,
+        code: ZodIssueCode2.invalid_type
+      });
+      return INVALID2;
+    }
+    if (!this._cache) {
+      this._cache = new Set(this._def.values);
+    }
+    if (!this._cache.has(input.data)) {
+      const ctx = this._getOrReturnCtx(input);
+      const expectedValues = this._def.values;
+      addIssueToContext2(ctx, {
+        received: ctx.data,
+        code: ZodIssueCode2.invalid_enum_value,
+        options: expectedValues
+      });
+      return INVALID2;
+    }
+    return OK2(input.data);
+  }
+  get options() {
+    return this._def.values;
+  }
+  get enum() {
+    const enumValues = {};
+    for (const val of this._def.values) {
+      enumValues[val] = val;
+    }
+    return enumValues;
+  }
+  get Values() {
+    const enumValues = {};
+    for (const val of this._def.values) {
+      enumValues[val] = val;
+    }
+    return enumValues;
+  }
+  get Enum() {
+    const enumValues = {};
+    for (const val of this._def.values) {
+      enumValues[val] = val;
+    }
+    return enumValues;
+  }
+  extract(values, newDef = this._def) {
+    return ZodEnum2.create(values, {
+      ...this._def,
+      ...newDef
+    });
+  }
+  exclude(values, newDef = this._def) {
+    return ZodEnum2.create(this.options.filter((opt) => !values.includes(opt)), {
+      ...this._def,
+      ...newDef
+    });
+  }
+}
+ZodEnum2.create = createZodEnum2;
+
+class ZodNativeEnum2 extends ZodType2 {
+  _parse(input) {
+    const nativeEnumValues = util3.getValidEnumValues(this._def.values);
+    const ctx = this._getOrReturnCtx(input);
+    if (ctx.parsedType !== ZodParsedType2.string && ctx.parsedType !== ZodParsedType2.number) {
+      const expectedValues = util3.objectValues(nativeEnumValues);
+      addIssueToContext2(ctx, {
+        expected: util3.joinValues(expectedValues),
+        received: ctx.parsedType,
+        code: ZodIssueCode2.invalid_type
+      });
+      return INVALID2;
+    }
+    if (!this._cache) {
+      this._cache = new Set(util3.getValidEnumValues(this._def.values));
+    }
+    if (!this._cache.has(input.data)) {
+      const expectedValues = util3.objectValues(nativeEnumValues);
+      addIssueToContext2(ctx, {
+        received: ctx.data,
+        code: ZodIssueCode2.invalid_enum_value,
+        options: expectedValues
+      });
+      return INVALID2;
+    }
+    return OK2(input.data);
+  }
+  get enum() {
+    return this._def.values;
+  }
+}
+ZodNativeEnum2.create = (values, params) => {
+  return new ZodNativeEnum2({
+    values,
+    typeName: ZodFirstPartyTypeKind2.ZodNativeEnum,
+    ...processCreateParams2(params)
+  });
+};
+
+class ZodPromise2 extends ZodType2 {
+  unwrap() {
+    return this._def.type;
+  }
+  _parse(input) {
+    const { ctx } = this._processInputParams(input);
+    if (ctx.parsedType !== ZodParsedType2.promise && ctx.common.async === false) {
+      addIssueToContext2(ctx, {
+        code: ZodIssueCode2.invalid_type,
+        expected: ZodParsedType2.promise,
+        received: ctx.parsedType
+      });
+      return INVALID2;
+    }
+    const promisified = ctx.parsedType === ZodParsedType2.promise ? ctx.data : Promise.resolve(ctx.data);
+    return OK2(promisified.then((data) => {
+      return this._def.type.parseAsync(data, {
+        path: ctx.path,
+        errorMap: ctx.common.contextualErrorMap
+      });
+    }));
+  }
+}
+ZodPromise2.create = (schema, params) => {
+  return new ZodPromise2({
+    type: schema,
+    typeName: ZodFirstPartyTypeKind2.ZodPromise,
+    ...processCreateParams2(params)
+  });
+};
+
+class ZodEffects2 extends ZodType2 {
+  innerType() {
+    return this._def.schema;
+  }
+  sourceType() {
+    return this._def.schema._def.typeName === ZodFirstPartyTypeKind2.ZodEffects ? this._def.schema.sourceType() : this._def.schema;
+  }
+  _parse(input) {
+    const { status, ctx } = this._processInputParams(input);
+    const effect = this._def.effect || null;
+    const checkCtx = {
+      addIssue: (arg) => {
+        addIssueToContext2(ctx, arg);
+        if (arg.fatal) {
+          status.abort();
+        } else {
+          status.dirty();
+        }
+      },
+      get path() {
+        return ctx.path;
+      }
+    };
+    checkCtx.addIssue = checkCtx.addIssue.bind(checkCtx);
+    if (effect.type === "preprocess") {
+      const processed = effect.transform(ctx.data, checkCtx);
+      if (ctx.common.async) {
+        return Promise.resolve(processed).then(async (processed2) => {
+          if (status.value === "aborted")
+            return INVALID2;
+          const result = await this._def.schema._parseAsync({
+            data: processed2,
+            path: ctx.path,
+            parent: ctx
+          });
+          if (result.status === "aborted")
+            return INVALID2;
+          if (result.status === "dirty")
+            return DIRTY2(result.value);
+          if (status.value === "dirty")
+            return DIRTY2(result.value);
+          return result;
+        });
+      } else {
+        if (status.value === "aborted")
+          return INVALID2;
+        const result = this._def.schema._parseSync({
+          data: processed,
+          path: ctx.path,
+          parent: ctx
+        });
+        if (result.status === "aborted")
+          return INVALID2;
+        if (result.status === "dirty")
+          return DIRTY2(result.value);
+        if (status.value === "dirty")
+          return DIRTY2(result.value);
+        return result;
+      }
+    }
+    if (effect.type === "refinement") {
+      const executeRefinement = (acc) => {
+        const result = effect.refinement(acc, checkCtx);
+        if (ctx.common.async) {
+          return Promise.resolve(result);
+        }
+        if (result instanceof Promise) {
+          throw new Error("Async refinement encountered during synchronous parse operation. Use .parseAsync instead.");
+        }
+        return acc;
+      };
+      if (ctx.common.async === false) {
+        const inner = this._def.schema._parseSync({
+          data: ctx.data,
+          path: ctx.path,
+          parent: ctx
+        });
+        if (inner.status === "aborted")
+          return INVALID2;
+        if (inner.status === "dirty")
+          status.dirty();
+        executeRefinement(inner.value);
+        return { status: status.value, value: inner.value };
+      } else {
+        return this._def.schema._parseAsync({ data: ctx.data, path: ctx.path, parent: ctx }).then((inner) => {
+          if (inner.status === "aborted")
+            return INVALID2;
+          if (inner.status === "dirty")
+            status.dirty();
+          return executeRefinement(inner.value).then(() => {
+            return { status: status.value, value: inner.value };
+          });
+        });
+      }
+    }
+    if (effect.type === "transform") {
+      if (ctx.common.async === false) {
+        const base = this._def.schema._parseSync({
+          data: ctx.data,
+          path: ctx.path,
+          parent: ctx
+        });
+        if (!isValid2(base))
+          return INVALID2;
+        const result = effect.transform(base.value, checkCtx);
+        if (result instanceof Promise) {
+          throw new Error(`Asynchronous transform encountered during synchronous parse operation. Use .parseAsync instead.`);
+        }
+        return { status: status.value, value: result };
+      } else {
+        return this._def.schema._parseAsync({ data: ctx.data, path: ctx.path, parent: ctx }).then((base) => {
+          if (!isValid2(base))
+            return INVALID2;
+          return Promise.resolve(effect.transform(base.value, checkCtx)).then((result) => ({
+            status: status.value,
+            value: result
+          }));
+        });
+      }
+    }
+    util3.assertNever(effect);
+  }
+}
+ZodEffects2.create = (schema, effect, params) => {
+  return new ZodEffects2({
+    schema,
+    typeName: ZodFirstPartyTypeKind2.ZodEffects,
+    effect,
+    ...processCreateParams2(params)
+  });
+};
+ZodEffects2.createWithPreprocess = (preprocess, schema, params) => {
+  return new ZodEffects2({
+    schema,
+    effect: { type: "preprocess", transform: preprocess },
+    typeName: ZodFirstPartyTypeKind2.ZodEffects,
+    ...processCreateParams2(params)
+  });
+};
+class ZodOptional2 extends ZodType2 {
+  _parse(input) {
+    const parsedType = this._getType(input);
+    if (parsedType === ZodParsedType2.undefined) {
+      return OK2(undefined);
+    }
+    return this._def.innerType._parse(input);
+  }
+  unwrap() {
+    return this._def.innerType;
+  }
+}
+ZodOptional2.create = (type, params) => {
+  return new ZodOptional2({
+    innerType: type,
+    typeName: ZodFirstPartyTypeKind2.ZodOptional,
+    ...processCreateParams2(params)
+  });
+};
+
+class ZodNullable2 extends ZodType2 {
+  _parse(input) {
+    const parsedType = this._getType(input);
+    if (parsedType === ZodParsedType2.null) {
+      return OK2(null);
+    }
+    return this._def.innerType._parse(input);
+  }
+  unwrap() {
+    return this._def.innerType;
+  }
+}
+ZodNullable2.create = (type, params) => {
+  return new ZodNullable2({
+    innerType: type,
+    typeName: ZodFirstPartyTypeKind2.ZodNullable,
+    ...processCreateParams2(params)
+  });
+};
+
+class ZodDefault2 extends ZodType2 {
+  _parse(input) {
+    const { ctx } = this._processInputParams(input);
+    let data = ctx.data;
+    if (ctx.parsedType === ZodParsedType2.undefined) {
+      data = this._def.defaultValue();
+    }
+    return this._def.innerType._parse({
+      data,
+      path: ctx.path,
+      parent: ctx
+    });
+  }
+  removeDefault() {
+    return this._def.innerType;
+  }
+}
+ZodDefault2.create = (type, params) => {
+  return new ZodDefault2({
+    innerType: type,
+    typeName: ZodFirstPartyTypeKind2.ZodDefault,
+    defaultValue: typeof params.default === "function" ? params.default : () => params.default,
+    ...processCreateParams2(params)
+  });
+};
+
+class ZodCatch2 extends ZodType2 {
+  _parse(input) {
+    const { ctx } = this._processInputParams(input);
+    const newCtx = {
+      ...ctx,
+      common: {
+        ...ctx.common,
+        issues: []
+      }
+    };
+    const result = this._def.innerType._parse({
+      data: newCtx.data,
+      path: newCtx.path,
+      parent: {
+        ...newCtx
+      }
+    });
+    if (isAsync2(result)) {
+      return result.then((result2) => {
+        return {
+          status: "valid",
+          value: result2.status === "valid" ? result2.value : this._def.catchValue({
+            get error() {
+              return new ZodError3(newCtx.common.issues);
+            },
+            input: newCtx.data
+          })
+        };
+      });
+    } else {
+      return {
+        status: "valid",
+        value: result.status === "valid" ? result.value : this._def.catchValue({
+          get error() {
+            return new ZodError3(newCtx.common.issues);
+          },
+          input: newCtx.data
+        })
+      };
+    }
+  }
+  removeCatch() {
+    return this._def.innerType;
+  }
+}
+ZodCatch2.create = (type, params) => {
+  return new ZodCatch2({
+    innerType: type,
+    typeName: ZodFirstPartyTypeKind2.ZodCatch,
+    catchValue: typeof params.catch === "function" ? params.catch : () => params.catch,
+    ...processCreateParams2(params)
+  });
+};
+
+class ZodNaN2 extends ZodType2 {
+  _parse(input) {
+    const parsedType = this._getType(input);
+    if (parsedType !== ZodParsedType2.nan) {
+      const ctx = this._getOrReturnCtx(input);
+      addIssueToContext2(ctx, {
+        code: ZodIssueCode2.invalid_type,
+        expected: ZodParsedType2.nan,
+        received: ctx.parsedType
+      });
+      return INVALID2;
+    }
+    return { status: "valid", value: input.data };
+  }
+}
+ZodNaN2.create = (params) => {
+  return new ZodNaN2({
+    typeName: ZodFirstPartyTypeKind2.ZodNaN,
+    ...processCreateParams2(params)
+  });
+};
+var BRAND2 = Symbol("zod_brand");
+
+class ZodBranded2 extends ZodType2 {
+  _parse(input) {
+    const { ctx } = this._processInputParams(input);
+    const data = ctx.data;
+    return this._def.type._parse({
+      data,
+      path: ctx.path,
+      parent: ctx
+    });
+  }
+  unwrap() {
+    return this._def.type;
+  }
+}
+
+class ZodPipeline2 extends ZodType2 {
+  _parse(input) {
+    const { status, ctx } = this._processInputParams(input);
+    if (ctx.common.async) {
+      const handleAsync = async () => {
+        const inResult = await this._def.in._parseAsync({
+          data: ctx.data,
+          path: ctx.path,
+          parent: ctx
+        });
+        if (inResult.status === "aborted")
+          return INVALID2;
+        if (inResult.status === "dirty") {
+          status.dirty();
+          return DIRTY2(inResult.value);
+        } else {
+          return this._def.out._parseAsync({
+            data: inResult.value,
+            path: ctx.path,
+            parent: ctx
+          });
+        }
+      };
+      return handleAsync();
+    } else {
+      const inResult = this._def.in._parseSync({
+        data: ctx.data,
+        path: ctx.path,
+        parent: ctx
+      });
+      if (inResult.status === "aborted")
+        return INVALID2;
+      if (inResult.status === "dirty") {
+        status.dirty();
+        return {
+          status: "dirty",
+          value: inResult.value
+        };
+      } else {
+        return this._def.out._parseSync({
+          data: inResult.value,
+          path: ctx.path,
+          parent: ctx
+        });
+      }
+    }
+  }
+  static create(a2, b2) {
+    return new ZodPipeline2({
+      in: a2,
+      out: b2,
+      typeName: ZodFirstPartyTypeKind2.ZodPipeline
+    });
+  }
+}
+
+class ZodReadonly2 extends ZodType2 {
+  _parse(input) {
+    const result = this._def.innerType._parse(input);
+    const freeze = (data) => {
+      if (isValid2(data)) {
+        data.value = Object.freeze(data.value);
+      }
+      return data;
+    };
+    return isAsync2(result) ? result.then((data) => freeze(data)) : freeze(result);
+  }
+  unwrap() {
+    return this._def.innerType;
+  }
+}
+ZodReadonly2.create = (type, params) => {
+  return new ZodReadonly2({
+    innerType: type,
+    typeName: ZodFirstPartyTypeKind2.ZodReadonly,
+    ...processCreateParams2(params)
+  });
+};
+function cleanParams2(params, data) {
+  const p2 = typeof params === "function" ? params(data) : typeof params === "string" ? { message: params } : params;
+  const p22 = typeof p2 === "string" ? { message: p2 } : p2;
+  return p22;
+}
+function custom2(check, _params = {}, fatal) {
+  if (check)
+    return ZodAny2.create().superRefine((data, ctx) => {
+      const r2 = check(data);
+      if (r2 instanceof Promise) {
+        return r2.then((r3) => {
+          if (!r3) {
+            const params = cleanParams2(_params, data);
+            const _fatal = params.fatal ?? fatal ?? true;
+            ctx.addIssue({ code: "custom", ...params, fatal: _fatal });
+          }
+        });
+      }
+      if (!r2) {
+        const params = cleanParams2(_params, data);
+        const _fatal = params.fatal ?? fatal ?? true;
+        ctx.addIssue({ code: "custom", ...params, fatal: _fatal });
+      }
+      return;
+    });
+  return ZodAny2.create();
+}
+var late2 = {
+  object: ZodObject2.lazycreate
+};
+var ZodFirstPartyTypeKind2;
+(function(ZodFirstPartyTypeKind3) {
+  ZodFirstPartyTypeKind3["ZodString"] = "ZodString";
+  ZodFirstPartyTypeKind3["ZodNumber"] = "ZodNumber";
+  ZodFirstPartyTypeKind3["ZodNaN"] = "ZodNaN";
+  ZodFirstPartyTypeKind3["ZodBigInt"] = "ZodBigInt";
+  ZodFirstPartyTypeKind3["ZodBoolean"] = "ZodBoolean";
+  ZodFirstPartyTypeKind3["ZodDate"] = "ZodDate";
+  ZodFirstPartyTypeKind3["ZodSymbol"] = "ZodSymbol";
+  ZodFirstPartyTypeKind3["ZodUndefined"] = "ZodUndefined";
+  ZodFirstPartyTypeKind3["ZodNull"] = "ZodNull";
+  ZodFirstPartyTypeKind3["ZodAny"] = "ZodAny";
+  ZodFirstPartyTypeKind3["ZodUnknown"] = "ZodUnknown";
+  ZodFirstPartyTypeKind3["ZodNever"] = "ZodNever";
+  ZodFirstPartyTypeKind3["ZodVoid"] = "ZodVoid";
+  ZodFirstPartyTypeKind3["ZodArray"] = "ZodArray";
+  ZodFirstPartyTypeKind3["ZodObject"] = "ZodObject";
+  ZodFirstPartyTypeKind3["ZodUnion"] = "ZodUnion";
+  ZodFirstPartyTypeKind3["ZodDiscriminatedUnion"] = "ZodDiscriminatedUnion";
+  ZodFirstPartyTypeKind3["ZodIntersection"] = "ZodIntersection";
+  ZodFirstPartyTypeKind3["ZodTuple"] = "ZodTuple";
+  ZodFirstPartyTypeKind3["ZodRecord"] = "ZodRecord";
+  ZodFirstPartyTypeKind3["ZodMap"] = "ZodMap";
+  ZodFirstPartyTypeKind3["ZodSet"] = "ZodSet";
+  ZodFirstPartyTypeKind3["ZodFunction"] = "ZodFunction";
+  ZodFirstPartyTypeKind3["ZodLazy"] = "ZodLazy";
+  ZodFirstPartyTypeKind3["ZodLiteral"] = "ZodLiteral";
+  ZodFirstPartyTypeKind3["ZodEnum"] = "ZodEnum";
+  ZodFirstPartyTypeKind3["ZodEffects"] = "ZodEffects";
+  ZodFirstPartyTypeKind3["ZodNativeEnum"] = "ZodNativeEnum";
+  ZodFirstPartyTypeKind3["ZodOptional"] = "ZodOptional";
+  ZodFirstPartyTypeKind3["ZodNullable"] = "ZodNullable";
+  ZodFirstPartyTypeKind3["ZodDefault"] = "ZodDefault";
+  ZodFirstPartyTypeKind3["ZodCatch"] = "ZodCatch";
+  ZodFirstPartyTypeKind3["ZodPromise"] = "ZodPromise";
+  ZodFirstPartyTypeKind3["ZodBranded"] = "ZodBranded";
+  ZodFirstPartyTypeKind3["ZodPipeline"] = "ZodPipeline";
+  ZodFirstPartyTypeKind3["ZodReadonly"] = "ZodReadonly";
+})(ZodFirstPartyTypeKind2 || (ZodFirstPartyTypeKind2 = {}));
+var instanceOfType2 = (cls, params = {
+  message: `Input not instance of ${cls.name}`
+}) => custom2((data) => data instanceof cls, params);
+var stringType2 = ZodString2.create;
+var numberType2 = ZodNumber2.create;
+var nanType2 = ZodNaN2.create;
+var bigIntType2 = ZodBigInt2.create;
+var booleanType2 = ZodBoolean2.create;
+var dateType2 = ZodDate2.create;
+var symbolType2 = ZodSymbol2.create;
+var undefinedType2 = ZodUndefined2.create;
+var nullType2 = ZodNull2.create;
+var anyType2 = ZodAny2.create;
+var unknownType2 = ZodUnknown2.create;
+var neverType2 = ZodNever2.create;
+var voidType2 = ZodVoid2.create;
+var arrayType2 = ZodArray2.create;
+var objectType2 = ZodObject2.create;
+var strictObjectType2 = ZodObject2.strictCreate;
+var unionType2 = ZodUnion2.create;
+var discriminatedUnionType2 = ZodDiscriminatedUnion2.create;
+var intersectionType2 = ZodIntersection2.create;
+var tupleType2 = ZodTuple2.create;
+var recordType2 = ZodRecord2.create;
+var mapType2 = ZodMap2.create;
+var setType2 = ZodSet2.create;
+var functionType2 = ZodFunction2.create;
+var lazyType2 = ZodLazy2.create;
+var literalType2 = ZodLiteral2.create;
+var enumType2 = ZodEnum2.create;
+var nativeEnumType2 = ZodNativeEnum2.create;
+var promiseType2 = ZodPromise2.create;
+var effectsType2 = ZodEffects2.create;
+var optionalType2 = ZodOptional2.create;
+var nullableType2 = ZodNullable2.create;
+var preprocessType2 = ZodEffects2.createWithPreprocess;
+var pipelineType2 = ZodPipeline2.create;
+var ostring2 = () => stringType2().optional();
+var onumber2 = () => numberType2().optional();
+var oboolean2 = () => booleanType2().optional();
+var coerce2 = {
+  string: (arg) => ZodString2.create({ ...arg, coerce: true }),
+  number: (arg) => ZodNumber2.create({ ...arg, coerce: true }),
+  boolean: (arg) => ZodBoolean2.create({
+    ...arg,
+    coerce: true
+  }),
+  bigint: (arg) => ZodBigInt2.create({ ...arg, coerce: true }),
+  date: (arg) => ZodDate2.create({ ...arg, coerce: true })
+};
+var NEVER2 = INVALID2;
+// core-single/node_modules/circuit-json/dist/index.mjs
+var resistance2 = exports_external2.string().or(exports_external2.number()).transform((v2) => parseAndConvertSiUnit2(v2, "Ω").value);
+var capacitance2 = exports_external2.string().or(exports_external2.number()).transform((v2) => parseAndConvertSiUnit2(v2, "F").value).transform((value) => {
+  return Number.parseFloat(value.toPrecision(12));
+});
+var inductance2 = exports_external2.string().or(exports_external2.number()).transform((v2) => parseAndConvertSiUnit2(v2, "H").value);
+var voltage2 = exports_external2.string().or(exports_external2.number()).transform((v2) => parseAndConvertSiUnit2(v2, "V").value);
+var length3 = exports_external2.string().or(exports_external2.number()).transform((v2) => parseAndConvertSiUnit2(v2).value);
+var frequency2 = exports_external2.string().or(exports_external2.number()).transform((v2) => parseAndConvertSiUnit2(v2, "Hz").value);
+var distance7 = length3;
+var current2 = exports_external2.string().or(exports_external2.number()).transform((v2) => parseAndConvertSiUnit2(v2, "A").value);
+var duration_ms2 = exports_external2.string().or(exports_external2.number()).transform((v2, context) => {
+  try {
+    const { value, unitOfValue } = parseAndConvertSiUnit2(v2);
+    if ((unitOfValue === null || unitOfValue === "ms") && Number.isFinite(value)) {
+      return value;
+    }
+  } catch {}
+  context.addIssue({
+    code: exports_external2.ZodIssueCode.custom,
+    message: "Expected a finite number of milliseconds or a time unit"
+  });
+  return exports_external2.NEVER;
+});
+var ms2 = duration_ms2;
+var timestamp2 = exports_external2.string().datetime();
+var rotation2 = exports_external2.string().or(exports_external2.number()).transform((arg) => {
+  if (typeof arg === "number")
+    return arg;
+  if (arg.endsWith("deg")) {
+    return Number.parseFloat(arg.split("deg")[0]);
+  }
+  if (arg.endsWith("rad")) {
+    return Number.parseFloat(arg.split("rad")[0]) * 180 / Math.PI;
+  }
+  return Number.parseFloat(arg);
+});
+var battery_capacity2 = exports_external2.number().or(exports_external2.string().endsWith("mAh")).transform((v2) => {
+  if (typeof v2 === "string") {
+    const valString = v2.replace("mAh", "");
+    const num = Number.parseFloat(valString);
+    if (Number.isNaN(num)) {
+      throw new Error("Invalid capacity");
+    }
+    return num;
+  }
+  return v2;
+}).describe("Battery capacity in mAh");
+var expectTypesMatch2 = (shouldBe) => {};
+expectTypesMatch2("extra props b");
+expectTypesMatch2("missing props b");
+expectTypesMatch2(true);
+expectTypesMatch2("mismatched prop types: a");
+var expectStringUnionsMatch2 = (shouldBe) => {};
+expectStringUnionsMatch2(true);
+expectStringUnionsMatch2('T1 has extra: "c", T2 has extra: "d"');
+expectStringUnionsMatch2('T1 has extra: "c"');
+expectStringUnionsMatch2('T2 has extra: "c"');
+expectStringUnionsMatch2('T1 has extra: "d", T2 has extra: "c"');
+expectStringUnionsMatch2(true);
+var point4 = exports_external2.object({
+  x: distance7,
+  y: distance7
+});
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+var point32 = exports_external2.object({
+  x: distance7,
+  y: distance7,
+  z: distance7
+});
+expectTypesMatch2(true);
+var size2 = exports_external2.object({
+  width: exports_external2.number(),
+  height: exports_external2.number()
+});
+expectTypesMatch2(true);
+var finite_distance2 = distance7.pipe(exports_external2.number().finite());
+var positive_distance2 = distance7.pipe(exports_external2.number().finite().positive());
+var circle_shape2 = exports_external2.object({
+  shape: exports_external2.literal("circle"),
+  x: finite_distance2,
+  y: finite_distance2,
+  radius: positive_distance2
+}).strict();
+var rect_shape2 = exports_external2.object({
+  shape: exports_external2.literal("rect"),
+  x: finite_distance2,
+  y: finite_distance2,
+  width: positive_distance2,
+  height: positive_distance2
+}).strict();
+var rotated_rect_shape2 = rect_shape2.extend({
+  shape: exports_external2.literal("rotated_rect"),
+  ccw_rotation: rotation2.pipe(exports_external2.number().finite())
+});
+var polygon_shape2 = exports_external2.object({
+  shape: exports_external2.literal("polygon"),
+  points: exports_external2.array(point4.extend({ x: finite_distance2, y: finite_distance2 })).min(3).refine((points) => {
+    const twice_area = points.reduce((sum, point22, index) => {
+      const next = points[(index + 1) % points.length];
+      return sum + point22.x * next.y - next.x * point22.y;
+    }, 0);
+    return Number.isFinite(twice_area) && twice_area !== 0;
+  }, "Polygon boundary must enclose a nonzero area")
+}).strict();
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+var standard_shape2 = exports_external2.discriminatedUnion("shape", [
+  circle_shape2,
+  rect_shape2,
+  rotated_rect_shape2,
+  polygon_shape2
+]);
+expectTypesMatch2(true);
+var randomId2 = (length4) => {
+  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  return Array.from({ length: length4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+};
+var getZodPrefixedIdWithDefault2 = (prefix) => {
+  return exports_external2.string().optional().default(() => `${prefix}_${randomId2(10)}`);
+};
+var ninePointAnchor2 = exports_external2.enum([
+  "top_left",
+  "top_center",
+  "top_right",
+  "center_left",
+  "center",
+  "center_right",
+  "bottom_left",
+  "bottom_center",
+  "bottom_right"
+]);
+expectTypesMatch2(true);
+var pcbRenderLayer2 = exports_external2.enum([
+  "top_silkscreen",
+  "bottom_silkscreen",
+  "top_copper",
+  "bottom_copper",
+  "top_soldermask",
+  "bottom_soldermask",
+  "top_fabrication_note",
+  "bottom_fabrication_note",
+  "top_user_note",
+  "bottom_user_note",
+  "top_courtyard",
+  "bottom_courtyard",
+  "inner1_copper",
+  "inner2_copper",
+  "inner3_copper",
+  "inner4_copper",
+  "inner5_copper",
+  "inner6_copper",
+  "inner7_copper",
+  "inner8_copper",
+  "edge_cuts",
+  "drill"
+]);
+expectTypesMatch2(true);
+var asset2 = exports_external2.object({
+  project_relative_path: exports_external2.string(),
+  url: exports_external2.string(),
+  mimetype: exports_external2.string()
+});
+expectTypesMatch2(true);
+var kicadAt2 = point4.extend({
+  rotation: rotation2.optional()
+});
+expectTypesMatch2(true);
+var kicadFont2 = exports_external2.object({
+  size: point4.optional(),
+  thickness: distance7.optional()
+});
+expectTypesMatch2(true);
+var kicadEffects2 = exports_external2.object({
+  font: kicadFont2.optional()
+});
+expectTypesMatch2(true);
+var kicadProperty2 = exports_external2.object({
+  value: exports_external2.string(),
+  at: kicadAt2.optional(),
+  layer: exports_external2.string().optional(),
+  uuid: exports_external2.string().optional(),
+  hide: exports_external2.boolean().optional(),
+  effects: kicadEffects2.optional()
+});
+expectTypesMatch2(true);
+var kicadFootprintProperties2 = exports_external2.object({
+  Reference: kicadProperty2.optional(),
+  Value: kicadProperty2.optional(),
+  Datasheet: kicadProperty2.optional(),
+  Description: kicadProperty2.optional()
+});
+expectTypesMatch2(true);
+var kicadFootprintAttributes2 = exports_external2.object({
+  through_hole: exports_external2.boolean().optional(),
+  smd: exports_external2.boolean().optional(),
+  exclude_from_pos_files: exports_external2.boolean().optional(),
+  exclude_from_bom: exports_external2.boolean().optional()
+});
+expectTypesMatch2(true);
+var kicadFootprintPad2 = exports_external2.object({
+  name: exports_external2.string(),
+  type: exports_external2.string(),
+  shape: exports_external2.string().optional(),
+  at: kicadAt2.optional(),
+  size: point4.optional(),
+  drill: distance7.optional(),
+  layers: exports_external2.array(exports_external2.string()).optional(),
+  removeUnusedLayers: exports_external2.boolean().optional(),
+  uuid: exports_external2.string().optional()
+});
+expectTypesMatch2(true);
+var kicadFootprintModel2 = exports_external2.object({
+  path: exports_external2.string(),
+  offset: point32.optional(),
+  scale: point32.optional(),
+  rotate: point32.optional()
+});
+expectTypesMatch2(true);
+var kicadFootprintMetadata2 = exports_external2.object({
+  footprintName: exports_external2.string().optional(),
+  version: exports_external2.union([exports_external2.number(), exports_external2.string()]).optional(),
+  generator: exports_external2.string().optional(),
+  generatorVersion: exports_external2.union([exports_external2.number(), exports_external2.string()]).optional(),
+  layer: exports_external2.string().optional(),
+  properties: kicadFootprintProperties2.optional(),
+  attributes: kicadFootprintAttributes2.optional(),
+  pads: exports_external2.array(kicadFootprintPad2).optional(),
+  embeddedFonts: exports_external2.boolean().optional(),
+  model: kicadFootprintModel2.optional()
+});
+expectTypesMatch2(true);
+var kicadSymbolPinNumbers2 = exports_external2.object({
+  hide: exports_external2.boolean().optional()
+});
+expectTypesMatch2(true);
+var kicadSymbolPinNames2 = exports_external2.object({
+  offset: distance7.optional(),
+  hide: exports_external2.boolean().optional()
+});
+expectTypesMatch2(true);
+var kicadSymbolEffects2 = exports_external2.object({
+  font: kicadFont2.optional(),
+  justify: exports_external2.union([exports_external2.string(), exports_external2.array(exports_external2.string())]).optional(),
+  hide: exports_external2.boolean().optional()
+});
+expectTypesMatch2(true);
+var kicadSymbolProperty2 = exports_external2.object({
+  value: exports_external2.string(),
+  id: exports_external2.union([exports_external2.number(), exports_external2.string()]).optional(),
+  at: kicadAt2.optional(),
+  effects: kicadSymbolEffects2.optional()
+});
+expectTypesMatch2(true);
+var kicadSymbolProperties2 = exports_external2.object({
+  Reference: kicadSymbolProperty2.optional(),
+  Value: kicadSymbolProperty2.optional(),
+  Footprint: kicadSymbolProperty2.optional(),
+  Datasheet: kicadSymbolProperty2.optional(),
+  Description: kicadSymbolProperty2.optional(),
+  ki_keywords: kicadSymbolProperty2.optional(),
+  ki_fp_filters: kicadSymbolProperty2.optional()
+});
+expectTypesMatch2(true);
+var kicadSymbolMetadata2 = exports_external2.object({
+  symbolName: exports_external2.string().optional(),
+  extends: exports_external2.string().optional(),
+  pinNumbers: kicadSymbolPinNumbers2.optional(),
+  pinNames: kicadSymbolPinNames2.optional(),
+  excludeFromSim: exports_external2.boolean().optional(),
+  inBom: exports_external2.boolean().optional(),
+  onBoard: exports_external2.boolean().optional(),
+  properties: kicadSymbolProperties2.optional(),
+  embeddedFonts: exports_external2.boolean().optional()
+});
+expectTypesMatch2(true);
+var base_circuit_json_error2 = exports_external2.object({
+  error_type: exports_external2.string(),
+  message: exports_external2.string(),
+  is_fatal: exports_external2.boolean().optional()
+});
+expectTypesMatch2(true);
+var supplier_name2 = exports_external2.enum([
+  "jlcpcb",
+  "macrofab",
+  "pcbway",
+  "digikey",
+  "mouser",
+  "lcsc"
+]);
+expectTypesMatch2(true);
+var source_component_base2 = exports_external2.object({
+  type: exports_external2.literal("source_component"),
+  ftype: exports_external2.string().optional(),
+  source_component_id: exports_external2.string(),
+  name: exports_external2.string(),
+  manufacturer_part_number: exports_external2.string().optional(),
+  supplier_part_numbers: exports_external2.record(supplier_name2, exports_external2.array(exports_external2.string())).optional(),
+  display_value: exports_external2.string().optional(),
+  display_name: exports_external2.string().optional(),
+  are_pins_interchangeable: exports_external2.boolean().optional(),
+  internally_connected_source_port_ids: exports_external2.array(exports_external2.array(exports_external2.string())).optional(),
+  source_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional()
+});
+expectTypesMatch2(true);
+var source_simple_capacitor2 = source_component_base2.extend({
+  ftype: exports_external2.literal("simple_capacitor"),
+  capacitance: capacitance2,
+  max_voltage_rating: voltage2.optional(),
+  display_capacitance: exports_external2.string().optional(),
+  max_decoupling_trace_length: distance7.optional()
+});
+expectTypesMatch2(true);
+var source_simple_resistor2 = source_component_base2.extend({
+  ftype: exports_external2.literal("simple_resistor"),
+  resistance: resistance2,
+  display_resistance: exports_external2.string().optional()
+});
+expectTypesMatch2(true);
+var source_simple_diode2 = source_component_base2.extend({
+  ftype: exports_external2.literal("simple_diode")
+});
+expectTypesMatch2(true);
+var source_simple_fiducial2 = source_component_base2.extend({
+  ftype: exports_external2.literal("simple_fiducial")
+});
+expectTypesMatch2(true);
+var source_simple_led2 = source_simple_diode2.extend({
+  ftype: exports_external2.literal("simple_led"),
+  color: exports_external2.string().optional(),
+  wavelength: exports_external2.string().optional()
+});
+expectTypesMatch2(true);
+var source_simple_ground2 = source_component_base2.extend({
+  ftype: exports_external2.literal("simple_ground")
+});
+expectTypesMatch2(true);
+var source_simple_chip2 = source_component_base2.extend({
+  ftype: exports_external2.literal("simple_chip")
+});
+expectTypesMatch2(true);
+var source_printed_part2 = source_component_base2.extend({
+  ftype: exports_external2.literal("printedpart"),
+  material: exports_external2.enum(["pla", "petg", "nylon"]).optional(),
+  color: exports_external2.string().trim().min(1).optional()
+});
+expectTypesMatch2(true);
+var source_subassembly2 = source_component_base2.extend({
+  ftype: exports_external2.literal("subassembly")
+});
+expectTypesMatch2(true);
+var source_motor2 = source_component_base2.extend({
+  ftype: exports_external2.literal("motor")
+});
+expectTypesMatch2(true);
+var source_simple_power_source2 = source_component_base2.extend({
+  ftype: exports_external2.literal("simple_power_source"),
+  voltage: voltage2
+});
+expectTypesMatch2(true);
+var source_simple_current_source2 = source_component_base2.extend({
+  ftype: exports_external2.literal("simple_current_source"),
+  current: current2,
+  frequency: frequency2.optional(),
+  peak_to_peak_current: current2.optional(),
+  wave_shape: exports_external2.enum(["sine", "square", "triangle", "sawtooth", "dc"]).optional().default("dc"),
+  phase: exports_external2.number().optional(),
+  duty_cycle: exports_external2.number().min(0).max(1).optional()
+});
+expectTypesMatch2(true);
+var source_simple_fuse2 = source_component_base2.extend({
+  ftype: exports_external2.literal("simple_fuse"),
+  current_rating_amps: exports_external2.number().describe("Nominal current in amps the fuse is rated for"),
+  voltage_rating_volts: exports_external2.number().describe("Voltage rating in volts, e.g. ±5V would be 5")
+});
+expectTypesMatch2(true);
+var source_simple_ammeter2 = source_component_base2.extend({
+  ftype: exports_external2.literal("simple_ammeter")
+});
+expectTypesMatch2(true);
+var pin_voltage2 = exports_external2.union([
+  exports_external2.number(),
+  exports_external2.string().trim().regex(/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?\s*(?:[fpnumkKMGTµμ]?V?|V)?$/, "Expected a scalar voltage, optionally with SI units")
+]).pipe(voltage2).pipe(exports_external2.number().finite());
+var source_pin_attributes2 = exports_external2.object({
+  is_input: exports_external2.boolean().optional(),
+  is_output: exports_external2.boolean().optional(),
+  is_bidirectional: exports_external2.boolean().optional(),
+  is_passive: exports_external2.boolean().optional(),
+  can_use_tri_state: exports_external2.boolean().optional(),
+  is_using_tri_state: exports_external2.boolean().optional(),
+  can_use_open_collector: exports_external2.boolean().optional(),
+  is_using_open_collector: exports_external2.boolean().optional(),
+  can_use_open_emitter: exports_external2.boolean().optional(),
+  is_using_open_emitter: exports_external2.boolean().optional(),
+  is_gpio: exports_external2.boolean().optional(),
+  highlight_color: exports_external2.string().optional(),
+  must_be_connected: exports_external2.boolean().optional(),
+  provides_power: exports_external2.boolean().optional(),
+  requires_power: exports_external2.boolean().optional(),
+  provides_ground: exports_external2.boolean().optional(),
+  requires_ground: exports_external2.boolean().optional(),
+  provides_voltage: pin_voltage2.optional(),
+  requires_voltage: pin_voltage2.optional(),
+  required_voltage_tolerance: exports_external2.number().finite().min(0).max(1).optional(),
+  do_not_connect: exports_external2.boolean().optional(),
+  include_in_board_pinout: exports_external2.boolean().optional(),
+  can_use_internal_pullup: exports_external2.boolean().optional(),
+  is_using_internal_pullup: exports_external2.boolean().optional(),
+  needs_external_pullup: exports_external2.boolean().optional(),
+  can_use_internal_pulldown: exports_external2.boolean().optional(),
+  is_using_internal_pulldown: exports_external2.boolean().optional(),
+  needs_external_pulldown: exports_external2.boolean().optional(),
+  can_use_open_drain: exports_external2.boolean().optional(),
+  is_using_open_drain: exports_external2.boolean().optional(),
+  can_use_push_pull: exports_external2.boolean().optional(),
+  is_using_push_pull: exports_external2.boolean().optional(),
+  should_have_decoupling_capacitor: exports_external2.boolean().optional(),
+  recommended_decoupling_capacitor_capacitance: exports_external2.union([exports_external2.string(), exports_external2.number()]).optional(),
+  is_configured_for_i2c_sda: exports_external2.boolean().optional(),
+  is_configured_for_i2c_scl: exports_external2.boolean().optional(),
+  is_configured_for_spi_mosi: exports_external2.boolean().optional(),
+  is_configured_for_spi_miso: exports_external2.boolean().optional(),
+  is_configured_for_spi_sck: exports_external2.boolean().optional(),
+  is_configured_for_spi_cs: exports_external2.boolean().optional(),
+  is_configured_for_uart_tx: exports_external2.boolean().optional(),
+  is_configured_for_uart_rx: exports_external2.boolean().optional(),
+  supports_i2c_sda: exports_external2.boolean().optional(),
+  supports_i2c_scl: exports_external2.boolean().optional(),
+  supports_spi_mosi: exports_external2.boolean().optional(),
+  supports_spi_miso: exports_external2.boolean().optional(),
+  supports_spi_sck: exports_external2.boolean().optional(),
+  supports_spi_cs: exports_external2.boolean().optional(),
+  supports_uart_tx: exports_external2.boolean().optional(),
+  supports_uart_rx: exports_external2.boolean().optional()
+});
+expectTypesMatch2(true);
+var source_simple_battery2 = source_component_base2.extend({
+  ftype: exports_external2.literal("simple_battery"),
+  capacity: battery_capacity2
+});
+expectTypesMatch2(true);
+var source_simple_inductor2 = source_component_base2.extend({
+  ftype: exports_external2.literal("simple_inductor"),
+  inductance: inductance2,
+  display_inductance: exports_external2.string().optional(),
+  max_current_rating: exports_external2.number().optional()
+});
+expectTypesMatch2(true);
+var source_simple_push_button2 = source_component_base2.extend({
+  ftype: exports_external2.literal("simple_push_button")
+});
+expectTypesMatch2(true);
+var source_simple_potentiometer2 = source_component_base2.extend({
+  ftype: exports_external2.literal("simple_potentiometer"),
+  max_resistance: resistance2,
+  display_max_resistance: exports_external2.string().optional()
+});
+expectTypesMatch2(true);
+var source_simple_crystal2 = source_component_base2.extend({
+  ftype: exports_external2.literal("simple_crystal"),
+  frequency: exports_external2.number().describe("Frequency in Hz"),
+  load_capacitance: exports_external2.number().optional().describe("Load capacitance in pF"),
+  pin_variant: exports_external2.enum(["two_pin", "four_pin"]).optional()
+});
+expectTypesMatch2(true);
+var source_simple_pin_header2 = source_component_base2.extend({
+  ftype: exports_external2.literal("simple_pin_header"),
+  pin_count: exports_external2.number(),
+  gender: exports_external2.enum(["male", "female"]).optional().default("male")
+});
+expectTypesMatch2(true);
+var source_simple_connector_standards2 = [
+  "usb_c",
+  "m2",
+  "jst_sh",
+  "jst_gh",
+  "jst_zh",
+  "jst_ph",
+  "jst_xh",
+  "jst_vh"
+];
+var source_simple_connector2 = source_component_base2.extend({
+  ftype: exports_external2.literal("simple_connector"),
+  standard: exports_external2.enum(source_simple_connector_standards2).optional(),
+  pin_count: exports_external2.number().int().positive().optional()
+});
+expectTypesMatch2(true);
+var source_simple_pinout2 = source_component_base2.extend({
+  ftype: exports_external2.literal("simple_pinout")
+});
+expectTypesMatch2(true);
+var source_simple_resonator2 = source_component_base2.extend({
+  ftype: exports_external2.literal("simple_resonator"),
+  load_capacitance: capacitance2,
+  equivalent_series_resistance: resistance2.optional(),
+  frequency: frequency2
+});
+expectTypesMatch2(true);
+var source_simple_transistor2 = source_component_base2.extend({
+  ftype: exports_external2.literal("simple_transistor"),
+  transistor_type: exports_external2.enum(["npn", "pnp"])
+});
+expectTypesMatch2(true);
+var source_simple_test_point2 = source_component_base2.extend({
+  ftype: exports_external2.literal("simple_test_point"),
+  footprint_variant: exports_external2.enum(["pad", "through_hole"]).optional(),
+  pad_shape: exports_external2.enum(["rect", "circle"]).optional(),
+  pad_diameter: exports_external2.union([exports_external2.number(), exports_external2.string()]).optional(),
+  hole_diameter: exports_external2.union([exports_external2.number(), exports_external2.string()]).optional(),
+  width: exports_external2.union([exports_external2.number(), exports_external2.string()]).optional(),
+  height: exports_external2.union([exports_external2.number(), exports_external2.string()]).optional()
+});
+expectTypesMatch2(true);
+var source_simple_mosfet2 = source_component_base2.extend({
+  ftype: exports_external2.literal("simple_mosfet"),
+  channel_type: exports_external2.enum(["n", "p"]),
+  mosfet_mode: exports_external2.enum(["enhancement", "depletion"])
+});
+expectTypesMatch2(true);
+var source_simple_op_amp2 = source_component_base2.extend({
+  ftype: exports_external2.literal("simple_op_amp")
+});
+expectTypesMatch2(true);
+var source_simple_switch2 = source_component_base2.extend({
+  ftype: exports_external2.literal("simple_switch")
+});
+expectTypesMatch2(true);
+var source_project_metadata2 = exports_external2.object({
+  type: exports_external2.literal("source_project_metadata"),
+  name: exports_external2.string().optional(),
+  software_used_string: exports_external2.string().optional(),
+  project_url: exports_external2.string().optional(),
+  source_filesystem_md5_hash: exports_external2.string().optional(),
+  created_at: timestamp2.optional()
+});
+expectTypesMatch2(true);
+var source_missing_property_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("source_missing_property_error"),
+  source_missing_property_error_id: getZodPrefixedIdWithDefault2("source_missing_property_error"),
+  source_component_id: exports_external2.string(),
+  property_name: exports_external2.string(),
+  subcircuit_id: exports_external2.string().optional(),
+  error_type: exports_external2.literal("source_missing_property_error").default("source_missing_property_error")
+}).describe("The source code is missing a property");
+expectTypesMatch2(true);
+var source_failed_to_create_component_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("source_failed_to_create_component_error"),
+  source_failed_to_create_component_error_id: getZodPrefixedIdWithDefault2("source_failed_to_create_component_error"),
+  error_type: exports_external2.literal("source_failed_to_create_component_error").default("source_failed_to_create_component_error"),
+  component_name: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  parent_source_component_id: exports_external2.string().optional(),
+  pcb_center: exports_external2.object({
+    x: exports_external2.number().optional(),
+    y: exports_external2.number().optional()
+  }).optional(),
+  schematic_center: exports_external2.object({
+    x: exports_external2.number().optional(),
+    y: exports_external2.number().optional()
+  }).optional()
+}).describe("Error emitted when a component fails to be constructed");
+expectTypesMatch2(true);
+var source_invalid_component_property_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("source_invalid_component_property_error"),
+  source_invalid_component_property_error_id: getZodPrefixedIdWithDefault2("source_invalid_component_property_error"),
+  source_component_id: exports_external2.string(),
+  property_name: exports_external2.string(),
+  property_value: exports_external2.unknown().optional(),
+  expected_format: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  error_type: exports_external2.literal("source_invalid_component_property_error").default("source_invalid_component_property_error")
+}).describe("The source component property is invalid");
+expectTypesMatch2(true);
+var source_trace_not_connected_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("source_trace_not_connected_error"),
+  source_trace_not_connected_error_id: getZodPrefixedIdWithDefault2("source_trace_not_connected_error"),
+  error_type: exports_external2.literal("source_trace_not_connected_error").default("source_trace_not_connected_error"),
+  subcircuit_id: exports_external2.string().optional(),
+  source_group_id: exports_external2.string().optional(),
+  source_trace_id: exports_external2.string().optional(),
+  connected_source_port_ids: exports_external2.array(exports_external2.string()).optional(),
+  selectors_not_found: exports_external2.array(exports_external2.string()).optional()
+}).describe("Occurs when a source trace selector does not match any ports");
+expectTypesMatch2(true);
+var source_property_ignored_warning2 = exports_external2.object({
+  type: exports_external2.literal("source_property_ignored_warning"),
+  source_property_ignored_warning_id: getZodPrefixedIdWithDefault2("source_property_ignored_warning"),
+  source_component_id: exports_external2.string(),
+  property_name: exports_external2.string(),
+  subcircuit_id: exports_external2.string().optional(),
+  error_type: exports_external2.literal("source_property_ignored_warning").default("source_property_ignored_warning"),
+  message: exports_external2.string()
+}).describe("The source property was ignored");
+expectTypesMatch2(true);
+var source_pin_missing_trace_warning2 = exports_external2.object({
+  type: exports_external2.literal("source_pin_missing_trace_warning"),
+  source_pin_missing_trace_warning_id: getZodPrefixedIdWithDefault2("source_pin_missing_trace_warning"),
+  warning_type: exports_external2.literal("source_pin_missing_trace_warning").default("source_pin_missing_trace_warning"),
+  message: exports_external2.string(),
+  source_component_id: exports_external2.string(),
+  source_port_id: exports_external2.string(),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Warning emitted when a source component pin is missing a trace connection");
+expectTypesMatch2(true);
+var source_missing_manufacturer_part_number_warning2 = exports_external2.object({
+  type: exports_external2.literal("source_missing_manufacturer_part_number_warning"),
+  source_missing_manufacturer_part_number_warning_id: getZodPrefixedIdWithDefault2("source_missing_manufacturer_part_number_warning"),
+  warning_type: exports_external2.literal("source_missing_manufacturer_part_number_warning").default("source_missing_manufacturer_part_number_warning"),
+  message: exports_external2.string(),
+  source_component_id: exports_external2.string(),
+  standard: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Warning emitted when a source component is missing its manufacturer part number");
+expectTypesMatch2(true);
+var source_refdes_convention_warning2 = exports_external2.object({
+  type: exports_external2.literal("source_refdes_convention_warning"),
+  source_refdes_convention_warning_id: getZodPrefixedIdWithDefault2("source_refdes_convention_warning"),
+  warning_type: exports_external2.literal("source_refdes_convention_warning").default("source_refdes_convention_warning"),
+  message: exports_external2.string(),
+  source_component_id: exports_external2.string(),
+  refdes: exports_external2.string(),
+  source_component_ftype: exports_external2.string(),
+  expected_prefixes: exports_external2.array(exports_external2.string()),
+  actual_prefix: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Warning emitted when a source component reference designator does not match the component type convention");
+expectTypesMatch2(true);
+var source_component_availability_warning2 = exports_external2.object({
+  type: exports_external2.literal("source_component_availability_warning"),
+  source_component_availability_warning_id: getZodPrefixedIdWithDefault2("source_component_availability_warning"),
+  warning_type: exports_external2.literal("source_component_availability_warning").default("source_component_availability_warning"),
+  message: exports_external2.string(),
+  source_component_id: exports_external2.string(),
+  subcircuit_id: exports_external2.string().optional(),
+  supplier_name: supplier_name2,
+  supplier_part_numbers: exports_external2.array(exports_external2.string()).nonempty()
+}).describe("Warning emitted when no supplier alternative can be confirmed in stock. Availability may be unknown or change over time.");
+expectTypesMatch2(true);
+var source_simple_voltage_probe2 = source_component_base2.extend({
+  ftype: exports_external2.literal("simple_voltage_probe")
+});
+expectTypesMatch2(true);
+var source_interconnect2 = source_component_base2.extend({
+  ftype: exports_external2.literal("interconnect")
+});
+expectTypesMatch2(true);
+var source_i2c_misconfigured_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("source_i2c_misconfigured_error"),
+  source_i2c_misconfigured_error_id: getZodPrefixedIdWithDefault2("source_i2c_misconfigured_error"),
+  error_type: exports_external2.literal("source_i2c_misconfigured_error").default("source_i2c_misconfigured_error"),
+  source_port_ids: exports_external2.array(exports_external2.string())
+}).describe("Error emitted when incompatible I2C pins (e.g. SDA and SCL) are connected to the same net");
+expectTypesMatch2(true);
+var source_component_misconfigured_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("source_component_misconfigured_error"),
+  source_component_misconfigured_error_id: getZodPrefixedIdWithDefault2("source_component_misconfigured_error"),
+  error_type: exports_external2.literal("source_component_misconfigured_error").default("source_component_misconfigured_error"),
+  source_component_ids: exports_external2.array(exports_external2.string()),
+  source_port_ids: exports_external2.array(exports_external2.string()).optional()
+}).describe("Error emitted when one or more source components have an invalid or conflicting configuration");
+expectTypesMatch2(true);
+var source_simple_voltage_source2 = source_component_base2.extend({
+  ftype: exports_external2.literal("simple_voltage_source"),
+  voltage: voltage2,
+  frequency: frequency2.optional(),
+  peak_to_peak_voltage: voltage2.optional(),
+  wave_shape: exports_external2.enum(["sinewave", "square", "triangle", "sawtooth"]).optional(),
+  phase: rotation2.optional(),
+  duty_cycle: exports_external2.number().optional().describe("Duty cycle as a fraction (0 to 1)"),
+  pulse_delay: ms2.optional(),
+  rise_time: ms2.optional(),
+  fall_time: ms2.optional(),
+  pulse_width: ms2.optional(),
+  period: ms2.optional()
+});
+expectTypesMatch2(true);
+var source_datasheet2 = exports_external2.object({
+  type: exports_external2.literal("source_datasheet"),
+  source_datasheet_id: exports_external2.string(),
+  manufacturer_part_number: exports_external2.string(),
+  datasheet_pdf_urls: exports_external2.array(exports_external2.string().url()),
+  description: exports_external2.string().optional()
+});
+expectTypesMatch2(true);
+var any_source_component2 = exports_external2.union([
+  source_datasheet2,
+  source_simple_resistor2,
+  source_simple_capacitor2,
+  source_simple_diode2,
+  source_simple_fiducial2,
+  source_simple_led2,
+  source_simple_ground2,
+  source_simple_chip2,
+  source_printed_part2,
+  source_subassembly2,
+  source_motor2,
+  source_simple_power_source2,
+  source_simple_current_source2,
+  source_simple_ammeter2,
+  source_simple_battery2,
+  source_simple_inductor2,
+  source_simple_push_button2,
+  source_simple_potentiometer2,
+  source_simple_crystal2,
+  source_simple_pin_header2,
+  source_simple_connector2,
+  source_simple_pinout2,
+  source_simple_resonator2,
+  source_simple_switch2,
+  source_simple_transistor2,
+  source_simple_test_point2,
+  source_simple_mosfet2,
+  source_simple_op_amp2,
+  source_simple_fuse2,
+  source_simple_voltage_probe2,
+  source_interconnect2,
+  source_simple_voltage_source2,
+  source_project_metadata2,
+  source_missing_property_error2,
+  source_invalid_component_property_error2,
+  source_failed_to_create_component_error2,
+  source_trace_not_connected_error2,
+  source_property_ignored_warning2,
+  source_pin_missing_trace_warning2,
+  source_missing_manufacturer_part_number_warning2,
+  source_refdes_convention_warning2,
+  source_component_availability_warning2,
+  source_i2c_misconfigured_error2,
+  source_component_misconfigured_error2
+]);
+expectTypesMatch2(true);
+var source_port2 = exports_external2.object({
+  type: exports_external2.literal("source_port"),
+  pin_number: exports_external2.number().optional(),
+  port_hints: exports_external2.array(exports_external2.string()).optional(),
+  name: exports_external2.string(),
+  source_port_id: exports_external2.string(),
+  source_component_id: exports_external2.string().optional(),
+  source_group_id: exports_external2.string().optional(),
+  most_frequently_referenced_by_name: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  subcircuit_connectivity_map_key: exports_external2.string().optional()
+}).merge(source_pin_attributes2);
+expectTypesMatch2(true);
+var source_component_internal_connection2 = exports_external2.object({
+  type: exports_external2.literal("source_component_internal_connection"),
+  source_component_internal_connection_id: exports_external2.string(),
+  source_component_id: exports_external2.string(),
+  source_port_ids: exports_external2.array(exports_external2.string()),
+  subcircuit_id: exports_external2.string().optional()
+});
+expectTypesMatch2(true);
+var source_trace2 = exports_external2.object({
+  type: exports_external2.literal("source_trace"),
+  source_trace_id: exports_external2.string(),
+  connected_source_port_ids: exports_external2.array(exports_external2.string()),
+  connected_source_net_ids: exports_external2.array(exports_external2.string()),
+  subcircuit_id: exports_external2.string().optional(),
+  subcircuit_connectivity_map_key: exports_external2.string().optional(),
+  max_length: exports_external2.number().optional(),
+  max_via_count: exports_external2.number().int().nonnegative().optional(),
+  name: exports_external2.string().optional(),
+  min_trace_thickness: exports_external2.number().optional(),
+  display_name: exports_external2.string().optional()
+});
+expectTypesMatch2(true);
+var source_group2 = exports_external2.object({
+  type: exports_external2.literal("source_group"),
+  source_group_id: exports_external2.string(),
+  subcircuit_id: exports_external2.string().optional(),
+  parent_subcircuit_id: exports_external2.string().optional(),
+  parent_source_group_id: exports_external2.string().optional(),
+  is_subcircuit: exports_external2.boolean().optional(),
+  show_as_schematic_box: exports_external2.boolean().optional(),
+  name: exports_external2.string().optional(),
+  was_automatically_named: exports_external2.boolean().optional()
+});
+expectTypesMatch2(true);
+var source_net2 = exports_external2.object({
+  type: exports_external2.literal("source_net"),
+  source_net_id: exports_external2.string(),
+  name: exports_external2.string(),
+  member_source_group_ids: exports_external2.array(exports_external2.string()),
+  is_power: exports_external2.boolean().optional(),
+  is_ground: exports_external2.boolean().optional(),
+  is_digital_signal: exports_external2.boolean().optional(),
+  is_analog_signal: exports_external2.boolean().optional(),
+  is_positive_voltage_source: exports_external2.boolean().optional(),
+  trace_width: exports_external2.number().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  subcircuit_connectivity_map_key: exports_external2.string().optional()
+});
+expectTypesMatch2(true);
+var source_board2 = exports_external2.object({
+  type: exports_external2.literal("source_board"),
+  source_board_id: exports_external2.string(),
+  source_group_id: exports_external2.string(),
+  title: exports_external2.string().optional()
+}).describe("Defines a board in the source domain");
+expectTypesMatch2(true);
+var source_ambiguous_port_reference2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("source_ambiguous_port_reference"),
+  source_ambiguous_port_reference_id: getZodPrefixedIdWithDefault2("source_ambiguous_port_reference"),
+  error_type: exports_external2.literal("source_ambiguous_port_reference").default("source_ambiguous_port_reference"),
+  source_port_id: exports_external2.string().optional(),
+  source_component_id: exports_external2.string().optional()
+}).describe("Error emitted when a port hint matches multiple non-overlapping pads, making the port reference ambiguous");
+expectTypesMatch2(true);
+var source_pcb_ground_plane2 = exports_external2.object({
+  type: exports_external2.literal("source_pcb_ground_plane"),
+  source_pcb_ground_plane_id: exports_external2.string(),
+  source_group_id: exports_external2.string(),
+  source_net_id: exports_external2.string(),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Defines a ground plane in the source domain");
+expectTypesMatch2(true);
+var all_layers2 = [
+  "top",
+  "bottom",
+  "inner1",
+  "inner2",
+  "inner3",
+  "inner4",
+  "inner5",
+  "inner6",
+  "inner7",
+  "inner8"
+];
+var layer_string2 = exports_external2.enum(all_layers2);
+var layer_ref2 = layer_string2.or(exports_external2.object({
+  name: layer_string2
+})).transform((layer) => {
+  if (typeof layer === "string") {
+    return layer;
+  }
+  return layer.name;
+});
+expectTypesMatch2(true);
+var visible_layer2 = exports_external2.enum(["top", "bottom"]);
+var source_manually_placed_via2 = exports_external2.object({
+  type: exports_external2.literal("source_manually_placed_via"),
+  source_manually_placed_via_id: exports_external2.string(),
+  source_group_id: exports_external2.string(),
+  source_net_id: exports_external2.string().min(1).optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  source_trace_id: exports_external2.string().optional()
+}).describe("Defines a via that is manually placed in the source domain");
+expectTypesMatch2(true);
+var source_unnamed_trace_warning2 = exports_external2.object({
+  type: exports_external2.literal("source_unnamed_trace_warning"),
+  source_unnamed_trace_warning_id: getZodPrefixedIdWithDefault2("source_unnamed_trace_warning"),
+  warning_type: exports_external2.literal("source_unnamed_trace_warning").default("source_unnamed_trace_warning"),
+  message: exports_external2.string(),
+  source_trace_id: exports_external2.string(),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Warning emitted when a source trace is missing a name");
+expectTypesMatch2(true);
+var source_no_power_pin_defined_warning2 = exports_external2.object({
+  type: exports_external2.literal("source_no_power_pin_defined_warning"),
+  source_no_power_pin_defined_warning_id: getZodPrefixedIdWithDefault2("source_no_power_pin_defined_warning"),
+  warning_type: exports_external2.literal("source_no_power_pin_defined_warning").default("source_no_power_pin_defined_warning"),
+  message: exports_external2.string(),
+  source_component_id: exports_external2.string(),
+  source_port_ids: exports_external2.array(exports_external2.string()),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Warning emitted when a chip has no source ports with requires_power=true");
+expectTypesMatch2(true);
+var source_no_ground_pin_defined_warning2 = exports_external2.object({
+  type: exports_external2.literal("source_no_ground_pin_defined_warning"),
+  source_no_ground_pin_defined_warning_id: getZodPrefixedIdWithDefault2("source_no_ground_pin_defined_warning"),
+  warning_type: exports_external2.literal("source_no_ground_pin_defined_warning").default("source_no_ground_pin_defined_warning"),
+  message: exports_external2.string(),
+  source_component_id: exports_external2.string(),
+  source_port_ids: exports_external2.array(exports_external2.string()),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Warning emitted when a chip has no source ports marked as ground pins");
+expectTypesMatch2(true);
+var source_component_pins_underspecified_warning2 = exports_external2.object({
+  type: exports_external2.literal("source_component_pins_underspecified_warning"),
+  source_component_pins_underspecified_warning_id: getZodPrefixedIdWithDefault2("source_component_pins_underspecified_warning"),
+  warning_type: exports_external2.literal("source_component_pins_underspecified_warning").default("source_component_pins_underspecified_warning"),
+  message: exports_external2.string(),
+  source_component_id: exports_external2.string(),
+  source_port_ids: exports_external2.array(exports_external2.string()),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Warning emitted when all ports on a source component are underspecified");
+expectTypesMatch2(true);
+var source_pin_must_be_connected_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("source_pin_must_be_connected_error"),
+  source_pin_must_be_connected_error_id: getZodPrefixedIdWithDefault2("source_pin_must_be_connected_error"),
+  error_type: exports_external2.literal("source_pin_must_be_connected_error").default("source_pin_must_be_connected_error"),
+  source_component_id: exports_external2.string(),
+  source_port_id: exports_external2.string(),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Error emitted when a pin with mustBeConnected attribute is not connected to any trace");
+expectTypesMatch2(true);
+var unknown_error_finding_part2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("unknown_error_finding_part"),
+  unknown_error_finding_part_id: getZodPrefixedIdWithDefault2("unknown_error_finding_part"),
+  error_type: exports_external2.literal("unknown_error_finding_part").default("unknown_error_finding_part"),
+  source_component_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Error emitted when an unexpected error occurs while finding a part");
+expectTypesMatch2(true);
+var source_part_not_found_warning2 = exports_external2.object({
+  type: exports_external2.literal("source_part_not_found_warning"),
+  source_part_not_found_warning_id: getZodPrefixedIdWithDefault2("source_part_not_found_warning"),
+  warning_type: exports_external2.literal("source_part_not_found_warning").default("source_part_not_found_warning"),
+  message: exports_external2.string(),
+  source_component_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  supplier_name: supplier_name2.optional(),
+  manufacturer_part_number: exports_external2.string().optional(),
+  supplier_part_number: exports_external2.string().optional(),
+  part_name: exports_external2.string().optional()
+}).describe("Warning emitted when a requested part can not be found");
+expectTypesMatch2(true);
+var source_confusing_net_name_warning2 = exports_external2.object({
+  type: exports_external2.literal("source_confusing_net_name_warning"),
+  source_confusing_net_name_warning_id: getZodPrefixedIdWithDefault2("source_confusing_net_name_warning"),
+  warning_type: exports_external2.literal("source_confusing_net_name_warning").default("source_confusing_net_name_warning"),
+  message: exports_external2.string(),
+  source_net_ids: exports_external2.array(exports_external2.string()).min(2),
+  net_name: exports_external2.string(),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Warning emitted when electrically disconnected source nets share a name");
+expectTypesMatch2(true);
+var route_length2 = exports_external2.union([
+  exports_external2.number().nonnegative().finite(),
+  exports_external2.object({
+    reference: exports_external2.literal("longest_manhattan"),
+    source_trace_ids: exports_external2.array(exports_external2.string()).min(1).optional(),
+    offset: exports_external2.number().finite().optional()
+  })
+]);
+var trace_spacing2 = exports_external2.union([
+  exports_external2.number().positive().finite(),
+  exports_external2.object({ width_multiplier: exports_external2.number().positive().finite() })
+]);
+var source_bus2 = exports_external2.object({
+  type: exports_external2.literal("source_bus"),
+  source_bus_id: exports_external2.string(),
+  name: exports_external2.string().optional(),
+  source_trace_ids: exports_external2.array(exports_external2.string()).min(1),
+  max_length_skew: exports_external2.number().nonnegative().finite().optional(),
+  target_impedance: exports_external2.number().positive().finite().optional(),
+  target_differential_impedance: exports_external2.number().positive().finite().optional(),
+  differential_pair: exports_external2.object({
+    positive_source_trace_id: exports_external2.string(),
+    negative_source_trace_id: exports_external2.string(),
+    trace_gap: exports_external2.number().positive().finite().optional(),
+    max_uncoupled_length: exports_external2.number().nonnegative().finite().optional()
+  }).optional(),
+  length_match_source_trace_ids: exports_external2.array(exports_external2.string()).min(1).optional(),
+  min_length: route_length2.optional(),
+  max_length: route_length2.optional(),
+  target_length: route_length2.optional(),
+  length_tolerance: exports_external2.number().nonnegative().finite().optional(),
+  pcb_trace_spacing: trace_spacing2.optional(),
+  pcb_spacing_to_other_signals: trace_spacing2.optional(),
+  target_impedance_min: exports_external2.number().positive().finite().optional(),
+  target_impedance_max: exports_external2.number().positive().finite().optional(),
+  target_differential_impedance_min: exports_external2.number().positive().finite().optional(),
+  target_differential_impedance_max: exports_external2.number().positive().finite().optional(),
+  subcircuit_id: exports_external2.string().optional()
+});
+expectTypesMatch2(true);
+var source_runtime_error2 = base_circuit_json_error2.pick({ message: true, error_type: true }).extend({
+  type: exports_external2.literal("source_runtime_error"),
+  source_runtime_error_id: getZodPrefixedIdWithDefault2("source_runtime_error"),
+  error_type: exports_external2.literal("source_runtime_error").default("source_runtime_error"),
+  phase_name: exports_external2.string().optional()
+}).describe("An unexpected runtime failure while generating or validating a circuit");
+expectTypesMatch2(true);
+var schematic_box2 = exports_external2.object({
+  type: exports_external2.literal("schematic_box"),
+  schematic_sheet_id: exports_external2.string().optional(),
+  schematic_component_id: exports_external2.string().optional(),
+  schematic_symbol_id: exports_external2.string().optional(),
+  width: distance7,
+  height: distance7,
+  is_dashed: exports_external2.boolean().default(false),
+  x: distance7,
+  y: distance7,
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Draws a box on the schematic");
+expectTypesMatch2(true);
+var schematic_path2 = exports_external2.object({
+  type: exports_external2.literal("schematic_path"),
+  schematic_path_id: getZodPrefixedIdWithDefault2("schematic_path"),
+  schematic_sheet_id: exports_external2.string().optional(),
+  schematic_component_id: exports_external2.string().optional(),
+  schematic_symbol_id: exports_external2.string().optional(),
+  fill_color: exports_external2.string().optional(),
+  is_filled: exports_external2.boolean().optional(),
+  is_dashed: exports_external2.boolean().default(false),
+  stroke_width: distance7.nullable().optional(),
+  stroke_color: exports_external2.string().optional(),
+  dash_length: distance7.optional(),
+  dash_gap: distance7.optional(),
+  points: exports_external2.array(point4),
+  subcircuit_id: exports_external2.string().optional()
+});
+expectTypesMatch2(true);
+var schematic_pin_styles2 = exports_external2.record(exports_external2.object({
+  left_margin: length3.optional(),
+  right_margin: length3.optional(),
+  top_margin: length3.optional(),
+  bottom_margin: length3.optional()
+}));
+var schematic_component_port_arrangement_by_size2 = exports_external2.object({
+  left_size: exports_external2.number(),
+  right_size: exports_external2.number(),
+  top_size: exports_external2.number().optional(),
+  bottom_size: exports_external2.number().optional()
+});
+expectTypesMatch2(true);
+var schematic_component_port_arrangement_by_sides2 = exports_external2.object({
+  left_side: exports_external2.object({
+    pins: exports_external2.array(exports_external2.number()),
+    direction: exports_external2.enum(["top-to-bottom", "bottom-to-top"]).optional()
+  }).optional(),
+  right_side: exports_external2.object({
+    pins: exports_external2.array(exports_external2.number()),
+    direction: exports_external2.enum(["top-to-bottom", "bottom-to-top"]).optional()
+  }).optional(),
+  top_side: exports_external2.object({
+    pins: exports_external2.array(exports_external2.number()),
+    direction: exports_external2.enum(["left-to-right", "right-to-left"]).optional()
+  }).optional(),
+  bottom_side: exports_external2.object({
+    pins: exports_external2.array(exports_external2.number()),
+    direction: exports_external2.enum(["left-to-right", "right-to-left"]).optional()
+  }).optional()
+});
+expectTypesMatch2(true);
+var port_arrangement2 = exports_external2.union([
+  schematic_component_port_arrangement_by_size2,
+  schematic_component_port_arrangement_by_sides2
+]);
+var schematic_component2 = exports_external2.object({
+  type: exports_external2.literal("schematic_component"),
+  size: size2,
+  center: point4,
+  source_component_id: exports_external2.string().optional(),
+  schematic_component_id: exports_external2.string(),
+  schematic_sheet_id: exports_external2.string().optional(),
+  schematic_symbol_id: exports_external2.string().optional(),
+  pin_spacing: length3.optional(),
+  pin_styles: schematic_pin_styles2.optional(),
+  box_width: length3.optional(),
+  symbol_name: exports_external2.string().optional(),
+  port_arrangement: port_arrangement2.optional(),
+  port_labels: exports_external2.record(exports_external2.string()).optional(),
+  symbol_display_value: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  schematic_group_id: exports_external2.string().optional(),
+  is_schematic_group: exports_external2.boolean().optional(),
+  source_group_id: exports_external2.string().optional(),
+  is_box_with_pins: exports_external2.boolean().optional().default(true)
+});
+expectTypesMatch2(true);
+var schematicSymbolMetadata2 = exports_external2.object({
+  kicad_symbol: kicadSymbolMetadata2.optional()
+}).catchall(exports_external2.unknown());
+var schematic_symbol2 = exports_external2.object({
+  type: exports_external2.literal("schematic_symbol"),
+  schematic_symbol_id: exports_external2.string(),
+  name: exports_external2.string().optional(),
+  metadata: schematicSymbolMetadata2.optional()
+}).describe("Defines a named schematic symbol that can be referenced by components.");
+expectTypesMatch2(true);
+var schematic_line2 = exports_external2.object({
+  type: exports_external2.literal("schematic_line"),
+  schematic_line_id: getZodPrefixedIdWithDefault2("schematic_line"),
+  schematic_sheet_id: exports_external2.string().optional(),
+  schematic_component_id: exports_external2.string().optional(),
+  schematic_symbol_id: exports_external2.string().optional(),
+  x1: distance7,
+  y1: distance7,
+  x2: distance7,
+  y2: distance7,
+  stroke_width: distance7.nullable().optional(),
+  color: exports_external2.string().default("#000000"),
+  is_dashed: exports_external2.boolean().default(false),
+  dash_length: distance7.optional(),
+  dash_gap: distance7.optional(),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Draws a styled line on the schematic");
+expectTypesMatch2(true);
+var schematic_rect2 = exports_external2.object({
+  type: exports_external2.literal("schematic_rect"),
+  schematic_rect_id: getZodPrefixedIdWithDefault2("schematic_rect"),
+  schematic_sheet_id: exports_external2.string().optional(),
+  schematic_component_id: exports_external2.string().optional(),
+  schematic_symbol_id: exports_external2.string().optional(),
+  center: point4,
+  width: distance7,
+  height: distance7,
+  rotation: rotation2.default(0),
+  stroke_width: distance7.nullable().optional(),
+  color: exports_external2.string().default("#000000"),
+  is_filled: exports_external2.boolean().default(false),
+  fill_color: exports_external2.string().optional(),
+  is_dashed: exports_external2.boolean().default(false),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Draws a styled rectangle on the schematic");
+expectTypesMatch2(true);
+var schematic_circle2 = exports_external2.object({
+  type: exports_external2.literal("schematic_circle"),
+  schematic_circle_id: getZodPrefixedIdWithDefault2("schematic_circle"),
+  schematic_sheet_id: exports_external2.string().optional(),
+  schematic_component_id: exports_external2.string().optional(),
+  schematic_symbol_id: exports_external2.string().optional(),
+  center: point4,
+  radius: distance7,
+  stroke_width: distance7.nullable().optional(),
+  color: exports_external2.string().default("#000000"),
+  is_filled: exports_external2.boolean().default(false),
+  fill_color: exports_external2.string().optional(),
+  is_dashed: exports_external2.boolean().default(false),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Draws a styled circle on the schematic");
+expectTypesMatch2(true);
+var schematic_arc2 = exports_external2.object({
+  type: exports_external2.literal("schematic_arc"),
+  schematic_arc_id: getZodPrefixedIdWithDefault2("schematic_arc"),
+  schematic_sheet_id: exports_external2.string().optional(),
+  schematic_component_id: exports_external2.string().optional(),
+  schematic_symbol_id: exports_external2.string().optional(),
+  center: point4,
+  radius: distance7,
+  start_angle_degrees: rotation2,
+  end_angle_degrees: rotation2,
+  direction: exports_external2.enum(["clockwise", "counterclockwise"]).default("counterclockwise"),
+  stroke_width: distance7.nullable().optional(),
+  color: exports_external2.string().default("#000000"),
+  is_dashed: exports_external2.boolean().default(false),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Draws a styled arc on the schematic");
+expectTypesMatch2(true);
+var schematic_trace2 = exports_external2.object({
+  type: exports_external2.literal("schematic_trace"),
+  schematic_trace_id: exports_external2.string(),
+  schematic_sheet_id: exports_external2.string().optional(),
+  source_trace_id: exports_external2.string().optional(),
+  junctions: exports_external2.array(exports_external2.object({
+    x: exports_external2.number(),
+    y: exports_external2.number()
+  })),
+  edges: exports_external2.array(exports_external2.object({
+    from: exports_external2.object({
+      x: exports_external2.number(),
+      y: exports_external2.number()
+    }),
+    to: exports_external2.object({
+      x: exports_external2.number(),
+      y: exports_external2.number()
+    }),
+    is_crossing: exports_external2.boolean().optional(),
+    from_schematic_port_id: exports_external2.string().optional(),
+    to_schematic_port_id: exports_external2.string().optional()
+  })),
+  subcircuit_id: exports_external2.string().optional(),
+  subcircuit_connectivity_map_key: exports_external2.string().optional()
+});
+expectTypesMatch2(true);
+var fivePointAnchor2 = exports_external2.enum([
+  "center",
+  "left",
+  "right",
+  "top",
+  "bottom"
+]);
+expectTypesMatch2(true);
+var schematic_text_part2 = exports_external2.object({
+  text: exports_external2.string(),
+  is_overlined: exports_external2.boolean().optional()
+});
+var schematic_text2 = exports_external2.object({
+  type: exports_external2.literal("schematic_text"),
+  schematic_sheet_id: exports_external2.string().optional(),
+  schematic_component_id: exports_external2.string().optional(),
+  schematic_symbol_id: exports_external2.string().optional(),
+  schematic_text_id: exports_external2.string(),
+  source_trace_id: exports_external2.string().optional(),
+  text: exports_external2.string(),
+  text_parts: exports_external2.array(schematic_text_part2).min(1).optional(),
+  display_superscript: exports_external2.string().optional(),
+  font_size: exports_external2.number().default(0.18),
+  position: exports_external2.object({
+    x: distance7,
+    y: distance7
+  }),
+  rotation: exports_external2.number().default(0),
+  anchor: exports_external2.union([fivePointAnchor2.describe("legacy"), ninePointAnchor2]).default("center"),
+  color: exports_external2.string().default("#000000"),
+  subcircuit_id: exports_external2.string().optional()
+});
+expectTypesMatch2(true);
+var schematic_port2 = exports_external2.object({
+  type: exports_external2.literal("schematic_port"),
+  schematic_port_id: exports_external2.string(),
+  source_port_id: exports_external2.string(),
+  schematic_sheet_id: exports_external2.string().optional(),
+  schematic_component_id: exports_external2.string().optional(),
+  center: point4,
+  facing_direction: exports_external2.enum(["up", "down", "left", "right"]).optional(),
+  distance_from_component_edge: exports_external2.number().optional(),
+  side_of_component: exports_external2.enum(["top", "bottom", "left", "right"]).optional(),
+  true_ccw_index: exports_external2.number().optional(),
+  pin_number: exports_external2.number().optional(),
+  display_pin_label: exports_external2.string().optional(),
+  display_pin_label_text_parts: exports_external2.array(schematic_text_part2).min(1).optional(),
+  display_pin_label_font_size: exports_external2.number().positive().finite().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  is_connected: exports_external2.boolean().optional(),
+  is_internal_circuit_port: exports_external2.boolean().optional(),
+  is_overlapping_internal_circuit_port: exports_external2.boolean().optional(),
+  has_input_arrow: exports_external2.boolean().optional(),
+  has_output_arrow: exports_external2.boolean().optional(),
+  is_drawn_with_inversion_circle: exports_external2.boolean().optional()
+}).describe("Defines a port on a schematic component");
+expectTypesMatch2(true);
+var schematic_net_label2 = exports_external2.object({
+  type: exports_external2.literal("schematic_net_label"),
+  schematic_net_label_id: getZodPrefixedIdWithDefault2("schematic_net_label"),
+  schematic_sheet_id: exports_external2.string().optional(),
+  schematic_trace_id: exports_external2.string().optional(),
+  source_trace_id: exports_external2.string().optional(),
+  source_net_id: exports_external2.string(),
+  center: point4,
+  anchor_position: point4.optional(),
+  anchor_side: exports_external2.enum(["top", "bottom", "left", "right"]),
+  text: exports_external2.string(),
+  display_superscript: exports_external2.string().optional(),
+  symbol_name: exports_external2.string().optional(),
+  is_movable: exports_external2.boolean().optional(),
+  subcircuit_id: exports_external2.string().optional()
+});
+expectTypesMatch2(true);
+var schematic_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("schematic_error"),
+  schematic_error_id: exports_external2.string(),
+  error_type: exports_external2.literal("schematic_port_not_found").default("schematic_port_not_found"),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Defines a schematic error on the schematic");
+expectTypesMatch2(true);
+var schematic_layout_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("schematic_layout_error"),
+  schematic_layout_error_id: getZodPrefixedIdWithDefault2("schematic_layout_error"),
+  error_type: exports_external2.literal("schematic_layout_error").default("schematic_layout_error"),
+  source_group_id: exports_external2.string(),
+  schematic_group_id: exports_external2.string(),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Error emitted when schematic layout fails for a group");
+expectTypesMatch2(true);
+var schematic_debug_object_base2 = exports_external2.object({
+  type: exports_external2.literal("schematic_debug_object"),
+  label: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional()
+});
+var schematic_debug_rect2 = schematic_debug_object_base2.extend({
+  shape: exports_external2.literal("rect"),
+  center: point4,
+  size: size2
+});
+var schematic_debug_line2 = schematic_debug_object_base2.extend({
+  shape: exports_external2.literal("line"),
+  start: point4,
+  end: point4
+});
+var schematic_debug_point2 = schematic_debug_object_base2.extend({
+  shape: exports_external2.literal("point"),
+  center: point4
+});
+var schematic_debug_object2 = exports_external2.discriminatedUnion("shape", [
+  schematic_debug_rect2,
+  schematic_debug_line2,
+  schematic_debug_point2
+]);
+expectTypesMatch2(true);
+var schematic_voltage_probe2 = exports_external2.object({
+  type: exports_external2.literal("schematic_voltage_probe"),
+  schematic_voltage_probe_id: exports_external2.string(),
+  schematic_sheet_id: exports_external2.string().optional(),
+  source_component_id: exports_external2.string().optional(),
+  name: exports_external2.string().optional(),
+  position: point4,
+  schematic_trace_id: exports_external2.string(),
+  voltage: voltage2.optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  color: exports_external2.string().optional(),
+  label_alignment: ninePointAnchor2.optional()
+}).describe("Defines a voltage probe measurement point on a schematic trace");
+expectTypesMatch2(true);
+var schematic_manual_edit_conflict_warning2 = exports_external2.object({
+  type: exports_external2.literal("schematic_manual_edit_conflict_warning"),
+  schematic_manual_edit_conflict_warning_id: getZodPrefixedIdWithDefault2("schematic_manual_edit_conflict_warning"),
+  warning_type: exports_external2.literal("schematic_manual_edit_conflict_warning").default("schematic_manual_edit_conflict_warning"),
+  message: exports_external2.string(),
+  schematic_component_id: exports_external2.string(),
+  schematic_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  source_component_id: exports_external2.string()
+}).describe("Warning emitted when a component has both manual placement and explicit schX/schY coordinates");
+expectTypesMatch2(true);
+var schematic_component_overlap_warning2 = exports_external2.object({
+  type: exports_external2.literal("schematic_component_overlap_warning"),
+  schematic_component_overlap_warning_id: getZodPrefixedIdWithDefault2("schematic_component_overlap_warning"),
+  warning_type: exports_external2.literal("schematic_component_overlap_warning").default("schematic_component_overlap_warning"),
+  message: exports_external2.string(),
+  schematic_component_ids: exports_external2.tuple([exports_external2.string(), exports_external2.string()]),
+  schematic_sheet_id: exports_external2.string().optional()
+}).describe("Warning emitted when the rendered bounds of two schematic components overlap");
+expectTypesMatch2(true);
+var schematic_component_styling_warning2 = exports_external2.object({
+  type: exports_external2.literal("schematic_component_styling_warning"),
+  schematic_component_styling_warning_id: getZodPrefixedIdWithDefault2("schematic_component_styling_warning"),
+  warning_type: exports_external2.literal("schematic_component_styling_warning").default("schematic_component_styling_warning"),
+  message: exports_external2.string(),
+  schematic_component_id: exports_external2.string(),
+  styling_issue_type: exports_external2.string(),
+  schematic_port_ids: exports_external2.array(exports_external2.string()).optional(),
+  source_component_id: exports_external2.string().optional(),
+  schematic_sheet_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Warning emitted when a schematic component has a visual styling issue");
+expectTypesMatch2(true);
+var schematic_sheet_styling_warning2 = exports_external2.object({
+  type: exports_external2.literal("schematic_sheet_styling_warning"),
+  schematic_sheet_styling_warning_id: getZodPrefixedIdWithDefault2("schematic_sheet_styling_warning"),
+  warning_type: exports_external2.literal("schematic_sheet_styling_warning").default("schematic_sheet_styling_warning"),
+  message: exports_external2.string(),
+  schematic_sheet_id: exports_external2.string(),
+  styling_issue_type: exports_external2.literal("non_default_sheet_size"),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Style warning emitted when a schematic sheet uses a non-default size");
+expectTypesMatch2(true);
+var schematic_element_outside_sheet_warning2 = exports_external2.object({
+  type: exports_external2.literal("schematic_element_outside_sheet_warning"),
+  schematic_element_outside_sheet_warning_id: getZodPrefixedIdWithDefault2("schematic_element_outside_sheet_warning"),
+  warning_type: exports_external2.literal("schematic_element_outside_sheet_warning").default("schematic_element_outside_sheet_warning"),
+  message: exports_external2.string(),
+  schematic_sheet_id: exports_external2.string(),
+  schematic_element_type: exports_external2.enum([
+    "schematic_component",
+    "schematic_net_label",
+    "schematic_trace"
+  ]),
+  schematic_element_id: exports_external2.string()
+}).describe("Warning emitted when a schematic component, net label, or trace extends outside its schematic sheet");
+expectTypesMatch2(true);
+var positiveFiniteDistance2 = distance7.pipe(exports_external2.number().positive().finite());
+var schematic_graphic2 = exports_external2.object({
+  type: exports_external2.literal("schematic_graphic"),
+  schematic_graphic_id: getZodPrefixedIdWithDefault2("schematic_graphic"),
+  schematic_sheet_id: exports_external2.string().optional(),
+  asset: asset2.optional(),
+  svg_content: exports_external2.string().optional(),
+  width: positiveFiniteDistance2.optional(),
+  height: positiveFiniteDistance2.optional()
+}).describe("References a graphic asset or inline SVG content with optional centered layout bounds on a schematic sheet").superRefine(({ asset: asset22, svg_content }, ctx) => {
+  if (asset22 === undefined && svg_content === undefined) {
+    ctx.addIssue({
+      code: exports_external2.ZodIssueCode.custom,
+      message: "At least one of asset or svg_content is required"
+    });
+  }
+});
+expectTypesMatch2(true);
+var schematic_group2 = exports_external2.object({
+  type: exports_external2.literal("schematic_group"),
+  schematic_group_id: getZodPrefixedIdWithDefault2("schematic_group"),
+  schematic_sheet_id: exports_external2.string().optional(),
+  source_group_id: exports_external2.string(),
+  is_subcircuit: exports_external2.boolean().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  width: length3,
+  height: length3,
+  center: point4,
+  schematic_component_ids: exports_external2.array(exports_external2.string()),
+  show_as_schematic_box: exports_external2.boolean().optional(),
+  name: exports_external2.string().optional(),
+  description: exports_external2.string().optional()
+}).describe("Defines a group of components on the schematic");
+expectTypesMatch2(true);
+var schematic_table2 = exports_external2.object({
+  type: exports_external2.literal("schematic_table"),
+  schematic_table_id: getZodPrefixedIdWithDefault2("schematic_table"),
+  schematic_sheet_id: exports_external2.string().optional(),
+  anchor_position: point4,
+  column_widths: exports_external2.array(distance7),
+  row_heights: exports_external2.array(distance7),
+  cell_padding: distance7.optional(),
+  border_width: distance7.optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  schematic_component_id: exports_external2.string().optional(),
+  anchor: ninePointAnchor2.optional()
+}).describe("Defines a table on the schematic");
+expectTypesMatch2(true);
+var schematic_table_cell2 = exports_external2.object({
+  type: exports_external2.literal("schematic_table_cell"),
+  schematic_table_cell_id: getZodPrefixedIdWithDefault2("schematic_table_cell"),
+  schematic_sheet_id: exports_external2.string().optional(),
+  schematic_table_id: exports_external2.string(),
+  start_row_index: exports_external2.number(),
+  end_row_index: exports_external2.number(),
+  start_column_index: exports_external2.number(),
+  end_column_index: exports_external2.number(),
+  text: exports_external2.string().optional(),
+  center: point4,
+  width: distance7,
+  height: distance7,
+  horizontal_align: exports_external2.enum(["left", "center", "right"]).optional(),
+  vertical_align: exports_external2.enum(["top", "middle", "bottom"]).optional(),
+  font_size: distance7.optional(),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Defines a cell within a schematic_table");
+expectTypesMatch2(true);
+var schematic_sheet_size2 = exports_external2.enum(["a4", "ansi_b"]);
+var schematic_sheet2 = exports_external2.object({
+  type: exports_external2.literal("schematic_sheet"),
+  schematic_sheet_id: getZodPrefixedIdWithDefault2("schematic_sheet"),
+  name: exports_external2.string().optional(),
+  sheet_index: exports_external2.number().optional(),
+  sheet_size: schematic_sheet_size2.optional(),
+  sheet_width: exports_external2.number().positive().optional(),
+  sheet_height: exports_external2.number().positive().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  outline_color: exports_external2.string().optional()
+}).describe("Defines a schematic sheet or page that components can be placed on");
+expectTypesMatch2(true);
+var schematic_missing_sheet_warning2 = exports_external2.object({
+  type: exports_external2.literal("schematic_missing_sheet_warning"),
+  schematic_missing_sheet_warning_id: getZodPrefixedIdWithDefault2("schematic_missing_sheet_warning"),
+  warning_type: exports_external2.literal("schematic_missing_sheet_warning").default("schematic_missing_sheet_warning"),
+  message: exports_external2.string()
+}).describe("Circuit-wide warning emitted when a schematic has no schematic sheet. Display as a banner without attaching it to a component or drawing a target outline or leader line.");
+expectTypesMatch2(true);
+var point_with_bulge2 = exports_external2.object({
+  x: distance7,
+  y: distance7,
+  bulge: exports_external2.number().optional()
+});
+expectTypesMatch2(true);
+var ring2 = exports_external2.object({
+  vertices: exports_external2.array(point_with_bulge2)
+});
+expectTypesMatch2(true);
+var brep_shape2 = exports_external2.object({
+  outer_ring: ring2,
+  inner_rings: exports_external2.array(ring2).default([])
+});
+expectTypesMatch2(true);
+var insertionDirectionToCanonical2 = {
+  from_left: "from_left",
+  from_right: "from_right",
+  from_top: "from_top",
+  from_bottom: "from_bottom",
+  from_above: "from_above",
+  from_below: "from_below",
+  from_x_neg: "from_left",
+  from_x_pos: "from_right",
+  from_y_pos: "from_top",
+  from_y_neg: "from_bottom",
+  from_z_pos: "from_above",
+  from_z_neg: "from_below",
+  from_front: "from_top",
+  from_back: "from_bottom"
+};
+var insertion_direction2 = exports_external2.enum([
+  "from_left",
+  "from_right",
+  "from_top",
+  "from_bottom",
+  "from_above",
+  "from_below",
+  "from_x_neg",
+  "from_x_pos",
+  "from_y_pos",
+  "from_y_neg",
+  "from_z_pos",
+  "from_z_neg",
+  "from_front",
+  "from_back"
+]).transform((value) => insertionDirectionToCanonical2[value]).describe('The side exposing the receptacle where the cable or mating part is attached, following the 2D PCB diagram convention, not a 3D viewport frame. In project coordinate space, "from_top" is +Y, "from_bottom" -Y, "from_left" -X, "from_right" +X, "from_above" +Z and "from_below" -Z. A receptacle on the +Y edge is "from_top" even though the plug moves in -Y as it seats. Cartesian spellings such as "from_y_pos" are accepted and normalized to the named values, as are the deprecated "from_front" (now "from_top") and "from_back" (now "from_bottom").');
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+var pcb_pin1_location2 = exports_external2.enum([
+  "leftside_top",
+  "leftside_bottom",
+  "rightside_top",
+  "rightside_bottom",
+  "topside_left",
+  "topside_right",
+  "bottomside_left",
+  "bottomside_right"
+]);
+expectTypesMatch2(true);
+var pcb_route_hint2 = exports_external2.object({
+  x: distance7,
+  y: distance7,
+  via: exports_external2.boolean().optional(),
+  via_to_layer: layer_ref2.optional()
+});
+var pcb_route_hints2 = exports_external2.array(pcb_route_hint2);
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+var route_hint_point2 = exports_external2.object({
+  x: distance7,
+  y: distance7,
+  via: exports_external2.boolean().optional(),
+  to_layer: layer_ref2.optional(),
+  trace_width: distance7.optional()
+});
+expectTypesMatch2(true);
+var manufacturing_drc_properties2 = exports_external2.object({
+  min_trace_width: length3.optional(),
+  min_board_edge_clearance: length3.optional(),
+  min_via_hole_edge_to_via_hole_edge_clearance: length3.optional(),
+  min_plated_hole_drill_edge_to_drill_edge_clearance: length3.optional(),
+  min_trace_to_pad_edge_clearance: length3.optional(),
+  min_trace_to_hole_edge_clearance: length3.optional().describe("Minimum distance from a trace copper edge to a non-plated hole edge, in mm. No default is applied when omitted."),
+  min_pad_edge_to_pad_edge_clearance: length3.optional(),
+  min_same_net_trace_edge_to_trace_edge_clearance: length3.optional(),
+  min_different_net_trace_edge_to_trace_edge_clearance: length3.optional(),
+  min_via_edge_to_pad_edge_clearance: length3.optional(),
+  min_via_hole_diameter: length3.optional(),
+  min_via_pad_diameter: length3.optional()
+});
+var pcb_component2 = exports_external2.object({
+  type: exports_external2.literal("pcb_component"),
+  pcb_component_id: getZodPrefixedIdWithDefault2("pcb_component"),
+  source_component_id: exports_external2.string(),
+  center: point4,
+  layer: layer_ref2,
+  rotation: rotation2,
+  display_offset_x: exports_external2.string().optional().describe("How to display the x offset for this part, usually corresponding with how the user specified it"),
+  display_offset_y: exports_external2.string().optional().describe("How to display the y offset for this part, usually corresponding with how the user specified it"),
+  width: length3,
+  height: length3,
+  do_not_place: exports_external2.boolean().optional(),
+  is_allowed_to_be_off_board: exports_external2.boolean().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  pcb_group_id: exports_external2.string().optional(),
+  position_mode: exports_external2.enum([
+    "packed",
+    "relative_to_group_anchor",
+    "relative_to_another_component",
+    "none"
+  ]).optional(),
+  anchor_position: point4.optional(),
+  anchor_alignment: ninePointAnchor2.optional(),
+  positioned_relative_to_pcb_group_id: exports_external2.string().optional(),
+  positioned_relative_to_pcb_board_id: exports_external2.string().optional(),
+  cable_insertion_center: point4.optional(),
+  insertion_direction: insertion_direction2.optional(),
+  pin1_location: pcb_pin1_location2.optional().describe("Location of pin 1 on the unrotated, top-view component footprint"),
+  supplier_pin1_location_map: exports_external2.record(supplier_name2, pcb_pin1_location2).optional().describe("Pin 1 location for each supplier's unrotated, top-view footprint"),
+  metadata: exports_external2.object({
+    kicad_footprint: kicadFootprintMetadata2.optional()
+  }).optional(),
+  obstructs_within_bounds: exports_external2.boolean().default(true).describe("Does this component take up all the space within its bounds on a layer. This is generally true except for when separated pin headers are being represented by a single component (in which case, chips can be placed between the pin headers) or for tall modules where chips fit underneath")
+}).describe("Defines a component on the PCB");
+expectTypesMatch2(true);
+var pcb_debug_object_base2 = exports_external2.object({
+  type: exports_external2.literal("pcb_debug_object"),
+  pcb_debug_object_id: getZodPrefixedIdWithDefault2("pcb_debug_object"),
+  label: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional()
+});
+var pcb_debug_rect2 = pcb_debug_object_base2.extend({
+  shape: exports_external2.literal("rect"),
+  center: point4,
+  size: size2
+});
+var pcb_debug_line2 = pcb_debug_object_base2.extend({
+  shape: exports_external2.literal("line"),
+  start: point4,
+  end: point4
+});
+var pcb_debug_point2 = pcb_debug_object_base2.extend({
+  shape: exports_external2.literal("point"),
+  center: point4
+});
+var pcb_debug_object2 = exports_external2.discriminatedUnion("shape", [
+  pcb_debug_rect2,
+  pcb_debug_line2,
+  pcb_debug_point2
+]);
+expectTypesMatch2(true);
+var pcb_hole_circle2 = exports_external2.object({
+  type: exports_external2.literal("pcb_hole"),
+  pcb_hole_id: getZodPrefixedIdWithDefault2("pcb_hole"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  pcb_component_id: exports_external2.string().optional(),
+  hole_shape: exports_external2.literal("circle"),
+  hole_diameter: exports_external2.number(),
+  x: distance7,
+  y: distance7,
+  is_covered_with_solder_mask: exports_external2.boolean().optional(),
+  soldermask_margin: exports_external2.number().optional()
+});
+var pcb_hole_circle_shape2 = pcb_hole_circle2.describe("Defines a circular hole on the PCB");
+expectTypesMatch2(true);
+var pcb_hole_rect2 = exports_external2.object({
+  type: exports_external2.literal("pcb_hole"),
+  pcb_hole_id: getZodPrefixedIdWithDefault2("pcb_hole"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  pcb_component_id: exports_external2.string().optional(),
+  hole_shape: exports_external2.literal("rect"),
+  hole_width: exports_external2.number(),
+  hole_height: exports_external2.number(),
+  x: distance7,
+  y: distance7,
+  is_covered_with_solder_mask: exports_external2.boolean().optional(),
+  soldermask_margin: exports_external2.number().optional()
+});
+var pcb_hole_rect_shape2 = pcb_hole_rect2.describe("Defines a rectangular (square-capable) hole on the PCB. Use equal width/height for square.");
+expectTypesMatch2(true);
+var pcb_hole_circle_or_square2 = exports_external2.object({
+  type: exports_external2.literal("pcb_hole"),
+  pcb_hole_id: getZodPrefixedIdWithDefault2("pcb_hole"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  pcb_component_id: exports_external2.string().optional(),
+  hole_shape: exports_external2.enum(["circle", "square"]),
+  hole_diameter: exports_external2.number(),
+  x: distance7,
+  y: distance7,
+  is_covered_with_solder_mask: exports_external2.boolean().optional(),
+  soldermask_margin: exports_external2.number().optional()
+});
+var pcb_hole_circle_or_square_shape2 = pcb_hole_circle_or_square2.describe("Defines a circular or square hole on the PCB");
+expectTypesMatch2(true);
+var pcb_hole_oval2 = exports_external2.object({
+  type: exports_external2.literal("pcb_hole"),
+  pcb_hole_id: getZodPrefixedIdWithDefault2("pcb_hole"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  pcb_component_id: exports_external2.string().optional(),
+  hole_shape: exports_external2.literal("oval"),
+  hole_width: exports_external2.number(),
+  hole_height: exports_external2.number(),
+  x: distance7,
+  y: distance7,
+  is_covered_with_solder_mask: exports_external2.boolean().optional(),
+  soldermask_margin: exports_external2.number().optional()
+});
+var pcb_hole_oval_shape2 = pcb_hole_oval2.describe("Defines an oval hole on the PCB");
+expectTypesMatch2(true);
+var pcb_hole_pill2 = exports_external2.object({
+  type: exports_external2.literal("pcb_hole"),
+  pcb_hole_id: getZodPrefixedIdWithDefault2("pcb_hole"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  pcb_component_id: exports_external2.string().optional(),
+  hole_shape: exports_external2.literal("pill"),
+  hole_width: exports_external2.number(),
+  hole_height: exports_external2.number(),
+  x: distance7,
+  y: distance7,
+  is_covered_with_solder_mask: exports_external2.boolean().optional(),
+  soldermask_margin: exports_external2.number().optional()
+});
+var pcb_hole_pill_shape2 = pcb_hole_pill2.describe("Defines a pill-shaped hole on the PCB");
+expectTypesMatch2(true);
+var pcb_hole_rotated_pill2 = exports_external2.object({
+  type: exports_external2.literal("pcb_hole"),
+  pcb_hole_id: getZodPrefixedIdWithDefault2("pcb_hole"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  pcb_component_id: exports_external2.string().optional(),
+  hole_shape: exports_external2.literal("rotated_pill"),
+  hole_width: exports_external2.number(),
+  hole_height: exports_external2.number(),
+  x: distance7,
+  y: distance7,
+  ccw_rotation: rotation2,
+  is_covered_with_solder_mask: exports_external2.boolean().optional(),
+  soldermask_margin: exports_external2.number().optional()
+});
+var pcb_hole_rotated_pill_shape2 = pcb_hole_rotated_pill2.describe("Defines a rotated pill-shaped hole on the PCB");
+expectTypesMatch2(true);
+var pcb_hole2 = pcb_hole_circle_or_square2.or(pcb_hole_oval2).or(pcb_hole_pill2).or(pcb_hole_rotated_pill2).or(pcb_hole_circle2).or(pcb_hole_rect2);
+var pcb_plated_hole_circle2 = exports_external2.object({
+  type: exports_external2.literal("pcb_plated_hole"),
+  shape: exports_external2.literal("circle"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  outer_diameter: exports_external2.number(),
+  hole_diameter: exports_external2.number(),
+  is_covered_with_solder_mask: exports_external2.boolean().optional(),
+  x: distance7,
+  y: distance7,
+  layers: exports_external2.array(layer_ref2),
+  port_hints: exports_external2.array(exports_external2.string()).optional(),
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_port_id: exports_external2.string().optional(),
+  pcb_plated_hole_id: getZodPrefixedIdWithDefault2("pcb_plated_hole"),
+  soldermask_margin: exports_external2.number().optional()
+});
+var pcb_plated_hole_oval2 = exports_external2.object({
+  type: exports_external2.literal("pcb_plated_hole"),
+  shape: exports_external2.enum(["oval", "pill"]),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  outer_width: exports_external2.number(),
+  outer_height: exports_external2.number(),
+  hole_width: exports_external2.number(),
+  hole_height: exports_external2.number(),
+  is_covered_with_solder_mask: exports_external2.boolean().optional(),
+  x: distance7,
+  y: distance7,
+  ccw_rotation: rotation2,
+  layers: exports_external2.array(layer_ref2),
+  port_hints: exports_external2.array(exports_external2.string()).optional(),
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_port_id: exports_external2.string().optional(),
+  pcb_plated_hole_id: getZodPrefixedIdWithDefault2("pcb_plated_hole"),
+  soldermask_margin: exports_external2.number().optional()
+});
+var pcb_circular_hole_with_rect_pad2 = exports_external2.object({
+  type: exports_external2.literal("pcb_plated_hole"),
+  shape: exports_external2.literal("circular_hole_with_rect_pad"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  hole_shape: exports_external2.literal("circle"),
+  pad_shape: exports_external2.literal("rect"),
+  hole_diameter: exports_external2.number(),
+  rect_pad_width: exports_external2.number(),
+  rect_pad_height: exports_external2.number(),
+  rect_border_radius: exports_external2.number().optional(),
+  hole_offset_x: distance7.default(0),
+  hole_offset_y: distance7.default(0),
+  is_covered_with_solder_mask: exports_external2.boolean().optional(),
+  x: distance7,
+  y: distance7,
+  layers: exports_external2.array(layer_ref2),
+  port_hints: exports_external2.array(exports_external2.string()).optional(),
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_port_id: exports_external2.string().optional(),
+  pcb_plated_hole_id: getZodPrefixedIdWithDefault2("pcb_plated_hole"),
+  soldermask_margin: exports_external2.number().optional(),
+  rect_ccw_rotation: rotation2.optional()
+});
+var pcb_pill_hole_with_rect_pad2 = exports_external2.object({
+  type: exports_external2.literal("pcb_plated_hole"),
+  shape: exports_external2.literal("pill_hole_with_rect_pad"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  hole_shape: exports_external2.literal("pill"),
+  pad_shape: exports_external2.literal("rect"),
+  hole_width: exports_external2.number(),
+  hole_height: exports_external2.number(),
+  rect_pad_width: exports_external2.number(),
+  rect_pad_height: exports_external2.number(),
+  rect_border_radius: exports_external2.number().optional(),
+  hole_offset_x: distance7.default(0),
+  hole_offset_y: distance7.default(0),
+  is_covered_with_solder_mask: exports_external2.boolean().optional(),
+  x: distance7,
+  y: distance7,
+  layers: exports_external2.array(layer_ref2),
+  port_hints: exports_external2.array(exports_external2.string()).optional(),
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_port_id: exports_external2.string().optional(),
+  pcb_plated_hole_id: getZodPrefixedIdWithDefault2("pcb_plated_hole"),
+  soldermask_margin: exports_external2.number().optional()
+});
+var pcb_rotated_pill_hole_with_rect_pad2 = exports_external2.object({
+  type: exports_external2.literal("pcb_plated_hole"),
+  shape: exports_external2.literal("rotated_pill_hole_with_rect_pad"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  hole_shape: exports_external2.literal("rotated_pill"),
+  pad_shape: exports_external2.literal("rect"),
+  hole_width: exports_external2.number(),
+  hole_height: exports_external2.number(),
+  hole_ccw_rotation: rotation2,
+  rect_pad_width: exports_external2.number(),
+  rect_pad_height: exports_external2.number(),
+  rect_border_radius: exports_external2.number().optional(),
+  rect_ccw_rotation: rotation2,
+  hole_offset_x: distance7.default(0),
+  hole_offset_y: distance7.default(0),
+  is_covered_with_solder_mask: exports_external2.boolean().optional(),
+  x: distance7,
+  y: distance7,
+  layers: exports_external2.array(layer_ref2),
+  port_hints: exports_external2.array(exports_external2.string()).optional(),
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_port_id: exports_external2.string().optional(),
+  pcb_plated_hole_id: getZodPrefixedIdWithDefault2("pcb_plated_hole"),
+  soldermask_margin: exports_external2.number().optional()
+});
+var pcb_hole_with_polygon_pad2 = exports_external2.object({
+  type: exports_external2.literal("pcb_plated_hole"),
+  shape: exports_external2.literal("hole_with_polygon_pad"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  hole_shape: exports_external2.enum(["circle", "oval", "pill", "rotated_pill"]),
+  hole_diameter: exports_external2.number().optional(),
+  hole_width: exports_external2.number().optional(),
+  hole_height: exports_external2.number().optional(),
+  pad_outline: exports_external2.array(exports_external2.object({
+    x: distance7,
+    y: distance7
+  })).min(3),
+  hole_offset_x: distance7.default(0),
+  hole_offset_y: distance7.default(0),
+  is_covered_with_solder_mask: exports_external2.boolean().optional(),
+  x: distance7,
+  y: distance7,
+  layers: exports_external2.array(layer_ref2),
+  port_hints: exports_external2.array(exports_external2.string()).optional(),
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_port_id: exports_external2.string().optional(),
+  pcb_plated_hole_id: getZodPrefixedIdWithDefault2("pcb_plated_hole"),
+  soldermask_margin: exports_external2.number().optional(),
+  ccw_rotation: rotation2.optional()
+});
+var pcb_plated_hole2 = exports_external2.union([
+  pcb_plated_hole_circle2,
+  pcb_plated_hole_oval2,
+  pcb_circular_hole_with_rect_pad2,
+  pcb_pill_hole_with_rect_pad2,
+  pcb_rotated_pill_hole_with_rect_pad2,
+  pcb_hole_with_polygon_pad2
+]);
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+var pcb_port2 = exports_external2.object({
+  type: exports_external2.literal("pcb_port"),
+  pcb_port_id: getZodPrefixedIdWithDefault2("pcb_port"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  source_port_id: exports_external2.string(),
+  pcb_component_id: exports_external2.string().optional(),
+  x: distance7,
+  y: distance7,
+  layers: exports_external2.array(layer_ref2),
+  is_board_pinout: exports_external2.boolean().optional()
+}).describe("Defines a port on the PCB");
+expectTypesMatch2(true);
+var pcb_smtpad_circle2 = exports_external2.object({
+  type: exports_external2.literal("pcb_smtpad"),
+  shape: exports_external2.literal("circle"),
+  pcb_smtpad_id: getZodPrefixedIdWithDefault2("pcb_smtpad"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  x: distance7,
+  y: distance7,
+  radius: exports_external2.number(),
+  layer: layer_ref2,
+  port_hints: exports_external2.array(exports_external2.string()).optional(),
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_port_id: exports_external2.string().optional(),
+  is_covered_with_solder_mask: exports_external2.boolean().optional(),
+  soldermask_margin: exports_external2.number().optional(),
+  solderpaste_margin: exports_external2.number().optional()
+});
+var pcb_smtpad_rect2 = exports_external2.object({
+  type: exports_external2.literal("pcb_smtpad"),
+  shape: exports_external2.literal("rect"),
+  pcb_smtpad_id: getZodPrefixedIdWithDefault2("pcb_smtpad"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  x: distance7,
+  y: distance7,
+  width: exports_external2.number(),
+  height: exports_external2.number(),
+  rect_border_radius: exports_external2.number().optional(),
+  corner_radius: exports_external2.number().optional(),
+  layer: layer_ref2,
+  port_hints: exports_external2.array(exports_external2.string()).optional(),
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_port_id: exports_external2.string().optional(),
+  is_covered_with_solder_mask: exports_external2.boolean().optional(),
+  soldermask_margin: exports_external2.number().optional(),
+  soldermask_margin_left: exports_external2.number().optional(),
+  soldermask_margin_top: exports_external2.number().optional(),
+  soldermask_margin_right: exports_external2.number().optional(),
+  soldermask_margin_bottom: exports_external2.number().optional(),
+  solderpaste_margin: exports_external2.number().optional()
+});
+var pcb_smtpad_rotated_rect2 = exports_external2.object({
+  type: exports_external2.literal("pcb_smtpad"),
+  shape: exports_external2.literal("rotated_rect"),
+  pcb_smtpad_id: getZodPrefixedIdWithDefault2("pcb_smtpad"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  x: distance7,
+  y: distance7,
+  width: exports_external2.number(),
+  height: exports_external2.number(),
+  rect_border_radius: exports_external2.number().optional(),
+  corner_radius: exports_external2.number().optional(),
+  ccw_rotation: rotation2,
+  layer: layer_ref2,
+  port_hints: exports_external2.array(exports_external2.string()).optional(),
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_port_id: exports_external2.string().optional(),
+  is_covered_with_solder_mask: exports_external2.boolean().optional(),
+  soldermask_margin: exports_external2.number().optional(),
+  soldermask_margin_left: exports_external2.number().optional(),
+  soldermask_margin_top: exports_external2.number().optional(),
+  soldermask_margin_right: exports_external2.number().optional(),
+  soldermask_margin_bottom: exports_external2.number().optional(),
+  solderpaste_margin: exports_external2.number().optional()
+});
+var pcb_smtpad_pill2 = exports_external2.object({
+  type: exports_external2.literal("pcb_smtpad"),
+  shape: exports_external2.literal("pill"),
+  pcb_smtpad_id: getZodPrefixedIdWithDefault2("pcb_smtpad"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  x: distance7,
+  y: distance7,
+  width: exports_external2.number(),
+  height: exports_external2.number(),
+  radius: exports_external2.number(),
+  layer: layer_ref2,
+  port_hints: exports_external2.array(exports_external2.string()).optional(),
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_port_id: exports_external2.string().optional(),
+  is_covered_with_solder_mask: exports_external2.boolean().optional(),
+  soldermask_margin: exports_external2.number().optional(),
+  solderpaste_margin: exports_external2.number().optional()
+});
+var pcb_smtpad_rotated_pill2 = exports_external2.object({
+  type: exports_external2.literal("pcb_smtpad"),
+  shape: exports_external2.literal("rotated_pill"),
+  pcb_smtpad_id: getZodPrefixedIdWithDefault2("pcb_smtpad"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  x: distance7,
+  y: distance7,
+  width: exports_external2.number(),
+  height: exports_external2.number(),
+  radius: exports_external2.number(),
+  ccw_rotation: rotation2,
+  layer: layer_ref2,
+  port_hints: exports_external2.array(exports_external2.string()).optional(),
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_port_id: exports_external2.string().optional(),
+  is_covered_with_solder_mask: exports_external2.boolean().optional(),
+  soldermask_margin: exports_external2.number().optional(),
+  solderpaste_margin: exports_external2.number().optional()
+});
+var pcb_smtpad_polygon2 = exports_external2.object({
+  type: exports_external2.literal("pcb_smtpad"),
+  shape: exports_external2.literal("polygon"),
+  pcb_smtpad_id: getZodPrefixedIdWithDefault2("pcb_smtpad"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  points: exports_external2.array(point4),
+  layer: layer_ref2,
+  port_hints: exports_external2.array(exports_external2.string()).optional(),
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_port_id: exports_external2.string().optional(),
+  is_covered_with_solder_mask: exports_external2.boolean().optional(),
+  soldermask_margin: exports_external2.number().optional(),
+  solderpaste_margin: exports_external2.number().optional()
+});
+var pcb_smtpad2 = exports_external2.discriminatedUnion("shape", [
+  pcb_smtpad_circle2,
+  pcb_smtpad_rect2,
+  pcb_smtpad_rotated_rect2,
+  pcb_smtpad_rotated_pill2,
+  pcb_smtpad_pill2,
+  pcb_smtpad_polygon2
+]).describe("Defines an SMT pad on the PCB");
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+var pcb_solder_paste_circle2 = exports_external2.object({
+  type: exports_external2.literal("pcb_solder_paste"),
+  shape: exports_external2.literal("circle"),
+  pcb_solder_paste_id: getZodPrefixedIdWithDefault2("pcb_solder_paste"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  x: distance7,
+  y: distance7,
+  radius: exports_external2.number(),
+  layer: layer_ref2,
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_smtpad_id: exports_external2.string().optional()
+});
+var pcb_solder_paste_rect2 = exports_external2.object({
+  type: exports_external2.literal("pcb_solder_paste"),
+  shape: exports_external2.literal("rect"),
+  pcb_solder_paste_id: getZodPrefixedIdWithDefault2("pcb_solder_paste"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  x: distance7,
+  y: distance7,
+  width: exports_external2.number(),
+  height: exports_external2.number(),
+  layer: layer_ref2,
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_smtpad_id: exports_external2.string().optional()
+});
+var pcb_solder_paste_pill2 = exports_external2.object({
+  type: exports_external2.literal("pcb_solder_paste"),
+  shape: exports_external2.literal("pill"),
+  pcb_solder_paste_id: getZodPrefixedIdWithDefault2("pcb_solder_paste"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  x: distance7,
+  y: distance7,
+  width: exports_external2.number(),
+  height: exports_external2.number(),
+  radius: exports_external2.number(),
+  layer: layer_ref2,
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_smtpad_id: exports_external2.string().optional()
+});
+var pcb_solder_paste_rotated_rect2 = exports_external2.object({
+  type: exports_external2.literal("pcb_solder_paste"),
+  shape: exports_external2.literal("rotated_rect"),
+  pcb_solder_paste_id: getZodPrefixedIdWithDefault2("pcb_solder_paste"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  x: distance7,
+  y: distance7,
+  width: exports_external2.number(),
+  height: exports_external2.number(),
+  ccw_rotation: distance7,
+  layer: layer_ref2,
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_smtpad_id: exports_external2.string().optional()
+});
+var pcb_solder_paste_rotated_pill2 = exports_external2.object({
+  type: exports_external2.literal("pcb_solder_paste"),
+  shape: exports_external2.literal("rotated_pill"),
+  pcb_solder_paste_id: getZodPrefixedIdWithDefault2("pcb_solder_paste"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  x: distance7,
+  y: distance7,
+  width: exports_external2.number(),
+  height: exports_external2.number(),
+  radius: exports_external2.number(),
+  ccw_rotation: rotation2,
+  layer: layer_ref2,
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_smtpad_id: exports_external2.string().optional()
+});
+var pcb_solder_paste_oval2 = exports_external2.object({
+  type: exports_external2.literal("pcb_solder_paste"),
+  shape: exports_external2.literal("oval"),
+  pcb_solder_paste_id: getZodPrefixedIdWithDefault2("pcb_solder_paste"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  x: distance7,
+  y: distance7,
+  width: exports_external2.number(),
+  height: exports_external2.number(),
+  layer: layer_ref2,
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_smtpad_id: exports_external2.string().optional()
+});
+var pcb_solder_paste_polygon2 = polygon_shape2.extend({
+  type: exports_external2.literal("pcb_solder_paste"),
+  pcb_solder_paste_id: getZodPrefixedIdWithDefault2("pcb_solder_paste"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  holes: exports_external2.array(polygon_shape2.shape.points).optional(),
+  layer: layer_ref2,
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_smtpad_id: exports_external2.string().optional()
+});
+var pcb_solder_paste2 = exports_external2.union([
+  pcb_solder_paste_circle2,
+  pcb_solder_paste_rect2,
+  pcb_solder_paste_pill2,
+  pcb_solder_paste_rotated_rect2,
+  pcb_solder_paste_rotated_pill2,
+  pcb_solder_paste_oval2,
+  pcb_solder_paste_polygon2
+]).describe("Defines solderpaste on the PCB");
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+var opening_base2 = exports_external2.object({
+  type: exports_external2.literal("pcb_soldermask_opening"),
+  pcb_soldermask_opening_id: getZodPrefixedIdWithDefault2("pcb_soldermask_opening"),
+  layer: layer_ref2.pipe(visible_layer2),
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional()
+});
+var pcb_soldermask_opening2 = exports_external2.discriminatedUnion("shape", [
+  circle_shape2.extend(opening_base2.shape),
+  rect_shape2.extend(opening_base2.shape),
+  rotated_rect_shape2.extend(opening_base2.shape),
+  polygon_shape2.extend(opening_base2.shape)
+]).describe("An explicit opening in top or bottom solder mask or flex coverlay, independent of pads. Removes mask without adding copper or solder paste.");
+expectTypesMatch2(true);
+var pcb_text2 = exports_external2.object({
+  type: exports_external2.literal("pcb_text"),
+  pcb_text_id: getZodPrefixedIdWithDefault2("pcb_text"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  text: exports_external2.string(),
+  center: point4,
+  layer: layer_ref2,
+  width: length3,
+  height: length3,
+  lines: exports_external2.number(),
+  align: exports_external2.enum(["bottom-left"])
+}).describe("Defines text on the PCB");
+expectTypesMatch2(true);
+var positive_width2 = distance7.pipe(exports_external2.number().finite().positive());
+var pcb_trace_route_point_wire2 = exports_external2.object({
+  route_type: exports_external2.literal("wire"),
+  x: distance7,
+  y: distance7,
+  width: distance7,
+  start_width: positive_width2.optional(),
+  end_width: positive_width2.optional(),
+  width_interpolation_mode: exports_external2.enum(["linear", "quadratic"]).optional(),
+  copper_pour_id: exports_external2.string().optional(),
+  is_inside_copper_pour: exports_external2.boolean().optional(),
+  start_pcb_port_id: exports_external2.string().optional(),
+  end_pcb_port_id: exports_external2.string().optional(),
+  layer: layer_ref2
+}).superRefine((wire, ctx) => {
+  const present = [
+    wire.start_width,
+    wire.end_width,
+    wire.width_interpolation_mode
+  ].filter((v2) => v2 !== undefined).length;
+  if (present === 0)
+    return;
+  if (present !== 3) {
+    ctx.addIssue({
+      code: exports_external2.ZodIssueCode.custom,
+      message: "Wire taper requires start_width, end_width and width_interpolation_mode together"
+    });
+  }
+  if (wire.width !== wire.start_width) {
+    ctx.addIssue({
+      code: exports_external2.ZodIssueCode.custom,
+      path: ["start_width"],
+      message: "start_width must equal width"
+    });
+  }
+  if (!Number.isFinite(wire.x) || !Number.isFinite(wire.y)) {
+    ctx.addIssue({
+      code: exports_external2.ZodIssueCode.custom,
+      message: "Tapered wire coordinates must be finite"
+    });
+  }
+});
+var pcb_trace_route_point_via2 = exports_external2.object({
+  route_type: exports_external2.literal("via"),
+  x: distance7,
+  y: distance7,
+  copper_pour_id: exports_external2.string().optional(),
+  is_inside_copper_pour: exports_external2.boolean().optional(),
+  hole_diameter: distance7.optional(),
+  outer_diameter: distance7.optional(),
+  tented_on_top: exports_external2.boolean().optional(),
+  tented_on_bottom: exports_external2.boolean().optional(),
+  from_layer: layer_ref2,
+  to_layer: layer_ref2
+});
+var pcb_trace_route_point_through_pad2 = exports_external2.object({
+  route_type: exports_external2.literal("through_pad"),
+  start: point4,
+  end: point4,
+  width: distance7,
+  start_layer: layer_ref2,
+  end_layer: layer_ref2,
+  pcb_smtpad_id: exports_external2.string().optional(),
+  pcb_plated_hole_id: exports_external2.string().optional()
+});
+var pcb_trace_route_point2 = exports_external2.union([
+  pcb_trace_route_point_wire2,
+  pcb_trace_route_point_via2,
+  pcb_trace_route_point_through_pad2
+]);
+var pcb_trace2 = exports_external2.object({
+  type: exports_external2.literal("pcb_trace"),
+  source_trace_id: exports_external2.string().optional(),
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_trace_id: getZodPrefixedIdWithDefault2("pcb_trace"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  route_thickness_mode: exports_external2.enum(["constant", "interpolated"]).default("constant").optional(),
+  route_order_index: exports_external2.number().optional(),
+  should_round_corners: exports_external2.boolean().optional(),
+  trace_length: exports_external2.number().optional(),
+  is_antenna_trace: exports_external2.boolean().optional(),
+  highlight_color: exports_external2.string().optional(),
+  route: exports_external2.array(pcb_trace_route_point2).superRefine((route, ctx) => {
+    for (const [i2, wire] of route.entries()) {
+      if (wire.route_type !== "wire" || wire.width_interpolation_mode === undefined)
+        continue;
+      const next = route[i2 + 1];
+      const end = next?.route_type === "through_pad" ? next.start : next;
+      const layer = next?.route_type === "wire" ? next.layer : next?.route_type === "via" ? next.from_layer : next?.start_layer;
+      const length4 = end ? Math.hypot(end.x - wire.x, end.y - wire.y) : NaN;
+      if (!Number.isFinite(length4) || length4 <= 0 || layer !== wire.layer) {
+        ctx.addIssue({
+          code: exports_external2.ZodIssueCode.custom,
+          path: [i2],
+          message: "Tapered wire must lead to a distinct finite next point on the same layer"
+        });
+      }
+    }
+  })
+}).describe("Defines a trace on the PCB");
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+var pcb_trace_warning2 = exports_external2.object({
+  type: exports_external2.literal("pcb_trace_warning"),
+  pcb_trace_warning_id: getZodPrefixedIdWithDefault2("pcb_trace_warning"),
+  warning_type: exports_external2.literal("pcb_trace_warning").default("pcb_trace_warning"),
+  message: exports_external2.string(),
+  center: point4.optional(),
+  pcb_trace_id: exports_external2.string(),
+  source_trace_id: exports_external2.string(),
+  pcb_component_ids: exports_external2.array(exports_external2.string()),
+  pcb_port_ids: exports_external2.array(exports_external2.string()),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Defines a trace warning on the PCB");
+expectTypesMatch2(true);
+var pcb_trace_style_warning2 = exports_external2.object({
+  type: exports_external2.literal("pcb_trace_style_warning"),
+  pcb_trace_style_warning_id: getZodPrefixedIdWithDefault2("pcb_trace_style_warning"),
+  warning_type: exports_external2.literal("pcb_trace_style_warning").default("pcb_trace_style_warning"),
+  message: exports_external2.string(),
+  styling_issue_type: exports_external2.literal("long_segment_at_odd_angle"),
+  pcb_trace_id: exports_external2.string(),
+  source_trace_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  layer: layer_ref2,
+  start_route_index: exports_external2.number().int().nonnegative(),
+  end_route_index: exports_external2.number().int().nonnegative(),
+  segment_start: point4,
+  segment_end: point4,
+  center: point4,
+  segment_length: distance7,
+  minimum_segment_length: distance7,
+  angle_degrees: exports_external2.number().min(0).lt(360),
+  nearest_allowed_angle_degrees: exports_external2.number().min(0).lt(360).multipleOf(45),
+  angle_deviation_degrees: exports_external2.number().min(0).max(22.5),
+  angle_tolerance_degrees: exports_external2.number().min(0).lt(22.5)
+}).describe("Warning for a long PCB trace segment whose direction deviates from a multiple of 45 degrees");
+expectTypesMatch2(true);
+var pcb_trace_too_long_error2 = exports_external2.object({
+  type: exports_external2.literal("pcb_trace_too_long_error"),
+  pcb_trace_too_long_error_id: getZodPrefixedIdWithDefault2("pcb_trace_too_long_error"),
+  error_type: exports_external2.literal("pcb_trace_too_long_error").default("pcb_trace_too_long_error"),
+  message: exports_external2.string(),
+  pcb_trace_id: exports_external2.string(),
+  source_net_id: exports_external2.string().optional(),
+  source_trace_id: exports_external2.string().optional(),
+  actual_trace_length: distance7,
+  maximum_trace_length: distance7,
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Error emitted when a PCB trace is longer than its maximum allowed length");
+expectTypesMatch2(true);
+var pcb_bus_length_skew_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("pcb_bus_length_skew_error"),
+  pcb_bus_length_skew_error_id: getZodPrefixedIdWithDefault2("pcb_bus_length_skew_error"),
+  error_type: exports_external2.literal("pcb_bus_length_skew_error").default("pcb_bus_length_skew_error"),
+  source_bus_id: exports_external2.string(),
+  source_trace_ids: exports_external2.array(exports_external2.string()),
+  pcb_trace_ids: exports_external2.array(exports_external2.string()),
+  actual_length_skew: exports_external2.number().nonnegative().finite(),
+  maximum_length_skew: exports_external2.number().nonnegative().finite(),
+  subcircuit_id: exports_external2.string().optional()
+});
+expectTypesMatch2(true);
+var pcb_trace_too_long_warning2 = exports_external2.object({
+  type: exports_external2.literal("pcb_trace_too_long_warning"),
+  pcb_trace_too_long_warning_id: getZodPrefixedIdWithDefault2("pcb_trace_too_long_warning"),
+  warning_type: exports_external2.literal("pcb_trace_too_long_warning").default("pcb_trace_too_long_warning"),
+  message: exports_external2.string(),
+  pcb_trace_id: exports_external2.string(),
+  source_net_id: exports_external2.string().optional(),
+  source_trace_id: exports_external2.string().optional(),
+  actual_trace_length: distance7,
+  maximum_trace_length: distance7,
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Warning emitted when a PCB trace is longer than its maximum allowed length");
+expectTypesMatch2(true);
+var pcb_trace_too_many_vias_warning2 = exports_external2.object({
+  type: exports_external2.literal("pcb_trace_too_many_vias_warning"),
+  pcb_trace_too_many_vias_warning_id: getZodPrefixedIdWithDefault2("pcb_trace_too_many_vias_warning"),
+  warning_type: exports_external2.literal("pcb_trace_too_many_vias_warning").default("pcb_trace_too_many_vias_warning"),
+  message: exports_external2.string(),
+  pcb_trace_id: exports_external2.string(),
+  source_net_id: exports_external2.string().optional(),
+  source_trace_id: exports_external2.string().optional(),
+  actual_via_count: exports_external2.number().int().nonnegative(),
+  maximum_via_count: exports_external2.number().int().nonnegative(),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Warning emitted when a PCB trace has more vias than its maximum allowed count");
+expectTypesMatch2(true);
+var error_base2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("pcb_bus_routing_constraint_error"),
+  pcb_bus_routing_constraint_error_id: getZodPrefixedIdWithDefault2("pcb_bus_routing_constraint_error"),
+  error_type: exports_external2.literal("pcb_bus_routing_constraint_error").default("pcb_bus_routing_constraint_error"),
+  source_bus_id: exports_external2.string(),
+  source_trace_ids: exports_external2.array(exports_external2.string()).min(1),
+  pcb_trace_ids: exports_external2.array(exports_external2.string()),
+  subcircuit_id: exports_external2.string().optional()
+});
+var pcb_bus_routing_constraint_error2 = exports_external2.discriminatedUnion("routing_rule", [
+  error_base2.extend({
+    routing_rule: exports_external2.literal("length_skew"),
+    actual_length_skew: exports_external2.number().nonnegative().finite(),
+    maximum_length_skew: exports_external2.number().nonnegative().finite()
+  }),
+  error_base2.extend({
+    routing_rule: exports_external2.literal("min_length"),
+    actual_trace_length: exports_external2.number().nonnegative().finite(),
+    minimum_trace_length: exports_external2.number().finite()
+  }),
+  error_base2.extend({
+    routing_rule: exports_external2.literal("max_length"),
+    actual_trace_length: exports_external2.number().nonnegative().finite(),
+    maximum_trace_length: exports_external2.number().finite()
+  }),
+  error_base2.extend({
+    routing_rule: exports_external2.literal("target_length"),
+    actual_trace_length: exports_external2.number().nonnegative().finite(),
+    target_trace_length: exports_external2.number().finite(),
+    length_tolerance: exports_external2.number().nonnegative().finite()
+  }),
+  error_base2.extend({
+    routing_rule: exports_external2.literal("pcb_trace_spacing"),
+    other_pcb_trace_id: exports_external2.string(),
+    other_source_trace_id: exports_external2.string().optional(),
+    actual_centerline_spacing: exports_external2.number().nonnegative().finite(),
+    minimum_centerline_spacing: exports_external2.number().positive().finite()
+  }),
+  error_base2.extend({
+    routing_rule: exports_external2.literal("pcb_spacing_to_other_signals"),
+    other_pcb_trace_id: exports_external2.string(),
+    other_source_trace_id: exports_external2.string().optional(),
+    actual_centerline_spacing: exports_external2.number().nonnegative().finite(),
+    minimum_centerline_spacing: exports_external2.number().positive().finite()
+  }),
+  error_base2.extend({
+    routing_rule: exports_external2.literal("impedance_target"),
+    target_impedance: exports_external2.number().positive().finite(),
+    minimum_impedance: exports_external2.number().positive().finite().optional(),
+    maximum_impedance: exports_external2.number().positive().finite().optional()
+  })
+]).superRefine((error, ctx) => {
+  if (error.routing_rule !== "impedance_target")
+    return;
+  if (error.minimum_impedance === undefined && error.maximum_impedance === undefined)
+    ctx.addIssue({
+      code: exports_external2.ZodIssueCode.custom,
+      path: ["minimum_impedance"],
+      message: "Provide an impedance bound"
+    });
+  if (error.minimum_impedance !== undefined && error.maximum_impedance !== undefined && error.minimum_impedance > error.maximum_impedance)
+    ctx.addIssue({
+      code: exports_external2.ZodIssueCode.custom,
+      path: ["maximum_impedance"],
+      message: "Impedance bounds must be ordered"
+    });
+}).describe("A declared bus or differential-pair routing constraint is violated.");
+expectTypesMatch2(true);
+var warning_base2 = exports_external2.object({
+  type: exports_external2.literal("pcb_bus_routing_constraint_warning"),
+  pcb_bus_routing_constraint_warning_id: getZodPrefixedIdWithDefault2("pcb_bus_routing_constraint_warning"),
+  warning_type: exports_external2.literal("pcb_bus_routing_constraint_warning").default("pcb_bus_routing_constraint_warning"),
+  source_bus_id: exports_external2.string(),
+  source_trace_ids: exports_external2.array(exports_external2.string()).min(1),
+  pcb_trace_ids: exports_external2.array(exports_external2.string()),
+  message: exports_external2.string(),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("A declared bus or pair constraint could not be verified; this is not a pass.");
+var pcb_bus_routing_constraint_warning2 = exports_external2.discriminatedUnion("routing_rule", [
+  warning_base2.extend({ routing_rule: exports_external2.literal("route_geometry") }),
+  warning_base2.extend({ routing_rule: exports_external2.literal("reference_geometry") }),
+  warning_base2.extend({ routing_rule: exports_external2.literal("spacing_geometry") }),
+  warning_base2.extend({ routing_rule: exports_external2.literal("target_length") }),
+  warning_base2.extend({ routing_rule: exports_external2.literal("physical_impedance") })
+]);
+expectTypesMatch2(true);
+var pcb_trace_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("pcb_trace_error"),
+  pcb_trace_error_id: getZodPrefixedIdWithDefault2("pcb_trace_error"),
+  error_type: exports_external2.literal("pcb_trace_error").default("pcb_trace_error"),
+  center: point4.optional(),
+  pcb_trace_id: exports_external2.string(),
+  source_trace_id: exports_external2.string(),
+  pcb_component_ids: exports_external2.array(exports_external2.string()),
+  pcb_port_ids: exports_external2.array(exports_external2.string()),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Defines a trace error on the PCB");
+expectTypesMatch2(true);
+var pcb_trace_missing_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("pcb_trace_missing_error"),
+  pcb_trace_missing_error_id: getZodPrefixedIdWithDefault2("pcb_trace_missing_error"),
+  error_type: exports_external2.literal("pcb_trace_missing_error").default("pcb_trace_missing_error"),
+  center: point4.optional(),
+  source_trace_id: exports_external2.string(),
+  pcb_component_ids: exports_external2.array(exports_external2.string()),
+  pcb_port_ids: exports_external2.array(exports_external2.string()),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Defines an error when a source trace has no corresponding PCB trace");
+expectTypesMatch2(true);
+var pcb_port_not_matched_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("pcb_port_not_matched_error"),
+  pcb_error_id: getZodPrefixedIdWithDefault2("pcb_error"),
+  error_type: exports_external2.literal("pcb_port_not_matched_error").default("pcb_port_not_matched_error"),
+  pcb_component_ids: exports_external2.array(exports_external2.string()),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Defines a trace error on the PCB where a port is not matched");
+expectTypesMatch2(true);
+var pcb_port_not_connected_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("pcb_port_not_connected_error"),
+  pcb_port_not_connected_error_id: getZodPrefixedIdWithDefault2("pcb_port_not_connected_error"),
+  error_type: exports_external2.literal("pcb_port_not_connected_error").default("pcb_port_not_connected_error"),
+  pcb_port_ids: exports_external2.array(exports_external2.string()),
+  pcb_component_ids: exports_external2.array(exports_external2.string()),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Defines an error when a pcb port is not connected to any trace");
+expectTypesMatch2(true);
+var pcb_net2 = exports_external2.object({
+  type: exports_external2.literal("pcb_net"),
+  pcb_net_id: getZodPrefixedIdWithDefault2("pcb_net"),
+  source_net_id: exports_external2.string().optional(),
+  highlight_color: exports_external2.string().optional()
+}).describe("Defines a net on the PCB");
+expectTypesMatch2(true);
+var pcb_via2 = exports_external2.object({
+  type: exports_external2.literal("pcb_via"),
+  pcb_via_id: getZodPrefixedIdWithDefault2("pcb_via"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  subcircuit_connectivity_map_key: exports_external2.string().optional(),
+  x: distance7,
+  y: distance7,
+  outer_diameter: distance7.default("0.6mm"),
+  hole_diameter: distance7.default("0.25mm"),
+  topmost_drill_layer: layer_ref2.optional(),
+  bottommost_drill_layer: layer_ref2.optional(),
+  through_hole: exports_external2.boolean().optional(),
+  from_layer: layer_ref2.optional(),
+  to_layer: layer_ref2.optional(),
+  layers: exports_external2.array(layer_ref2),
+  pcb_port_ids: exports_external2.array(exports_external2.string()).optional(),
+  pcb_trace_id: exports_external2.string().optional(),
+  source_trace_id: exports_external2.string().optional(),
+  source_net_id: exports_external2.string().min(1).optional(),
+  net_is_assignable: exports_external2.boolean().optional(),
+  net_assigned: exports_external2.boolean().optional(),
+  is_tented: exports_external2.boolean().optional(),
+  tented_on_top: exports_external2.boolean().optional(),
+  tented_on_bottom: exports_external2.boolean().optional()
+}).transform(({ is_tented, ...via }) => {
+  if (is_tented !== undefined) {
+    via.tented_on_top ??= is_tented;
+    via.tented_on_bottom ??= is_tented;
+  }
+  return via;
+}).describe("Defines a via on the PCB");
+expectTypesMatch2(true);
+var pcb_board2 = exports_external2.object({
+  type: exports_external2.literal("pcb_board"),
+  pcb_board_id: getZodPrefixedIdWithDefault2("pcb_board"),
+  pcb_panel_id: exports_external2.string().optional(),
+  carrier_pcb_board_id: exports_external2.string().optional(),
+  is_subcircuit: exports_external2.boolean().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  is_mounted_to_carrier_board: exports_external2.boolean().optional(),
+  is_via_in_pad_allowed: exports_external2.boolean().optional(),
+  default_via_tented_on_top: exports_external2.boolean().optional(),
+  default_via_tented_on_bottom: exports_external2.boolean().optional(),
+  default_via_plugged: exports_external2.boolean().optional(),
+  width: length3.optional(),
+  height: length3.optional(),
+  center: point4,
+  display_offset_x: exports_external2.string().optional().describe("How to display the x offset for this board, usually corresponding with how the user specified it"),
+  display_offset_y: exports_external2.string().optional().describe("How to display the y offset for this board, usually corresponding with how the user specified it"),
+  thickness: length3.optional().default(1.4),
+  num_layers: exports_external2.number().optional().default(4),
+  allow_blind_and_buried_vias: exports_external2.boolean().optional().describe("Whether autorouters may generate blind and buried vias. False restricts newly generated vias to the full board stack."),
+  outline: exports_external2.array(point4).optional(),
+  shape: exports_external2.enum(["rect", "polygon"]).optional(),
+  material: exports_external2.enum(["fr4", "fr1", "flex"]).default("fr4"),
+  solder_mask_color: exports_external2.string().optional(),
+  silkscreen_color: exports_external2.string().optional(),
+  anchor_position: point4.optional(),
+  anchor_alignment: ninePointAnchor2.optional(),
+  position_mode: exports_external2.enum(["relative_to_panel_anchor", "none"]).optional()
+}).merge(manufacturing_drc_properties2).describe("Defines the board outline of the PCB");
+expectTypesMatch2(true);
+var finite_point3 = point4.extend({
+  x: length3.pipe(exports_external2.number().finite()),
+  y: length3.pipe(exports_external2.number().finite())
+});
+var pcb_bend2 = exports_external2.object({
+  type: exports_external2.literal("pcb_bend"),
+  pcb_bend_id: getZodPrefixedIdWithDefault2("pcb_bend"),
+  pcb_board_id: exports_external2.string(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  name: exports_external2.string().optional(),
+  start: finite_point3,
+  end: finite_point3,
+  bend_angle: rotation2.pipe(exports_external2.number().finite()),
+  bend_radius: length3.pipe(exports_external2.number().finite().positive()),
+  bend_side: exports_external2.enum(["left", "right"])
+}).refine(({ start, end }) => start.x !== end.x || start.y !== end.y, {
+  message: "Bend centerline endpoints must be distinct",
+  path: ["end"]
+}).describe("Defines a finite-radius bend on a flat PCB for runtime CAD folding");
+expectTypesMatch2(true);
+var positive_length3 = length3.pipe(exports_external2.number().finite().positive());
+var finite_point22 = point4.extend({
+  x: length3.pipe(exports_external2.number().finite()),
+  y: length3.pipe(exports_external2.number().finite())
+});
+var pcb_stiffener_base2 = exports_external2.object({
+  type: exports_external2.literal("pcb_stiffener"),
+  pcb_stiffener_id: getZodPrefixedIdWithDefault2("pcb_stiffener"),
+  pcb_board_id: exports_external2.string(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  name: exports_external2.string().optional(),
+  layer: exports_external2.enum(["top", "bottom"]),
+  material: exports_external2.enum(["fr4", "polyimide", "stainless_steel", "aluminum"]),
+  thickness: positive_length3,
+  adhesive_thickness: length3.pipe(exports_external2.number().finite().nonnegative()).optional()
+});
+var pcb_stiffener_rect2 = pcb_stiffener_base2.extend({
+  shape: exports_external2.literal("rect"),
+  center: finite_point22,
+  rotation: rotation2.pipe(exports_external2.number().finite()).optional(),
+  width: positive_length3,
+  height: positive_length3,
+  outline: exports_external2.never().optional()
+});
+expectTypesMatch2(true);
+var pcb_stiffener_polygon2 = pcb_stiffener_base2.extend({
+  shape: exports_external2.literal("polygon"),
+  outline: exports_external2.array(finite_point22).min(3).refine((points) => {
+    const twice_area = points.reduce((sum, p2, i2) => {
+      const next = points[(i2 + 1) % points.length];
+      return sum + p2.x * next.y - next.x * p2.y;
+    }, 0);
+    return Number.isFinite(twice_area) && twice_area !== 0;
+  }, "Stiffener outline must enclose a nonzero area"),
+  center: exports_external2.never().optional(),
+  rotation: exports_external2.never().optional(),
+  width: exports_external2.never().optional(),
+  height: exports_external2.never().optional()
+});
+expectTypesMatch2(true);
+var pcb_stiffener2 = exports_external2.discriminatedUnion("shape", [pcb_stiffener_rect2, pcb_stiffener_polygon2]).describe("Defines bonded mechanical PCB reinforcement without adding copper layers");
+expectTypesMatch2(true);
+var pcb_panel2 = exports_external2.object({
+  type: exports_external2.literal("pcb_panel"),
+  pcb_panel_id: getZodPrefixedIdWithDefault2("pcb_panel"),
+  width: length3,
+  height: length3,
+  center: point4,
+  thickness: length3.optional().default(1.4),
+  covered_with_solder_mask: exports_external2.boolean().optional().default(true)
+}).describe("Defines a PCB panel that can contain multiple boards");
+expectTypesMatch2(true);
+var pcb_placement_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("pcb_placement_error"),
+  pcb_placement_error_id: getZodPrefixedIdWithDefault2("pcb_placement_error"),
+  error_type: exports_external2.literal("pcb_placement_error").default("pcb_placement_error"),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Defines a placement error on the PCB");
+expectTypesMatch2(true);
+var pcb_packing_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("pcb_packing_error"),
+  pcb_packing_error_id: getZodPrefixedIdWithDefault2("pcb_packing_error"),
+  error_type: exports_external2.literal("pcb_packing_error").default("pcb_packing_error"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Defines a failure to pack PCB components within layout bounds");
+expectTypesMatch2(true);
+var pcb_panelization_placement_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("pcb_panelization_placement_error"),
+  pcb_panelization_placement_error_id: getZodPrefixedIdWithDefault2("pcb_panelization_placement_error"),
+  error_type: exports_external2.literal("pcb_panelization_placement_error").default("pcb_panelization_placement_error"),
+  pcb_panel_id: exports_external2.string().optional(),
+  pcb_board_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Defines a panelization placement error on the PCB");
+expectTypesMatch2(true);
+var pcb_trace_hint2 = exports_external2.object({
+  type: exports_external2.literal("pcb_trace_hint"),
+  pcb_trace_hint_id: getZodPrefixedIdWithDefault2("pcb_trace_hint"),
+  pcb_port_id: exports_external2.string(),
+  pcb_component_id: exports_external2.string(),
+  route: exports_external2.array(route_hint_point2),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("A hint that can be used during generation of a PCB trace");
+expectTypesMatch2(true);
+var pcb_silkscreen_line2 = exports_external2.object({
+  type: exports_external2.literal("pcb_silkscreen_line"),
+  pcb_silkscreen_line_id: getZodPrefixedIdWithDefault2("pcb_silkscreen_line"),
+  pcb_component_id: exports_external2.string(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  stroke_width: distance7.default("0.1mm"),
+  x1: distance7,
+  y1: distance7,
+  x2: distance7,
+  y2: distance7,
+  layer: visible_layer2
+}).describe("Defines a silkscreen line on the PCB");
+expectTypesMatch2(true);
+var pcb_silkscreen_path2 = exports_external2.object({
+  type: exports_external2.literal("pcb_silkscreen_path"),
+  pcb_silkscreen_path_id: getZodPrefixedIdWithDefault2("pcb_silkscreen_path"),
+  pcb_component_id: exports_external2.string(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  layer: visible_layer2,
+  route: exports_external2.array(point4),
+  stroke_width: length3
+}).describe("Defines a silkscreen path on the PCB");
+expectTypesMatch2(true);
+var pcb_silkscreen_text2 = exports_external2.object({
+  type: exports_external2.literal("pcb_silkscreen_text"),
+  pcb_silkscreen_text_id: getZodPrefixedIdWithDefault2("pcb_silkscreen_text"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  font: exports_external2.literal("tscircuit2024").default("tscircuit2024"),
+  font_size: distance7.default("0.2mm"),
+  pcb_component_id: exports_external2.string(),
+  text: exports_external2.string(),
+  is_knockout: exports_external2.boolean().default(false).optional(),
+  knockout_padding: exports_external2.object({
+    left: length3,
+    top: length3,
+    bottom: length3,
+    right: length3
+  }).default({
+    left: "0.2mm",
+    top: "0.2mm",
+    bottom: "0.2mm",
+    right: "0.2mm"
+  }).optional(),
+  ccw_rotation: exports_external2.number().optional(),
+  layer: layer_ref2,
+  is_mirrored: exports_external2.boolean().default(false).optional(),
+  anchor_position: point4.default({ x: 0, y: 0 }),
+  anchor_alignment: ninePointAnchor2.default("center")
+}).describe("Defines silkscreen text on the PCB");
+expectTypesMatch2(true);
+var pcb_copper_text2 = exports_external2.object({
+  type: exports_external2.literal("pcb_copper_text"),
+  pcb_copper_text_id: getZodPrefixedIdWithDefault2("pcb_copper_text"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  font: exports_external2.literal("tscircuit2024").default("tscircuit2024"),
+  font_size: distance7.default("0.2mm"),
+  pcb_component_id: exports_external2.string(),
+  text: exports_external2.string(),
+  is_knockout: exports_external2.boolean().default(false).optional(),
+  knockout_padding: exports_external2.object({
+    left: length3,
+    top: length3,
+    bottom: length3,
+    right: length3
+  }).default({
+    left: "0.2mm",
+    top: "0.2mm",
+    bottom: "0.2mm",
+    right: "0.2mm"
+  }).optional(),
+  ccw_rotation: exports_external2.number().optional(),
+  layer: layer_ref2,
+  is_mirrored: exports_external2.boolean().default(false).optional(),
+  anchor_position: point4.default({ x: 0, y: 0 }),
+  anchor_alignment: ninePointAnchor2.default("center")
+}).describe("Defines copper text on the PCB");
+expectTypesMatch2(true);
+var pcb_silkscreen_rect2 = exports_external2.object({
+  type: exports_external2.literal("pcb_silkscreen_rect"),
+  pcb_silkscreen_rect_id: getZodPrefixedIdWithDefault2("pcb_silkscreen_rect"),
+  pcb_component_id: exports_external2.string(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  center: point4,
+  width: length3,
+  height: length3,
+  layer: layer_ref2,
+  stroke_width: length3.default("1mm"),
+  corner_radius: length3.optional(),
+  is_filled: exports_external2.boolean().default(true).optional(),
+  has_stroke: exports_external2.boolean().optional(),
+  is_stroke_dashed: exports_external2.boolean().optional(),
+  ccw_rotation: exports_external2.number().optional()
+}).describe("Defines a silkscreen rect on the PCB");
+expectTypesMatch2(true);
+var pcb_silkscreen_circle2 = exports_external2.object({
+  type: exports_external2.literal("pcb_silkscreen_circle"),
+  pcb_silkscreen_circle_id: getZodPrefixedIdWithDefault2("pcb_silkscreen_circle"),
+  pcb_component_id: exports_external2.string(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  center: point4,
+  radius: length3,
+  layer: visible_layer2,
+  stroke_width: length3.default("1mm"),
+  is_filled: exports_external2.boolean().optional()
+}).describe("Defines a silkscreen circle on the PCB");
+expectTypesMatch2(true);
+var pcb_silkscreen_oval2 = exports_external2.object({
+  type: exports_external2.literal("pcb_silkscreen_oval"),
+  pcb_silkscreen_oval_id: getZodPrefixedIdWithDefault2("pcb_silkscreen_oval"),
+  pcb_component_id: exports_external2.string(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  center: point4,
+  radius_x: distance7,
+  radius_y: distance7,
+  layer: visible_layer2,
+  ccw_rotation: rotation2.optional()
+}).describe("Defines a silkscreen oval on the PCB");
+expectTypesMatch2(true);
+var pcb_silkscreen_graphic_base2 = exports_external2.object({
+  type: exports_external2.literal("pcb_silkscreen_graphic"),
+  pcb_silkscreen_graphic_id: getZodPrefixedIdWithDefault2("pcb_silkscreen_graphic"),
+  pcb_component_id: exports_external2.string(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  layer: visible_layer2,
+  image_asset: asset2.optional()
+});
+var pcb_silkscreen_graphic_brep2 = pcb_silkscreen_graphic_base2.extend({
+  shape: exports_external2.literal("brep"),
+  brep_shape: brep_shape2
+}).describe("Defines a BRep silkscreen graphic on the PCB");
+expectTypesMatch2(true);
+var pcb_silkscreen_graphic2 = exports_external2.discriminatedUnion("shape", [pcb_silkscreen_graphic_brep2]).describe("Defines a silkscreen graphic on the PCB");
+expectTypesMatch2(true);
+var pcb_silkscreen_pill2 = exports_external2.object({
+  type: exports_external2.literal("pcb_silkscreen_pill"),
+  pcb_silkscreen_pill_id: getZodPrefixedIdWithDefault2("pcb_silkscreen_pill"),
+  pcb_component_id: exports_external2.string(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  center: point4,
+  width: length3,
+  height: length3,
+  layer: layer_ref2,
+  ccw_rotation: exports_external2.number().optional()
+}).describe("Defines a silkscreen pill on the PCB");
+expectTypesMatch2(true);
+var pcb_fabrication_note_text2 = exports_external2.object({
+  type: exports_external2.literal("pcb_fabrication_note_text"),
+  pcb_fabrication_note_text_id: getZodPrefixedIdWithDefault2("pcb_fabrication_note_text"),
+  subcircuit_id: exports_external2.string().optional(),
+  pcb_group_id: exports_external2.string().optional(),
+  font: exports_external2.literal("tscircuit2024").default("tscircuit2024"),
+  font_size: distance7.default("1mm"),
+  pcb_component_id: exports_external2.string(),
+  text: exports_external2.string(),
+  ccw_rotation: exports_external2.number().optional(),
+  layer: visible_layer2,
+  anchor_position: point4.default({ x: 0, y: 0 }),
+  anchor_alignment: exports_external2.enum(["center", "top_left", "top_right", "bottom_left", "bottom_right"]).default("center"),
+  color: exports_external2.string().optional()
+}).describe("Defines a fabrication note in text on the PCB, useful for leaving notes for assemblers or fabricators");
+expectTypesMatch2(true);
+var pcb_fabrication_note_path2 = exports_external2.object({
+  type: exports_external2.literal("pcb_fabrication_note_path"),
+  pcb_fabrication_note_path_id: getZodPrefixedIdWithDefault2("pcb_fabrication_note_path"),
+  pcb_component_id: exports_external2.string(),
+  subcircuit_id: exports_external2.string().optional(),
+  layer: layer_ref2,
+  route: exports_external2.array(point4),
+  stroke_width: length3,
+  color: exports_external2.string().optional(),
+  is_filled: exports_external2.boolean().optional(),
+  has_stroke: exports_external2.boolean().optional()
+}).describe("Defines a fabrication path on the PCB for fabricators or assemblers");
+expectTypesMatch2(true);
+var pcb_fabrication_note_rect2 = exports_external2.object({
+  type: exports_external2.literal("pcb_fabrication_note_rect"),
+  pcb_fabrication_note_rect_id: getZodPrefixedIdWithDefault2("pcb_fabrication_note_rect"),
+  pcb_component_id: exports_external2.string(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  center: point4,
+  width: length3,
+  height: length3,
+  layer: visible_layer2,
+  stroke_width: length3.default("0.1mm"),
+  corner_radius: length3.optional(),
+  is_filled: exports_external2.boolean().optional(),
+  has_stroke: exports_external2.boolean().optional(),
+  is_stroke_dashed: exports_external2.boolean().optional(),
+  color: exports_external2.string().optional()
+}).describe("Defines a fabrication note rectangle on the PCB");
+expectTypesMatch2(true);
+var pcb_fabrication_note_dimension2 = exports_external2.object({
+  type: exports_external2.literal("pcb_fabrication_note_dimension"),
+  pcb_fabrication_note_dimension_id: getZodPrefixedIdWithDefault2("pcb_fabrication_note_dimension"),
+  pcb_component_id: exports_external2.string(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  layer: visible_layer2,
+  from: point4,
+  to: point4,
+  text: exports_external2.string().optional(),
+  text_ccw_rotation: exports_external2.number().optional(),
+  offset: length3.optional(),
+  offset_distance: length3.optional(),
+  offset_direction: exports_external2.object({
+    x: exports_external2.number(),
+    y: exports_external2.number()
+  }).optional(),
+  font: exports_external2.literal("tscircuit2024").default("tscircuit2024"),
+  font_size: length3.default("1mm"),
+  color: exports_external2.string().optional(),
+  arrow_size: length3.default("1mm")
+}).describe("Defines a measurement annotation within PCB fabrication notes");
+expectTypesMatch2(true);
+var pcb_note_text2 = exports_external2.object({
+  type: exports_external2.literal("pcb_note_text"),
+  pcb_note_text_id: getZodPrefixedIdWithDefault2("pcb_note_text"),
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  name: exports_external2.string().optional(),
+  font: exports_external2.literal("tscircuit2024").default("tscircuit2024"),
+  font_size: distance7.default("1mm"),
+  text: exports_external2.string().optional(),
+  anchor_position: point4.default({ x: 0, y: 0 }),
+  anchor_alignment: exports_external2.enum(["center", "top_left", "top_right", "bottom_left", "bottom_right"]).default("center"),
+  layer: visible_layer2.default("top"),
+  is_mirrored_from_top_view: exports_external2.boolean().optional(),
+  color: exports_external2.string().optional()
+}).describe("Defines a documentation note in text on the PCB");
+expectTypesMatch2(true);
+var pcb_note_rect2 = exports_external2.object({
+  type: exports_external2.literal("pcb_note_rect"),
+  pcb_note_rect_id: getZodPrefixedIdWithDefault2("pcb_note_rect"),
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  name: exports_external2.string().optional(),
+  text: exports_external2.string().optional(),
+  center: point4,
+  width: length3,
+  height: length3,
+  layer: visible_layer2.default("top"),
+  stroke_width: length3.default("0.1mm"),
+  corner_radius: length3.optional(),
+  is_filled: exports_external2.boolean().optional(),
+  has_stroke: exports_external2.boolean().optional(),
+  is_stroke_dashed: exports_external2.boolean().optional(),
+  color: exports_external2.string().optional()
+}).describe("Defines a rectangular documentation note on the PCB");
+expectTypesMatch2(true);
+var pcb_note_path2 = exports_external2.object({
+  type: exports_external2.literal("pcb_note_path"),
+  pcb_note_path_id: getZodPrefixedIdWithDefault2("pcb_note_path"),
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  name: exports_external2.string().optional(),
+  text: exports_external2.string().optional(),
+  route: exports_external2.array(point4),
+  layer: visible_layer2.default("top"),
+  stroke_width: length3.default("0.1mm"),
+  color: exports_external2.string().optional()
+}).describe("Defines a polyline documentation note on the PCB");
+expectTypesMatch2(true);
+var pcb_note_line2 = exports_external2.object({
+  type: exports_external2.literal("pcb_note_line"),
+  pcb_note_line_id: getZodPrefixedIdWithDefault2("pcb_note_line"),
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  name: exports_external2.string().optional(),
+  text: exports_external2.string().optional(),
+  x1: distance7,
+  y1: distance7,
+  x2: distance7,
+  y2: distance7,
+  layer: visible_layer2.default("top"),
+  stroke_width: distance7.default("0.1mm"),
+  color: exports_external2.string().optional(),
+  is_dashed: exports_external2.boolean().optional()
+}).describe("Defines a straight documentation note line on the PCB");
+expectTypesMatch2(true);
+var pcb_note_dimension2 = exports_external2.object({
+  type: exports_external2.literal("pcb_note_dimension"),
+  pcb_note_dimension_id: getZodPrefixedIdWithDefault2("pcb_note_dimension"),
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  name: exports_external2.string().optional(),
+  from: point4,
+  to: point4,
+  text: exports_external2.string().optional(),
+  text_ccw_rotation: exports_external2.number().optional(),
+  offset_distance: length3.optional(),
+  offset_direction: exports_external2.object({
+    x: exports_external2.number(),
+    y: exports_external2.number()
+  }).optional(),
+  font: exports_external2.literal("tscircuit2024").default("tscircuit2024"),
+  font_size: length3.default("1mm"),
+  layer: visible_layer2.default("top"),
+  color: exports_external2.string().optional(),
+  arrow_size: length3.default("1mm")
+}).describe("Defines a measurement annotation within PCB documentation notes");
+expectTypesMatch2(true);
+var pcb_footprint_overlap_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("pcb_footprint_overlap_error"),
+  pcb_error_id: getZodPrefixedIdWithDefault2("pcb_error"),
+  error_type: exports_external2.literal("pcb_footprint_overlap_error").default("pcb_footprint_overlap_error"),
+  pcb_smtpad_ids: exports_external2.array(exports_external2.string()).optional(),
+  pcb_plated_hole_ids: exports_external2.array(exports_external2.string()).optional(),
+  pcb_hole_ids: exports_external2.array(exports_external2.string()).optional(),
+  pcb_keepout_ids: exports_external2.array(exports_external2.string()).optional()
+}).describe("Error emitted when a pcb footprint overlaps with another element");
+expectTypesMatch2(true);
+var pcb_courtyard_overlap_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("pcb_courtyard_overlap_error"),
+  pcb_error_id: getZodPrefixedIdWithDefault2("pcb_error"),
+  error_type: exports_external2.literal("pcb_courtyard_overlap_error").default("pcb_courtyard_overlap_error"),
+  pcb_component_ids: exports_external2.tuple([exports_external2.string(), exports_external2.string()])
+}).describe("Error emitted when the courtyard (CrtYd) of one PCB component overlaps with the courtyard of another");
+expectTypesMatch2(true);
+var pcb_keepout_outline2 = exports_external2.object({
+  type: exports_external2.literal("pcb_keepout"),
+  shape: exports_external2.literal("outline"),
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  outline: exports_external2.array(point4).min(2),
+  stroke_width: length3,
+  pcb_keepout_id: exports_external2.string(),
+  layers: exports_external2.array(exports_external2.string()),
+  description: exports_external2.string().optional(),
+  excluded_pcb_component_ids: exports_external2.array(exports_external2.string()).optional(),
+  warning_only: exports_external2.boolean().optional(),
+  allow_traces: exports_external2.boolean().optional(),
+  allow_placements: exports_external2.boolean().optional()
+});
+var pcb_keepout2 = exports_external2.object({
+  type: exports_external2.literal("pcb_keepout"),
+  shape: exports_external2.literal("rect"),
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  center: point4,
+  width: distance7,
+  height: distance7,
+  pcb_keepout_id: exports_external2.string(),
+  layers: exports_external2.array(exports_external2.string()),
+  description: exports_external2.string().optional(),
+  excluded_pcb_component_ids: exports_external2.array(exports_external2.string()).optional(),
+  warning_only: exports_external2.boolean().optional(),
+  allow_traces: exports_external2.boolean().optional(),
+  allow_placements: exports_external2.boolean().optional()
+}).or(exports_external2.object({
+  type: exports_external2.literal("pcb_keepout"),
+  shape: exports_external2.literal("circle"),
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  center: point4,
+  radius: distance7,
+  pcb_keepout_id: exports_external2.string(),
+  layers: exports_external2.array(exports_external2.string()),
+  description: exports_external2.string().optional(),
+  excluded_pcb_component_ids: exports_external2.array(exports_external2.string()).optional(),
+  warning_only: exports_external2.boolean().optional(),
+  allow_traces: exports_external2.boolean().optional(),
+  allow_placements: exports_external2.boolean().optional()
+})).or(pcb_keepout_outline2);
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+var pcb_keepout_overlap_warning2 = exports_external2.object({
+  type: exports_external2.literal("pcb_keepout_overlap_warning"),
+  pcb_keepout_overlap_warning_id: getZodPrefixedIdWithDefault2("pcb_keepout_overlap_warning"),
+  warning_type: exports_external2.literal("pcb_keepout_overlap_warning").default("pcb_keepout_overlap_warning"),
+  message: exports_external2.string(),
+  pcb_keepout_id: exports_external2.string(),
+  pcb_component_ids: exports_external2.array(exports_external2.string()).optional(),
+  pcb_trace_ids: exports_external2.array(exports_external2.string()).optional(),
+  pcb_smtpad_ids: exports_external2.array(exports_external2.string()).optional(),
+  pcb_plated_hole_ids: exports_external2.array(exports_external2.string()).optional(),
+  pcb_via_ids: exports_external2.array(exports_external2.string()).optional(),
+  center: point4.optional(),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Warning emitted when copper overlaps a PCB keepout with warning_only enabled");
+expectTypesMatch2(true);
+var pcb_cutout_base2 = exports_external2.object({
+  type: exports_external2.literal("pcb_cutout"),
+  pcb_cutout_id: getZodPrefixedIdWithDefault2("pcb_cutout"),
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  pcb_board_id: exports_external2.string().optional(),
+  pcb_panel_id: exports_external2.string().optional()
+});
+var pcb_cutout_rect2 = pcb_cutout_base2.extend({
+  shape: exports_external2.literal("rect"),
+  center: point4,
+  width: length3,
+  height: length3,
+  rotation: rotation2.optional(),
+  corner_radius: length3.optional()
+});
+expectTypesMatch2(true);
+var pcb_cutout_circle2 = pcb_cutout_base2.extend({
+  shape: exports_external2.literal("circle"),
+  center: point4,
+  radius: length3
+});
+expectTypesMatch2(true);
+var pcb_cutout_polygon2 = pcb_cutout_base2.extend({
+  shape: exports_external2.literal("polygon"),
+  points: exports_external2.array(point4)
+});
+expectTypesMatch2(true);
+var pcb_cutout_path2 = pcb_cutout_base2.extend({
+  shape: exports_external2.literal("path"),
+  route: exports_external2.array(point4),
+  slot_width: length3,
+  slot_length: length3.optional(),
+  space_between_slots: length3.optional(),
+  slot_corner_radius: length3.optional()
+});
+expectTypesMatch2(true);
+var pcb_cutout2 = exports_external2.discriminatedUnion("shape", [
+  pcb_cutout_rect2,
+  pcb_cutout_circle2,
+  pcb_cutout_polygon2,
+  pcb_cutout_path2
+]).describe("Defines a cutout on the PCB, removing board material.");
+expectTypesMatch2(true);
+var pcb_missing_footprint_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("pcb_missing_footprint_error"),
+  pcb_missing_footprint_error_id: getZodPrefixedIdWithDefault2("pcb_missing_footprint_error"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  error_type: exports_external2.literal("pcb_missing_footprint_error").default("pcb_missing_footprint_error"),
+  source_component_id: exports_external2.string()
+}).describe("Defines a missing footprint error on the PCB");
+expectTypesMatch2(true);
+var external_footprint_load_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("external_footprint_load_error"),
+  external_footprint_load_error_id: getZodPrefixedIdWithDefault2("external_footprint_load_error"),
+  pcb_component_id: exports_external2.string(),
+  source_component_id: exports_external2.string(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  footprinter_string: exports_external2.string().optional(),
+  error_type: exports_external2.literal("external_footprint_load_error").default("external_footprint_load_error")
+}).describe("Defines an error when an external footprint fails to load");
+expectTypesMatch2(true);
+var circuit_json_footprint_load_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("circuit_json_footprint_load_error"),
+  circuit_json_footprint_load_error_id: getZodPrefixedIdWithDefault2("circuit_json_footprint_load_error"),
+  pcb_component_id: exports_external2.string(),
+  source_component_id: exports_external2.string(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  error_type: exports_external2.literal("circuit_json_footprint_load_error").default("circuit_json_footprint_load_error"),
+  circuit_json: exports_external2.array(exports_external2.any()).optional()
+}).describe("Defines an error when a circuit JSON footprint fails to load");
+expectTypesMatch2(true);
+var pcb_group2 = exports_external2.object({
+  type: exports_external2.literal("pcb_group"),
+  pcb_group_id: getZodPrefixedIdWithDefault2("pcb_group"),
+  source_group_id: exports_external2.string(),
+  is_subcircuit: exports_external2.boolean().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  width: length3.optional(),
+  height: length3.optional(),
+  center: point4,
+  display_offset_x: exports_external2.string().optional().describe("How to display the x offset for this group, usually corresponding with how the user specified it"),
+  display_offset_y: exports_external2.string().optional().describe("How to display the y offset for this group, usually corresponding with how the user specified it"),
+  outline: exports_external2.array(point4).optional(),
+  anchor_position: point4.optional(),
+  anchor_alignment: ninePointAnchor2.default("center"),
+  position_mode: exports_external2.enum(["packed", "relative_to_group_anchor", "none"]).optional(),
+  positioned_relative_to_pcb_group_id: exports_external2.string().optional(),
+  positioned_relative_to_pcb_board_id: exports_external2.string().optional(),
+  pcb_component_ids: exports_external2.array(exports_external2.string()),
+  child_layout_mode: exports_external2.enum(["packed", "none"]).optional(),
+  name: exports_external2.string().optional(),
+  description: exports_external2.string().optional(),
+  layout_mode: exports_external2.string().optional(),
+  autorouter_configuration: exports_external2.object({
+    trace_clearance: length3
+  }).optional(),
+  autorouter_used_string: exports_external2.string().optional()
+}).describe("Defines a group of components on the PCB");
+expectTypesMatch2(true);
+var pcb_autorouting_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("pcb_autorouting_error"),
+  pcb_error_id: getZodPrefixedIdWithDefault2("pcb_autorouting_error"),
+  error_type: exports_external2.literal("pcb_autorouting_error").default("pcb_autorouting_error"),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("The autorouting has failed to route a portion of the board");
+expectTypesMatch2(true);
+var pcb_preflight_routing_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("pcb_preflight_routing_error"),
+  pcb_preflight_routing_error_id: getZodPrefixedIdWithDefault2("pcb_preflight_routing_error"),
+  error_type: exports_external2.literal("pcb_preflight_routing_error").default("pcb_preflight_routing_error"),
+  error_code: exports_external2.string(),
+  subcircuit_id: exports_external2.string().optional(),
+  pcb_group_id: exports_external2.string().optional(),
+  routing_phase_index: exports_external2.number().int().optional(),
+  phase_name: exports_external2.string().optional(),
+  source_trace_ids: exports_external2.array(exports_external2.string()).optional(),
+  pcb_component_ids: exports_external2.array(exports_external2.string()).optional(),
+  pcb_port_ids: exports_external2.array(exports_external2.string()).optional(),
+  related_error_ids: exports_external2.array(exports_external2.string()).optional(),
+  measurements: exports_external2.record(exports_external2.number().finite()).optional()
+});
+expectTypesMatch2(true);
+var pcb_manual_edit_conflict_warning2 = exports_external2.object({
+  type: exports_external2.literal("pcb_manual_edit_conflict_warning"),
+  pcb_manual_edit_conflict_warning_id: getZodPrefixedIdWithDefault2("pcb_manual_edit_conflict_warning"),
+  warning_type: exports_external2.literal("pcb_manual_edit_conflict_warning").default("pcb_manual_edit_conflict_warning"),
+  message: exports_external2.string(),
+  pcb_component_id: exports_external2.string(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  source_component_id: exports_external2.string()
+}).describe("Warning emitted when a component has both manual placement and explicit pcbX/pcbY coordinates");
+expectTypesMatch2(true);
+var connectorOrientationDirection2 = exports_external2.enum(["x-", "x+", "y+", "y-"]);
+var pcb_connector_not_in_accessible_orientation_warning2 = exports_external2.object({
+  type: exports_external2.literal("pcb_connector_not_in_accessible_orientation_warning"),
+  pcb_connector_not_in_accessible_orientation_warning_id: getZodPrefixedIdWithDefault2("pcb_connector_not_in_accessible_orientation_warning"),
+  warning_type: exports_external2.literal("pcb_connector_not_in_accessible_orientation_warning").default("pcb_connector_not_in_accessible_orientation_warning"),
+  message: exports_external2.string(),
+  pcb_component_id: exports_external2.string(),
+  source_component_id: exports_external2.string().optional(),
+  pcb_board_id: exports_external2.string().optional(),
+  facing_direction: connectorOrientationDirection2,
+  recommended_facing_direction: connectorOrientationDirection2,
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Warning emitted when a connector PCB component is facing inward toward the board and should be reoriented to an outward-facing direction");
+expectTypesMatch2(true);
+var pcb_component_missing_courtyard_warning2 = exports_external2.object({
+  type: exports_external2.literal("pcb_component_missing_courtyard_warning"),
+  pcb_component_missing_courtyard_warning_id: getZodPrefixedIdWithDefault2("pcb_component_missing_courtyard_warning"),
+  warning_type: exports_external2.literal("pcb_component_missing_courtyard_warning").default("pcb_component_missing_courtyard_warning"),
+  message: exports_external2.string(),
+  pcb_component_id: exports_external2.string(),
+  source_component_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Warning emitted when a PCB component has no courtyard geometry");
+expectTypesMatch2(true);
+var supplier_footprint_mismatch_warning2 = exports_external2.object({
+  type: exports_external2.literal("supplier_footprint_mismatch_warning"),
+  supplier_footprint_mismatch_warning_id: getZodPrefixedIdWithDefault2("supplier_footprint_mismatch_warning"),
+  warning_type: exports_external2.literal("supplier_footprint_mismatch_warning").default("supplier_footprint_mismatch_warning"),
+  message: exports_external2.string(),
+  source_component_id: exports_external2.string(),
+  pcb_component_id: exports_external2.string().optional(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  supplier_name: supplier_name2.optional(),
+  supplier_part_number: exports_external2.string().optional(),
+  supplier_footprint_url: exports_external2.string().optional(),
+  footprint_copper_intersection_over_union: exports_external2.number()
+}).describe("Warning emitted when a supplier part footprint does not match the expected footprint");
+expectTypesMatch2(true);
+var pcb_fabricator_extra_charge_warning2 = exports_external2.object({
+  type: exports_external2.literal("pcb_fabricator_extra_charge_warning"),
+  pcb_fabricator_extra_charge_warning_id: getZodPrefixedIdWithDefault2("pcb_fabricator_extra_charge_warning"),
+  warning_type: exports_external2.literal("pcb_fabricator_extra_charge_warning").default("pcb_fabricator_extra_charge_warning"),
+  message: exports_external2.string(),
+  fabricator_preset: exports_external2.string(),
+  pcb_board_id: exports_external2.string().optional(),
+  pcb_via_ids: exports_external2.array(exports_external2.string()).optional(),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Warning that a design feature incurs an extra charge for the selected fabricator preset, such as via hole diameters below 0.3 mm with JLCPCB economy or standard presets.");
+expectTypesMatch2(true);
+var pcb_breakout_point2 = exports_external2.object({
+  type: exports_external2.literal("pcb_breakout_point"),
+  pcb_breakout_point_id: getZodPrefixedIdWithDefault2("pcb_breakout_point"),
+  pcb_group_id: exports_external2.string(),
+  subcircuit_id: exports_external2.string().optional(),
+  source_trace_id: exports_external2.string().optional(),
+  source_port_id: exports_external2.string().optional(),
+  source_net_id: exports_external2.string().optional(),
+  layer: layer_ref2.optional(),
+  x: distance7,
+  y: distance7
+}).describe("Defines a routing target within a pcb_group for a source_trace or source_net");
+expectTypesMatch2(true);
+var pcb_ground_plane2 = exports_external2.object({
+  type: exports_external2.literal("pcb_ground_plane"),
+  pcb_ground_plane_id: getZodPrefixedIdWithDefault2("pcb_ground_plane"),
+  source_pcb_ground_plane_id: exports_external2.string(),
+  source_net_id: exports_external2.string(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Defines a ground plane on the PCB");
+expectTypesMatch2(true);
+var pcb_ground_plane_region2 = exports_external2.object({
+  type: exports_external2.literal("pcb_ground_plane_region"),
+  pcb_ground_plane_region_id: getZodPrefixedIdWithDefault2("pcb_ground_plane_region"),
+  pcb_ground_plane_id: exports_external2.string(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  layer: layer_ref2,
+  points: exports_external2.array(point4)
+}).describe("Defines a polygon region of a ground plane");
+expectTypesMatch2(true);
+var pcb_thermal_spoke2 = exports_external2.object({
+  type: exports_external2.literal("pcb_thermal_spoke"),
+  pcb_thermal_spoke_id: getZodPrefixedIdWithDefault2("pcb_thermal_spoke"),
+  pcb_ground_plane_id: exports_external2.string(),
+  shape: exports_external2.string(),
+  spoke_count: exports_external2.number(),
+  spoke_thickness: distance7,
+  spoke_inner_diameter: distance7,
+  spoke_outer_diameter: distance7,
+  pcb_plated_hole_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Pattern for connecting a ground plane to a plated hole");
+expectTypesMatch2(true);
+var pcb_copper_pour_base2 = exports_external2.object({
+  type: exports_external2.literal("pcb_copper_pour"),
+  pcb_copper_pour_id: getZodPrefixedIdWithDefault2("pcb_copper_pour"),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  layer: layer_ref2,
+  source_net_id: exports_external2.string().optional(),
+  covered_with_solder_mask: exports_external2.boolean().optional().default(true)
+});
+var pcb_copper_pour_rect2 = pcb_copper_pour_base2.extend({
+  shape: exports_external2.literal("rect"),
+  center: point4,
+  width: length3,
+  height: length3,
+  rotation: rotation2.optional()
+});
+expectTypesMatch2(true);
+var pcb_copper_pour_brep2 = pcb_copper_pour_base2.extend({
+  shape: exports_external2.literal("brep"),
+  brep_shape: brep_shape2
+});
+expectTypesMatch2(true);
+var pcb_copper_pour_polygon2 = pcb_copper_pour_base2.extend({
+  shape: exports_external2.literal("polygon"),
+  points: exports_external2.array(point4)
+});
+expectTypesMatch2(true);
+var pcb_copper_pour2 = exports_external2.discriminatedUnion("shape", [
+  pcb_copper_pour_rect2,
+  pcb_copper_pour_brep2,
+  pcb_copper_pour_polygon2
+]).describe("Defines a copper pour on the PCB.");
+expectTypesMatch2(true);
+var pcb_component_outside_board_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("pcb_component_outside_board_error"),
+  pcb_component_outside_board_error_id: getZodPrefixedIdWithDefault2("pcb_component_outside_board_error"),
+  error_type: exports_external2.literal("pcb_component_outside_board_error").default("pcb_component_outside_board_error"),
+  pcb_component_id: exports_external2.string(),
+  pcb_board_id: exports_external2.string(),
+  component_center: point4,
+  component_bounds: exports_external2.object({
+    min_x: exports_external2.number(),
+    max_x: exports_external2.number(),
+    min_y: exports_external2.number(),
+    max_y: exports_external2.number()
+  }),
+  subcircuit_id: exports_external2.string().optional(),
+  source_component_id: exports_external2.string().optional()
+}).describe("Error emitted when a PCB component is placed outside the board boundaries");
+expectTypesMatch2(true);
+var pcb_component_not_on_board_edge_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("pcb_component_not_on_board_edge_error"),
+  pcb_component_not_on_board_edge_error_id: getZodPrefixedIdWithDefault2("pcb_component_not_on_board_edge_error"),
+  error_type: exports_external2.literal("pcb_component_not_on_board_edge_error").default("pcb_component_not_on_board_edge_error"),
+  pcb_component_id: exports_external2.string(),
+  pcb_board_id: exports_external2.string(),
+  component_center: point4,
+  pad_to_nearest_board_edge_distance: exports_external2.number(),
+  source_component_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Error emitted when a component that must be placed on the board edge is centered away from the edge");
+expectTypesMatch2(true);
+var pcb_component_invalid_layer_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("pcb_component_invalid_layer_error"),
+  pcb_component_invalid_layer_error_id: getZodPrefixedIdWithDefault2("pcb_component_invalid_layer_error"),
+  error_type: exports_external2.literal("pcb_component_invalid_layer_error").default("pcb_component_invalid_layer_error"),
+  pcb_component_id: exports_external2.string().optional(),
+  source_component_id: exports_external2.string(),
+  layer: layer_ref2,
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Error emitted when a component is placed on an invalid layer (components can only be on 'top' or 'bottom' layers)");
+expectTypesMatch2(true);
+var pcb_via_clearance_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("pcb_via_clearance_error"),
+  pcb_error_id: getZodPrefixedIdWithDefault2("pcb_error"),
+  error_type: exports_external2.literal("pcb_via_clearance_error").default("pcb_via_clearance_error"),
+  pcb_via_ids: exports_external2.array(exports_external2.string()).min(2),
+  minimum_clearance: distance7.optional(),
+  actual_clearance: distance7.optional(),
+  pcb_center: exports_external2.object({
+    x: exports_external2.number().optional(),
+    y: exports_external2.number().optional()
+  }).optional(),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Error emitted when vias are closer than the allowed clearance");
+expectTypesMatch2(true);
+var pcb_via_trace_clearance_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("pcb_via_trace_clearance_error"),
+  pcb_via_trace_clearance_error_id: getZodPrefixedIdWithDefault2("pcb_via_trace_clearance_error"),
+  error_type: exports_external2.literal("pcb_via_trace_clearance_error").default("pcb_via_trace_clearance_error"),
+  pcb_via_id: exports_external2.string(),
+  pcb_trace_id: exports_external2.string(),
+  minimum_clearance: distance7.optional(),
+  actual_clearance: distance7.optional(),
+  center: exports_external2.object({
+    x: exports_external2.number().optional(),
+    y: exports_external2.number().optional()
+  }).optional(),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Error emitted when a via and trace are closer than the allowed clearance");
+expectTypesMatch2(true);
+var pcb_pad_pad_clearance_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("pcb_pad_pad_clearance_error"),
+  pcb_pad_pad_clearance_error_id: getZodPrefixedIdWithDefault2("pcb_pad_pad_clearance_error"),
+  error_type: exports_external2.literal("pcb_pad_pad_clearance_error").default("pcb_pad_pad_clearance_error"),
+  pcb_pad_ids: exports_external2.array(exports_external2.string()).min(2),
+  minimum_clearance: distance7.optional(),
+  actual_clearance: distance7.optional(),
+  center: exports_external2.object({
+    x: exports_external2.number().optional(),
+    y: exports_external2.number().optional()
+  }).optional(),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Error emitted when pads are closer than the allowed clearance");
+expectTypesMatch2(true);
+var pcb_pad_trace_clearance_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("pcb_pad_trace_clearance_error"),
+  pcb_pad_trace_clearance_error_id: getZodPrefixedIdWithDefault2("pcb_pad_trace_clearance_error"),
+  error_type: exports_external2.literal("pcb_pad_trace_clearance_error").default("pcb_pad_trace_clearance_error"),
+  pcb_pad_id: exports_external2.string(),
+  pcb_trace_id: exports_external2.string(),
+  minimum_clearance: distance7.optional(),
+  actual_clearance: distance7.optional(),
+  center: exports_external2.object({
+    x: exports_external2.number().optional(),
+    y: exports_external2.number().optional()
+  }).optional(),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("Error emitted when a pad and trace are closer than allowed clearance");
+expectTypesMatch2(true);
+var pcb_courtyard_rect2 = exports_external2.object({
+  type: exports_external2.literal("pcb_courtyard_rect"),
+  pcb_courtyard_rect_id: getZodPrefixedIdWithDefault2("pcb_courtyard_rect"),
+  pcb_component_id: exports_external2.string(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  center: point4,
+  width: length3,
+  height: length3,
+  layer: visible_layer2,
+  ccw_rotation: rotation2.optional(),
+  color: exports_external2.string().optional()
+}).describe("Defines a courtyard rectangle on the PCB");
+expectTypesMatch2(true);
+var pcb_courtyard_outline2 = exports_external2.object({
+  type: exports_external2.literal("pcb_courtyard_outline"),
+  pcb_courtyard_outline_id: getZodPrefixedIdWithDefault2("pcb_courtyard_outline"),
+  pcb_component_id: exports_external2.string(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  layer: visible_layer2,
+  outline: exports_external2.array(point4).min(2)
+}).describe("Defines a courtyard outline on the PCB");
+expectTypesMatch2(true);
+var pcb_courtyard_polygon2 = exports_external2.object({
+  type: exports_external2.literal("pcb_courtyard_polygon"),
+  pcb_courtyard_polygon_id: getZodPrefixedIdWithDefault2("pcb_courtyard_polygon"),
+  pcb_component_id: exports_external2.string(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  layer: visible_layer2,
+  points: exports_external2.array(point4).min(3),
+  color: exports_external2.string().optional()
+}).describe("Defines a courtyard polygon on the PCB");
+expectTypesMatch2(true);
+var pcb_courtyard_circle2 = exports_external2.object({
+  type: exports_external2.literal("pcb_courtyard_circle"),
+  pcb_courtyard_circle_id: getZodPrefixedIdWithDefault2("pcb_courtyard_circle"),
+  pcb_component_id: exports_external2.string(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  center: point4,
+  radius: length3,
+  layer: visible_layer2,
+  color: exports_external2.string().optional()
+}).describe("Defines a courtyard circle on the PCB");
+expectTypesMatch2(true);
+var pcb_courtyard_pill2 = exports_external2.object({
+  type: exports_external2.literal("pcb_courtyard_pill"),
+  pcb_courtyard_pill_id: getZodPrefixedIdWithDefault2("pcb_courtyard_pill"),
+  pcb_component_id: exports_external2.string(),
+  pcb_group_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  center: point4,
+  width: length3,
+  height: length3,
+  radius: length3,
+  layer: visible_layer2,
+  color: exports_external2.string().optional()
+}).describe("Defines a courtyard pill on the PCB");
+expectTypesMatch2(true);
+var cad_model_axis_directions2 = [
+  "x+",
+  "x-",
+  "y+",
+  "y-",
+  "z+",
+  "z-"
+];
+var cad_component2 = exports_external2.object({
+  type: exports_external2.literal("cad_component"),
+  cad_component_id: exports_external2.string(),
+  pcb_component_id: exports_external2.string().optional().describe("Optional PCB component reference; omit for CAD geometry without a PCB component"),
+  source_component_id: exports_external2.string(),
+  position: point32,
+  rotation: point32.optional(),
+  is_on_folded_board: exports_external2.boolean().optional().describe("True when position and rotation describe the assembled folded board pose. False or omitted means the flat board pose. PCB records remain flat; pcb_component_id identifies the flat mount and owning board for reversible transforms."),
+  size: point32.optional(),
+  layer: layer_ref2.optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  footprinter_string: exports_external2.string().optional(),
+  model_obj_url: exports_external2.string().optional(),
+  model_stl_url: exports_external2.string().optional(),
+  model_3mf_url: exports_external2.string().optional(),
+  model_gltf_url: exports_external2.string().optional(),
+  model_glb_url: exports_external2.string().optional(),
+  model_step_url: exports_external2.string().optional(),
+  model_wrl_url: exports_external2.string().optional(),
+  model_asset: asset2.optional(),
+  model_unit_to_mm_scale_factor: exports_external2.number().optional(),
+  model_board_normal_direction: exports_external2.enum(cad_model_axis_directions2).optional().describe(`The direction in the model's coordinate space that is considered "up" or "coming out of the board surface"`),
+  model_origin_position: point32.optional(),
+  model_origin_alignment: exports_external2.enum([
+    "unknown",
+    "center",
+    "center_of_component_on_board_surface",
+    "bottom_center_of_component"
+  ]).optional(),
+  model_object_fit: exports_external2.enum(["contain_within_bounds", "fill_bounds"]).optional().default("contain_within_bounds"),
+  model_jscad: exports_external2.any().optional(),
+  color: exports_external2.string().trim().min(1).optional().describe("Explicit color override for CAD geometry, including authored JSCAD material colors. Omit to preserve model materials."),
+  show_as_translucent_model: exports_external2.boolean().optional(),
+  show_as_bounding_box: exports_external2.boolean().optional(),
+  show_hidden_edges: exports_external2.boolean().optional(),
+  anchor_alignment: exports_external2.enum(["center", "center_of_component_on_board_surface"]).optional().default("center")
+}).describe("Defines CAD geometry, optionally associated with a PCB component");
+expectTypesMatch2(true);
+var cad_collision_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("cad_collision_error"),
+  cad_collision_error_id: getZodPrefixedIdWithDefault2("cad_collision_error"),
+  error_type: exports_external2.literal("cad_collision_error").default("cad_collision_error"),
+  cad_component_ids: exports_external2.array(exports_external2.string()).min(1),
+  pcb_component_ids: exports_external2.array(exports_external2.string()).optional(),
+  source_component_ids: exports_external2.array(exports_external2.string()).min(1),
+  intersection_area_mm2: exports_external2.number().finite().nonnegative(),
+  threshold_area_mm2: exports_external2.number().finite().nonnegative()
+}).describe("An aperture-bearing part intersects the finished enclosure. The intersection_area_mm2 is the union silhouette area of the solid intersection projected along the aperture face normal, in the right-handed Circuit JSON world frame (+X right, +Y top, +Z above). It is an area in square millimetres, not intersection volume or surface area. This indicates possible aperture misplacement, insufficient size/depth, or body clearance problems; it does not prove which cause applies.");
+expectTypesMatch2(true);
+var connectorPin1Position2 = point32.refine((point22) => [point22.x, point22.y, point22.z].every(Number.isFinite), "Connector pin 1 positions must be finite").describe("Resolved pin 1 position at the connector mating face, in right-handed circuit world, millimeters: +X right, +Y top, +Z above. An absolute point, not a direction. Computed by the circuit producer from endpoint geometry. Together with the endpoint path tangent, fixes connector roll and identifies its pin 1 side; renderers must not infer it from footprints.");
+var cad_cable2 = exports_external2.object({
+  type: exports_external2.literal("cad_cable"),
+  cad_cable_id: exports_external2.string(),
+  name: exports_external2.string().min(1),
+  from_source_component_id: exports_external2.string(),
+  to_source_component_id: exports_external2.string(),
+  from_connector_pin1_position: connectorPin1Position2.optional(),
+  to_connector_pin1_position: connectorPin1Position2.optional(),
+  cableprinter_string: exports_external2.string().min(1).describe('Physical cable definition, e.g. "usb_c" or "jst_ph_pins6". Independent of the route.'),
+  path: exports_external2.array(point32).min(2).refine((path) => path.every((point22, i2) => [point22.x, point22.y, point22.z].every(Number.isFinite) && (i2 === 0 || Math.hypot(point22.x - path[i2 - 1].x, point22.y - path[i2 - 1].y, point22.z - path[i2 - 1].z) > 0.00000001)), "Cable paths require finite, distinct consecutive points").describe("Resolved cable centerline points in right-handed circuit world, millimeters: +X right, +Y top, +Z above. First/last samples are connector wire exits; their tangents point into/out of the cable. Includes routing/slack; renderers must not recompute the path.")
+}).describe("A physical assembly cable with a resolved 3D route. Several cables are independent cad_cable records, each with its own endpoints, definition and path. Does not imply electrical pin mapping.");
+expectTypesMatch2(true);
+var FRAME_TOLERANCE2 = 0.000001;
+var unitDirection2 = exports_external2.object({
+  x: exports_external2.number().finite(),
+  y: exports_external2.number().finite(),
+  z: exports_external2.number().finite()
+}).refine((v2) => Math.abs(Math.hypot(v2.x, v2.y, v2.z) - 1) <= FRAME_TOLERANCE2, "Reference surface directions must be unit vectors");
+var extent2 = distance7.pipe(exports_external2.number().finite().positive());
+var cad_reference_surface2 = exports_external2.object({
+  type: exports_external2.literal("cad_reference_surface"),
+  cad_reference_surface_id: exports_external2.string().min(1),
+  source_component_id: exports_external2.string().min(1).describe("Owning assembly part's source component ID. The part may have no CAD geometry."),
+  name: exports_external2.string().trim().min(1).describe("Reference name, unique within the owning part, e.g. shade in STEM.shade."),
+  shape: exports_external2.literal("rect"),
+  center: point32.refine((p2) => [p2.x, p2.y, p2.z].every(Number.isFinite), "Reference surface centers must be finite").describe("Resolved surface center in right-handed circuit-world XYZ, millimeters: +X right, +Y top, +Z above. An absolute point after assembly placement."),
+  normal: unitDirection2.describe("Outward unit normal in circuit-world XYZ. Dimensionless direction; transform with the part's rotation, without translation."),
+  x_axis: unitDirection2.describe("In-plane unit X direction in circuit-world XYZ, perpendicular to normal. The second tangent is normal cross x_axis, giving a right-handed frame."),
+  width: extent2.optional().describe("Rectangular extent along x_axis in millimeters. Supply together with height. Omission leaves the surface's display size unspecified."),
+  height: extent2.optional().describe("Rectangular extent along normal cross x_axis in millimeters. Supply together with width."),
+  subcircuit_id: exports_external2.string().optional()
+}).superRefine((surface, ctx) => {
+  if (surface.width === undefined !== (surface.height === undefined))
+    ctx.addIssue({
+      code: exports_external2.ZodIssueCode.custom,
+      path: ["width"],
+      message: "Provide width and height together"
+    });
+  const { normal: n2, x_axis: x2 } = surface;
+  if (Math.abs(n2.x * x2.x + n2.y * x2.y + n2.z * x2.z) > FRAME_TOLERANCE2)
+    ctx.addIssue({
+      code: exports_external2.ZodIssueCode.custom,
+      path: ["x_axis"],
+      message: "x_axis must be perpendicular to normal"
+    });
+}).describe("A named assembly mounting surface with a resolved world-space frame. Reference geometry for optional visualization; does not add solid material or electrical connectivity. The producer resolves part placement independently of CAD-model offsets; renderers consume the world frame without reapplying the owning model's transform.");
+expectTypesMatch2(true);
+var wave_shape2 = exports_external2.enum(["sinewave", "square", "triangle", "sawtooth"]);
+var percentage3 = exports_external2.union([exports_external2.string(), exports_external2.number()]).transform((val) => {
+  if (typeof val === "string") {
+    if (val.endsWith("%")) {
+      return parseFloat(val.slice(0, -1)) / 100;
+    }
+    return parseFloat(val);
+  }
+  return val;
+}).pipe(exports_external2.number().min(0, "Duty cycle must be non-negative").max(1, "Duty cycle cannot be greater than 100%"));
+var simulation_dc_voltage_source2 = exports_external2.object({
+  type: exports_external2.literal("simulation_voltage_source"),
+  simulation_voltage_source_id: getZodPrefixedIdWithDefault2("simulation_voltage_source"),
+  is_dc_source: exports_external2.literal(true).optional().default(true),
+  positive_source_port_id: exports_external2.string().optional(),
+  negative_source_port_id: exports_external2.string().optional(),
+  positive_source_net_id: exports_external2.string().optional(),
+  negative_source_net_id: exports_external2.string().optional(),
+  voltage: voltage2,
+  ac_magnitude: voltage2.optional(),
+  ac_phase: rotation2.optional()
+}).describe("Defines a DC voltage source for simulation");
+var simulation_ac_voltage_source2 = exports_external2.object({
+  type: exports_external2.literal("simulation_voltage_source"),
+  simulation_voltage_source_id: getZodPrefixedIdWithDefault2("simulation_voltage_source"),
+  is_dc_source: exports_external2.literal(false),
+  terminal1_source_port_id: exports_external2.string().optional(),
+  terminal2_source_port_id: exports_external2.string().optional(),
+  terminal1_source_net_id: exports_external2.string().optional(),
+  terminal2_source_net_id: exports_external2.string().optional(),
+  voltage: voltage2.optional(),
+  frequency: frequency2.optional(),
+  peak_to_peak_voltage: voltage2.optional(),
+  wave_shape: wave_shape2.optional(),
+  phase: rotation2.optional(),
+  duty_cycle: percentage3.optional(),
+  pulse_delay: ms2.optional(),
+  rise_time: ms2.optional(),
+  fall_time: ms2.optional(),
+  pulse_width: ms2.optional(),
+  period: ms2.optional(),
+  ac_magnitude: voltage2.optional(),
+  ac_phase: rotation2.optional()
+}).describe("Defines an AC voltage source for simulation");
+var simulation_voltage_source2 = exports_external2.union([simulation_dc_voltage_source2, simulation_ac_voltage_source2]).describe("Defines a voltage source for simulation");
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+var percentage22 = exports_external2.union([exports_external2.string(), exports_external2.number()]).transform((val) => {
+  if (typeof val === "string") {
+    if (val.endsWith("%")) {
+      return parseFloat(val.slice(0, -1)) / 100;
+    }
+    return parseFloat(val);
+  }
+  return val;
+}).pipe(exports_external2.number().min(0, "Duty cycle must be non-negative").max(1, "Duty cycle cannot be greater than 100%"));
+var simulation_dc_current_source2 = exports_external2.object({
+  type: exports_external2.literal("simulation_current_source"),
+  simulation_current_source_id: getZodPrefixedIdWithDefault2("simulation_current_source"),
+  is_dc_source: exports_external2.literal(true).optional().default(true),
+  positive_source_port_id: exports_external2.string().optional(),
+  negative_source_port_id: exports_external2.string().optional(),
+  positive_source_net_id: exports_external2.string().optional(),
+  negative_source_net_id: exports_external2.string().optional(),
+  current: current2,
+  ac_magnitude: current2.optional(),
+  ac_phase: rotation2.optional()
+}).describe("Defines a DC current source for simulation");
+var simulation_ac_current_source2 = exports_external2.object({
+  type: exports_external2.literal("simulation_current_source"),
+  simulation_current_source_id: getZodPrefixedIdWithDefault2("simulation_current_source"),
+  is_dc_source: exports_external2.literal(false),
+  terminal1_source_port_id: exports_external2.string().optional(),
+  terminal2_source_port_id: exports_external2.string().optional(),
+  terminal1_source_net_id: exports_external2.string().optional(),
+  terminal2_source_net_id: exports_external2.string().optional(),
+  current: current2.optional(),
+  frequency: frequency2.optional(),
+  peak_to_peak_current: current2.optional(),
+  wave_shape: wave_shape2.optional(),
+  phase: rotation2.optional(),
+  duty_cycle: percentage22.optional(),
+  ac_magnitude: current2.optional(),
+  ac_phase: rotation2.optional()
+}).describe("Defines an AC current source for simulation");
+var simulation_current_source2 = exports_external2.union([simulation_dc_current_source2, simulation_ac_current_source2]).describe("Defines a current source for simulation");
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+expectTypesMatch2(true);
+var simulation_dc_sweep_unit2 = exports_external2.custom((dcSweepUnit) => dcSweepUnit === "V" || dcSweepUnit === "A");
+var simulation_parameter_unit2 = exports_external2.custom((parameterUnit) => parameterUnit === "Ω" || parameterUnit === "F" || parameterUnit === "H" || parameterUnit === "V" || parameterUnit === "A");
+var experiment_type2 = exports_external2.union([
+  exports_external2.literal("spice_dc_sweep"),
+  exports_external2.literal("spice_dc_operating_point"),
+  exports_external2.literal("spice_transient_analysis"),
+  exports_external2.literal("spice_ac_analysis"),
+  exports_external2.literal("pcb_return_current")
+]);
+var spice_simulation_options2 = exports_external2.object({
+  method: exports_external2.enum(["trap", "gear"]).optional(),
+  reltol: exports_external2.union([exports_external2.number(), exports_external2.string()]).optional(),
+  abstol: exports_external2.union([exports_external2.number(), exports_external2.string()]).optional(),
+  vntol: exports_external2.union([exports_external2.number(), exports_external2.string()]).optional()
+}).describe("SPICE solver options for a simulation experiment");
+var simulation_experiment2 = exports_external2.object({
+  type: exports_external2.literal("simulation_experiment"),
+  simulation_experiment_id: getZodPrefixedIdWithDefault2("simulation_experiment"),
+  name: exports_external2.string(),
+  experiment_type: experiment_type2,
+  subcircuit_id: exports_external2.string().optional(),
+  spice_engine: exports_external2.string().optional(),
+  time_per_step: duration_ms2.optional(),
+  start_time_ms: ms2.optional(),
+  end_time_ms: ms2.optional(),
+  spice_options: spice_simulation_options2.optional(),
+  dc_sweep_voltage_source_id: exports_external2.string().optional(),
+  dc_sweep_current_source_id: exports_external2.string().optional(),
+  dc_sweep_start: exports_external2.number().optional(),
+  dc_sweep_stop: exports_external2.number().optional(),
+  dc_sweep_step: exports_external2.number().refine((dcSweepStep) => dcSweepStep !== 0).optional(),
+  dc_sweep_unit: simulation_dc_sweep_unit2.optional(),
+  ac_sweep_type: exports_external2.enum(["linear", "decade", "octave"]).optional(),
+  ac_samples_per_interval: exports_external2.number().int().positive().optional(),
+  ac_sample_count: exports_external2.number().int().positive().optional(),
+  ac_start_frequency_hz: exports_external2.number().positive().optional(),
+  ac_stop_frequency_hz: exports_external2.number().positive().optional()
+}).superRefine((experiment, context) => {
+  if (experiment.experiment_type === "spice_dc_sweep") {
+    const requiredFields = [
+      "dc_sweep_start",
+      "dc_sweep_stop",
+      "dc_sweep_step",
+      "dc_sweep_unit"
+    ];
+    for (const field of requiredFields) {
+      if (experiment[field] === undefined) {
+        context.addIssue({
+          code: exports_external2.ZodIssueCode.custom,
+          path: [field],
+          message: `${field} is required for a DC sweep`
+        });
+      }
+    }
+    const hasVoltageSource = experiment.dc_sweep_voltage_source_id !== undefined;
+    const hasCurrentSource = experiment.dc_sweep_current_source_id !== undefined;
+    if (hasVoltageSource === hasCurrentSource) {
+      context.addIssue({
+        code: exports_external2.ZodIssueCode.custom,
+        path: ["dc_sweep_voltage_source_id"],
+        message: "Exactly one DC sweep voltage or current source ID is required"
+      });
+    }
+  }
+  if (experiment.experiment_type === "spice_ac_analysis") {
+    if (experiment.ac_sweep_type === undefined) {
+      context.addIssue({
+        code: exports_external2.ZodIssueCode.custom,
+        path: ["ac_sweep_type"],
+        message: "ac_sweep_type is required for an AC analysis"
+      });
+    }
+    if (experiment.ac_start_frequency_hz === undefined) {
+      context.addIssue({
+        code: exports_external2.ZodIssueCode.custom,
+        path: ["ac_start_frequency_hz"],
+        message: "ac_start_frequency_hz is required for an AC analysis"
+      });
+    }
+    if (experiment.ac_stop_frequency_hz === undefined) {
+      context.addIssue({
+        code: exports_external2.ZodIssueCode.custom,
+        path: ["ac_stop_frequency_hz"],
+        message: "ac_stop_frequency_hz is required for an AC analysis"
+      });
+    }
+    if (experiment.ac_sweep_type === "linear" && experiment.ac_sample_count === undefined) {
+      context.addIssue({
+        code: exports_external2.ZodIssueCode.custom,
+        path: ["ac_sample_count"],
+        message: "ac_sample_count is required for a linear AC analysis"
+      });
+    }
+    if ((experiment.ac_sweep_type === "decade" || experiment.ac_sweep_type === "octave") && experiment.ac_samples_per_interval === undefined) {
+      context.addIssue({
+        code: exports_external2.ZodIssueCode.custom,
+        path: ["ac_samples_per_interval"],
+        message: "ac_samples_per_interval is required for decade and octave AC analyses"
+      });
+    }
+  }
+}).describe("Defines a simulation experiment configuration");
+expectTypesMatch2(true);
+var simulation_parameter_sweep_coordinate2 = exports_external2.object({
+  simulation_parameter_sweep_id: exports_external2.string(),
+  sweep_index: exports_external2.number().int().nonnegative(),
+  parameter_value: exports_external2.number(),
+  parameter_unit: simulation_parameter_unit2
+});
+expectTypesMatch2(true);
+var simulation_transient_voltage_graph2 = exports_external2.object({
+  type: exports_external2.literal("simulation_transient_voltage_graph"),
+  simulation_transient_voltage_graph_id: getZodPrefixedIdWithDefault2("simulation_transient_voltage_graph"),
+  simulation_experiment_id: exports_external2.string(),
+  simulation_voltage_probe_id: exports_external2.string().optional(),
+  simulation_parameter_sweep_coordinate: simulation_parameter_sweep_coordinate2.optional(),
+  timestamps_ms: exports_external2.array(exports_external2.number()).optional(),
+  voltage_levels: exports_external2.array(exports_external2.number()),
+  source_component_id: exports_external2.string().optional(),
+  subcircuit_connectivity_map_key: exports_external2.string().optional(),
+  time_per_step: duration_ms2,
+  start_time_ms: ms2,
+  end_time_ms: ms2,
+  name: exports_external2.string().optional(),
+  color: exports_external2.string().optional()
+}).describe("Stores voltage measurements over time for a simulation");
+expectTypesMatch2(true);
+var simulation_transient_current_graph2 = exports_external2.object({
+  type: exports_external2.literal("simulation_transient_current_graph"),
+  simulation_transient_current_graph_id: getZodPrefixedIdWithDefault2("simulation_transient_current_graph"),
+  simulation_experiment_id: exports_external2.string(),
+  simulation_parameter_sweep_coordinate: simulation_parameter_sweep_coordinate2.optional(),
+  timestamps_ms: exports_external2.array(exports_external2.number()).optional(),
+  current_levels: exports_external2.array(exports_external2.number()),
+  source_component_id: exports_external2.string().optional(),
+  subcircuit_connectivity_map_key: exports_external2.string().optional(),
+  time_per_step: duration_ms2,
+  start_time_ms: ms2,
+  end_time_ms: ms2,
+  name: exports_external2.string().optional(),
+  color: exports_external2.string().optional()
+}).describe("Stores current measurements over time for a simulation");
+expectTypesMatch2(true);
+var simulation_switch2 = exports_external2.object({
+  type: exports_external2.literal("simulation_switch"),
+  simulation_switch_id: getZodPrefixedIdWithDefault2("simulation_switch"),
+  source_component_id: exports_external2.string().optional(),
+  closes_at: ms2.optional(),
+  opens_at: ms2.optional(),
+  starts_closed: exports_external2.boolean().optional(),
+  switching_frequency: frequency2.optional()
+}).describe("Defines a switch for simulation timing control");
+expectTypesMatch2(true);
+var simulation_voltage_probe2 = exports_external2.object({
+  type: exports_external2.literal("simulation_voltage_probe"),
+  simulation_voltage_probe_id: getZodPrefixedIdWithDefault2("simulation_voltage_probe"),
+  source_component_id: exports_external2.string().optional(),
+  name: exports_external2.string().optional(),
+  signal_input_source_port_id: exports_external2.string().optional(),
+  signal_input_source_net_id: exports_external2.string().optional(),
+  reference_input_source_port_id: exports_external2.string().optional(),
+  reference_input_source_net_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  color: exports_external2.string().optional()
+}).describe("Defines a voltage probe for simulation. If a reference input is not provided, it measures against ground. If a reference input is provided, it measures the differential voltage between two points.").superRefine((data, ctx) => {
+  const is_differential = data.reference_input_source_port_id || data.reference_input_source_net_id;
+  if (is_differential) {
+    const has_ports = !!data.signal_input_source_port_id || !!data.reference_input_source_port_id;
+    const has_nets = !!data.signal_input_source_net_id || !!data.reference_input_source_net_id;
+    if (has_ports && has_nets) {
+      ctx.addIssue({
+        code: exports_external2.ZodIssueCode.custom,
+        message: "Cannot mix port and net connections in a differential probe."
+      });
+    } else if (has_ports) {
+      if (!data.signal_input_source_port_id || !data.reference_input_source_port_id) {
+        ctx.addIssue({
+          code: exports_external2.ZodIssueCode.custom,
+          message: "Differential port probe requires both signal_input_source_port_id and reference_input_source_port_id."
+        });
+      }
+    } else if (has_nets) {
+      if (!data.signal_input_source_net_id || !data.reference_input_source_net_id) {
+        ctx.addIssue({
+          code: exports_external2.ZodIssueCode.custom,
+          message: "Differential net probe requires both signal_input_source_net_id and reference_input_source_net_id."
+        });
+      }
+    }
+  } else {
+    if (!!data.signal_input_source_port_id === !!data.signal_input_source_net_id) {
+      ctx.addIssue({
+        code: exports_external2.ZodIssueCode.custom,
+        message: "A voltage probe must have exactly one of signal_input_source_port_id or signal_input_source_net_id."
+      });
+    }
+  }
+});
+expectTypesMatch2(true);
+var simulation_current_probe2 = exports_external2.object({
+  type: exports_external2.literal("simulation_current_probe"),
+  simulation_current_probe_id: getZodPrefixedIdWithDefault2("simulation_current_probe"),
+  source_component_id: exports_external2.string().optional(),
+  name: exports_external2.string().optional(),
+  positive_source_port_id: exports_external2.string().optional(),
+  negative_source_port_id: exports_external2.string().optional(),
+  positive_source_net_id: exports_external2.string().optional(),
+  negative_source_net_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional(),
+  color: exports_external2.string().optional()
+}).describe("Defines a current probe for simulation. It measures current flowing from the positive endpoint to the negative endpoint.").superRefine((data, ctx) => {
+  const hasPositivePort = !!data.positive_source_port_id;
+  const hasNegativePort = !!data.negative_source_port_id;
+  const hasPositiveNet = !!data.positive_source_net_id;
+  const hasNegativeNet = !!data.negative_source_net_id;
+  const hasPorts = hasPositivePort || hasNegativePort;
+  const hasNets = hasPositiveNet || hasNegativeNet;
+  if (hasPorts && hasNets) {
+    ctx.addIssue({
+      code: exports_external2.ZodIssueCode.custom,
+      message: "Cannot mix port and net connections in a current probe."
+    });
+    return;
+  }
+  if (hasPorts) {
+    if (!hasPositivePort || !hasNegativePort) {
+      ctx.addIssue({
+        code: exports_external2.ZodIssueCode.custom,
+        message: "Current probe using source ports requires both positive_source_port_id and negative_source_port_id."
+      });
+    }
+    return;
+  }
+  if (hasNets) {
+    if (!hasPositiveNet || !hasNegativeNet) {
+      ctx.addIssue({
+        code: exports_external2.ZodIssueCode.custom,
+        message: "Current probe using source nets requires both positive_source_net_id and negative_source_net_id."
+      });
+    }
+    return;
+  }
+  ctx.addIssue({
+    code: exports_external2.ZodIssueCode.custom,
+    message: "A current probe must have either positive/negative source port ids or positive/negative source net ids."
+  });
+});
+expectTypesMatch2(true);
+var simulation_unknown_experiment_error2 = base_circuit_json_error2.extend({
+  type: exports_external2.literal("simulation_unknown_experiment_error"),
+  simulation_unknown_experiment_error_id: getZodPrefixedIdWithDefault2("simulation_unknown_experiment_error"),
+  error_type: exports_external2.literal("simulation_unknown_experiment_error").default("simulation_unknown_experiment_error"),
+  simulation_experiment_id: exports_external2.string().optional(),
+  subcircuit_id: exports_external2.string().optional()
+}).describe("An unknown error occurred during the simulation experiment.");
+expectTypesMatch2(true);
+var simulation_parameter_type2 = exports_external2.enum([
+  "resistance",
+  "capacitance",
+  "inductance",
+  "voltage",
+  "current"
+]);
+var simulation_parameter_sweep_base2 = exports_external2.object({
+  type: exports_external2.literal("simulation_parameter_sweep"),
+  simulation_parameter_sweep_id: getZodPrefixedIdWithDefault2("simulation_parameter_sweep"),
+  simulation_experiment_id: exports_external2.string(),
+  name: exports_external2.string().optional(),
+  parameter_values: exports_external2.array(exports_external2.number()).min(1),
+  parameter_unit: simulation_parameter_unit2
+});
+var simulation_parameter_sweep2 = exports_external2.discriminatedUnion("parameter_type", [
+  simulation_parameter_sweep_base2.extend({
+    parameter_type: exports_external2.literal("resistance"),
+    resistor_source_component_id: exports_external2.string()
+  }),
+  simulation_parameter_sweep_base2.extend({
+    parameter_type: exports_external2.literal("capacitance"),
+    capacitor_source_component_id: exports_external2.string()
+  }),
+  simulation_parameter_sweep_base2.extend({
+    parameter_type: exports_external2.literal("inductance"),
+    inductor_source_component_id: exports_external2.string()
+  }),
+  simulation_parameter_sweep_base2.extend({
+    parameter_type: exports_external2.literal("voltage"),
+    source_net_id: exports_external2.string()
+  }),
+  simulation_parameter_sweep_base2.extend({
+    parameter_type: exports_external2.literal("current"),
+    current_source_component_id: exports_external2.string()
+  })
+]).describe("Repeats a simulation experiment over component parameter values");
+expectTypesMatch2(true);
+var simulation_dc_operating_point_voltage2 = exports_external2.object({
+  type: exports_external2.literal("simulation_dc_operating_point_voltage"),
+  simulation_dc_operating_point_voltage_id: getZodPrefixedIdWithDefault2("simulation_dc_operating_point_voltage"),
+  simulation_experiment_id: exports_external2.string(),
+  simulation_parameter_sweep_coordinate: simulation_parameter_sweep_coordinate2.optional(),
+  simulation_voltage_probe_id: exports_external2.string(),
+  voltage: exports_external2.number(),
+  name: exports_external2.string().optional(),
+  color: exports_external2.string().optional()
+});
+expectTypesMatch2(true);
+var simulation_dc_operating_point_current2 = exports_external2.object({
+  type: exports_external2.literal("simulation_dc_operating_point_current"),
+  simulation_dc_operating_point_current_id: getZodPrefixedIdWithDefault2("simulation_dc_operating_point_current"),
+  simulation_experiment_id: exports_external2.string(),
+  simulation_parameter_sweep_coordinate: simulation_parameter_sweep_coordinate2.optional(),
+  simulation_current_probe_id: exports_external2.string(),
+  current: exports_external2.number(),
+  name: exports_external2.string().optional(),
+  color: exports_external2.string().optional()
+});
+expectTypesMatch2(true);
+var simulation_dc_sweep_voltage_graph2 = exports_external2.object({
+  type: exports_external2.literal("simulation_dc_sweep_voltage_graph"),
+  simulation_dc_sweep_voltage_graph_id: getZodPrefixedIdWithDefault2("simulation_dc_sweep_voltage_graph"),
+  simulation_experiment_id: exports_external2.string(),
+  simulation_parameter_sweep_coordinate: simulation_parameter_sweep_coordinate2.optional(),
+  simulation_voltage_probe_id: exports_external2.string(),
+  sweep_values: exports_external2.array(exports_external2.number()),
+  sweep_unit: simulation_dc_sweep_unit2,
+  voltage_levels: exports_external2.array(exports_external2.number()),
+  name: exports_external2.string().optional(),
+  color: exports_external2.string().optional()
+}).refine((graph) => graph.sweep_values.length === graph.voltage_levels.length, {
+  message: "sweep_values and voltage_levels must have the same length"
+});
+expectTypesMatch2(true);
+var simulation_dc_sweep_current_graph2 = exports_external2.object({
+  type: exports_external2.literal("simulation_dc_sweep_current_graph"),
+  simulation_dc_sweep_current_graph_id: getZodPrefixedIdWithDefault2("simulation_dc_sweep_current_graph"),
+  simulation_experiment_id: exports_external2.string(),
+  simulation_parameter_sweep_coordinate: simulation_parameter_sweep_coordinate2.optional(),
+  simulation_current_probe_id: exports_external2.string(),
+  sweep_values: exports_external2.array(exports_external2.number()),
+  sweep_unit: simulation_dc_sweep_unit2,
+  current_levels: exports_external2.array(exports_external2.number()),
+  name: exports_external2.string().optional(),
+  color: exports_external2.string().optional()
+}).refine((graph) => graph.sweep_values.length === graph.current_levels.length, {
+  message: "sweep_values and current_levels must have the same length"
+});
+expectTypesMatch2(true);
+var simulation_complex_sample2 = exports_external2.object({
+  re: exports_external2.number(),
+  im: exports_external2.number()
+});
+expectTypesMatch2(true);
+var simulation_ac_sweep_voltage_graph2 = exports_external2.object({
+  type: exports_external2.literal("simulation_ac_sweep_voltage_graph"),
+  simulation_ac_sweep_voltage_graph_id: getZodPrefixedIdWithDefault2("simulation_ac_sweep_voltage_graph"),
+  simulation_experiment_id: exports_external2.string(),
+  simulation_parameter_sweep_coordinate: simulation_parameter_sweep_coordinate2.optional(),
+  simulation_voltage_probe_id: exports_external2.string(),
+  frequencies_hz: exports_external2.array(exports_external2.number()),
+  complex_voltages: exports_external2.array(simulation_complex_sample2),
+  name: exports_external2.string().optional(),
+  color: exports_external2.string().optional()
+}).refine((graph) => graph.frequencies_hz.length === graph.complex_voltages.length, {
+  message: "frequencies_hz and complex_voltages must have the same length"
+});
+expectTypesMatch2(true);
+var simulation_ac_sweep_current_graph2 = exports_external2.object({
+  type: exports_external2.literal("simulation_ac_sweep_current_graph"),
+  simulation_ac_sweep_current_graph_id: getZodPrefixedIdWithDefault2("simulation_ac_sweep_current_graph"),
+  simulation_experiment_id: exports_external2.string(),
+  simulation_parameter_sweep_coordinate: simulation_parameter_sweep_coordinate2.optional(),
+  simulation_current_probe_id: exports_external2.string(),
+  frequencies_hz: exports_external2.array(exports_external2.number()),
+  complex_currents: exports_external2.array(simulation_complex_sample2),
+  name: exports_external2.string().optional(),
+  color: exports_external2.string().optional()
+}).refine((graph) => graph.frequencies_hz.length === graph.complex_currents.length, {
+  message: "frequencies_hz and complex_currents must have the same length"
+});
+expectTypesMatch2(true);
+var simulation_op_amp2 = exports_external2.object({
+  type: exports_external2.literal("simulation_op_amp"),
+  simulation_op_amp_id: getZodPrefixedIdWithDefault2("simulation_op_amp"),
+  source_component_id: exports_external2.string().optional(),
+  inverting_input_source_port_id: exports_external2.string(),
+  non_inverting_input_source_port_id: exports_external2.string(),
+  output_source_port_id: exports_external2.string(),
+  positive_supply_source_port_id: exports_external2.string(),
+  negative_supply_source_port_id: exports_external2.string()
+}).describe("Defines a simple ideal operational amplifier for simulation");
+expectTypesMatch2(true);
+var simulation_spice_subcircuit2 = exports_external2.object({
+  type: exports_external2.literal("simulation_spice_subcircuit"),
+  simulation_spice_subcircuit_id: getZodPrefixedIdWithDefault2("simulation_spice_subcircuit"),
+  source_component_id: exports_external2.string(),
+  spice_pin_to_source_port_map: exports_external2.record(exports_external2.string(), exports_external2.string()),
+  subcircuit_source: exports_external2.string()
+}).describe("Defines a custom SPICE subcircuit model for simulation");
+expectTypesMatch2(true);
+var hasValue2 = (value) => value !== undefined;
+var simulation_oscilloscope_trace2 = exports_external2.object({
+  type: exports_external2.literal("simulation_oscilloscope_trace"),
+  simulation_oscilloscope_trace_id: getZodPrefixedIdWithDefault2("simulation_oscilloscope_trace"),
+  simulation_transient_voltage_graph_id: exports_external2.string().optional(),
+  simulation_transient_current_graph_id: exports_external2.string().optional(),
+  simulation_voltage_probe_id: exports_external2.string().optional(),
+  simulation_current_probe_id: exports_external2.string().optional(),
+  display_name: exports_external2.string().optional(),
+  color: exports_external2.string().optional(),
+  display_center_value: exports_external2.number().optional(),
+  display_center_offset_divs: exports_external2.number().optional(),
+  volts_per_div: exports_external2.number().positive().optional(),
+  amps_per_div: exports_external2.number().positive().optional()
+}).describe("Defines how a simulation measurement is rendered as an oscilloscope-style trace.").superRefine((data, ctx) => {
+  const voltageReferences = [
+    data.simulation_transient_voltage_graph_id,
+    data.simulation_voltage_probe_id
+  ].filter(hasValue2).length;
+  const currentReferences = [
+    data.simulation_transient_current_graph_id,
+    data.simulation_current_probe_id
+  ].filter(hasValue2).length;
+  if (voltageReferences + currentReferences !== 1) {
+    ctx.addIssue({
+      code: exports_external2.ZodIssueCode.custom,
+      message: "An oscilloscope trace must reference exactly one voltage graph, current graph, voltage probe, or current probe."
+    });
+  }
+  if (voltageReferences > 0 && data.amps_per_div !== undefined) {
+    ctx.addIssue({
+      code: exports_external2.ZodIssueCode.custom,
+      message: "Voltage oscilloscope traces must use volts_per_div, not amps_per_div."
+    });
+  }
+  if (currentReferences > 0 && data.volts_per_div !== undefined) {
+    ctx.addIssue({
+      code: exports_external2.ZodIssueCode.custom,
+      message: "Current oscilloscope traces must use amps_per_div, not volts_per_div."
+    });
+  }
+});
+expectTypesMatch2(true);
+var ibisAssetPath2 = exports_external2.string().min(1).regex(/^(?!\s|[a-z][a-z\d+.-]*:|[/\\])[^\\\u0000-\u001f\u007f]+$/i);
+var simulation_ibis_model2 = exports_external2.object({
+  type: exports_external2.literal("simulation_ibis_model"),
+  simulation_ibis_model_id: getZodPrefixedIdWithDefault2("simulation_ibis_model"),
+  source_component_id: exports_external2.string().min(1),
+  ibis_model_asset: asset2.extend({
+    project_relative_path: ibisAssetPath2,
+    url: exports_external2.string().url().regex(/^https?:\/\//i).or(ibisAssetPath2)
+  }).describe("Reference to the .ibs file containing the vendor's IBIS models"),
+  ibis_component_name: exports_external2.string().min(1).describe("Name of the [Component] section in the IBIS file"),
+  ibis_pin_name_to_source_port_id: exports_external2.record(exports_external2.string().min(1), exports_external2.string().min(1)).refine((pins) => Object.keys(pins).length > 0, "At least one physical IBIS pin is required").describe("Maps pin names from the IBIS [Pin] table, such as A1 or 12, to physical source_port_id values"),
+  ibis_pin_name_to_model_name: exports_external2.record(exports_external2.string().min(1), exports_external2.string().min(1)).optional().describe("Maps an IBIS pin name to the selected [Model] name when its [Model Selector] has multiple buffers"),
+  ibis_pin_name_to_reference_source_port_ids: exports_external2.record(exports_external2.string().min(1), exports_external2.object({
+    pullup_reference_source_port_id: exports_external2.string().min(1).optional(),
+    pulldown_reference_source_port_id: exports_external2.string().min(1).optional(),
+    power_clamp_reference_source_port_id: exports_external2.string().min(1).optional(),
+    ground_clamp_reference_source_port_id: exports_external2.string().min(1).optional(),
+    external_reference_source_port_id: exports_external2.string().min(1).optional()
+  }).strict()).optional().describe("Maps each IBIS signal pin name to the physical source ports used as its buffer supply/clamp references"),
+  model_value_corner: exports_external2.union([exports_external2.literal("typical"), exports_external2.literal("minimum"), exports_external2.literal("maximum")]).describe("Selects the typ, min, or max column of numerical data in the IBIS model"),
+  include_package_parasitics: exports_external2.boolean().describe("Whether the runner includes the IBIS vendor's package resistance, inductance, and capacitance")
+}).superRefine((model, context) => {
+  const boundPins = new Set(Object.keys(model.ibis_pin_name_to_source_port_id));
+  for (const field of [
+    "ibis_pin_name_to_model_name",
+    "ibis_pin_name_to_reference_source_port_ids"
+  ]) {
+    for (const pin of Object.keys(model[field] ?? {})) {
+      if (!boundPins.has(pin)) {
+        context.addIssue({
+          code: exports_external2.ZodIssueCode.custom,
+          path: [field, pin],
+          message: `IBIS pin "${pin}" must be bound in ibis_pin_name_to_source_port_id`
+        });
+      }
+    }
+  }
+}).describe("Attaches an IBIS component and its physical pin bindings to a source component");
+var simulation_ibis_pin_state2 = exports_external2.object({
+  type: exports_external2.literal("simulation_ibis_pin_state"),
+  simulation_ibis_pin_state_id: getZodPrefixedIdWithDefault2("simulation_ibis_pin_state"),
+  simulation_experiment_id: exports_external2.string().min(1),
+  source_port_id: exports_external2.string().min(1),
+  is_output: exports_external2.boolean().describe("True selects output mode; false selects input mode for this experiment"),
+  is_output_enabled: exports_external2.boolean().optional()
+}).superRefine((pin, context) => {
+  if (pin.is_output && pin.is_output_enabled === undefined || !pin.is_output && pin.is_output_enabled !== undefined) {
+    context.addIssue({
+      code: exports_external2.ZodIssueCode.custom,
+      path: ["is_output_enabled"],
+      message: "Only output pins require an explicit is_output_enabled boolean"
+    });
+  }
+}).describe("Declares an IBIS pin's direction and output-enable state for one experiment");
+var MAX_PATTERN_BITS2 = 65536;
+var simulation_digital_stimulus2 = exports_external2.object({
+  type: exports_external2.literal("simulation_digital_stimulus"),
+  simulation_digital_stimulus_id: getZodPrefixedIdWithDefault2("simulation_digital_stimulus"),
+  name: exports_external2.string().min(1),
+  simulation_experiment_id: exports_external2.string().min(1),
+  source_port_id: exports_external2.string().min(1),
+  bit_duration_ms: ms2.refine((milliseconds) => milliseconds > 0),
+  start_time_ms: ms2.refine((milliseconds) => milliseconds >= 0),
+  initial_state: exports_external2.union([exports_external2.literal(0), exports_external2.literal(1)]),
+  inverted: exports_external2.boolean(),
+  transmission_pattern: exports_external2.object({
+    transmission_type: exports_external2.literal("bits"),
+    bits: exports_external2.string().max(MAX_PATTERN_BITS2).regex(/^[01]+$/).or(exports_external2.array(exports_external2.union([exports_external2.literal(0), exports_external2.literal(1)])).min(1).max(MAX_PATTERN_BITS2)),
+    repeat: exports_external2.boolean()
+  }).strict()
+}).describe("Declares a digital transmission pattern and bit duration in milliseconds for a physical source port");
+var simulation_eye_diagram2 = exports_external2.object({
+  type: exports_external2.literal("simulation_eye_diagram"),
+  simulation_eye_diagram_id: getZodPrefixedIdWithDefault2("simulation_eye_diagram"),
+  name: exports_external2.string().min(1),
+  simulation_experiment_id: exports_external2.string().min(1),
+  simulation_voltage_probe_id: exports_external2.string().min(1),
+  unit_interval_ms: ms2.refine((milliseconds) => milliseconds > 0),
+  time_origin_ms: ms2,
+  start_time_ms: ms2.refine((milliseconds) => milliseconds >= 0).optional(),
+  end_time_ms: ms2.refine((milliseconds) => milliseconds > 0).optional()
+}).superRefine((eye, context) => {
+  if (eye.start_time_ms !== undefined && eye.end_time_ms !== undefined && eye.start_time_ms >= eye.end_time_ms) {
+    context.addIssue({
+      code: exports_external2.ZodIssueCode.custom,
+      path: ["end_time_ms"],
+      message: "Eye gate end must follow its start"
+    });
+  }
+}).describe("Declares probe-bound eye folding, fixed origin and optional measurement gate in milliseconds");
+var contact_position2 = exports_external2.object({
+  x: exports_external2.number().finite(),
+  y: exports_external2.number().finite(),
+  layer: layer_ref2
+});
+var simulation_return_current_contact2 = exports_external2.discriminatedUnion("contact_type", [
+  contact_position2.extend({
+    contact_type: exports_external2.literal("pcb_port"),
+    pcb_port_id: exports_external2.string().min(1)
+  }),
+  contact_position2.extend({
+    contact_type: exports_external2.literal("pcb_via"),
+    pcb_via_id: exports_external2.string().min(1)
+  }),
+  contact_position2.extend({
+    contact_type: exports_external2.literal("pcb_copper_pour"),
+    pcb_copper_pour_id: exports_external2.string().min(1)
+  })
+]).describe("Identifies the reference conductor at a return-current contact");
+expectTypesMatch2(true);
+var simulation_terminal_port2 = exports_external2.object({
+  signal_pcb_port_id: exports_external2.string().min(1),
+  reference_pcb_port_id: exports_external2.string().min(1).optional(),
+  reference_layer: layer_ref2,
+  resistance: exports_external2.number().finite().positive()
+}).describe("A two-terminal return-current excitation port with resistance in ohms");
+expectTypesMatch2(true);
+var simulation_return_current_excitation2 = exports_external2.object({
+  type: exports_external2.literal("simulation_return_current_excitation"),
+  simulation_return_current_excitation_id: getZodPrefixedIdWithDefault2("simulation_return_current_excitation"),
+  simulation_experiment_id: exports_external2.string().min(1),
+  pcb_trace_id: exports_external2.string().min(1),
+  ground_source_net_id: exports_external2.string().min(1),
+  current: exports_external2.number().finite(),
+  return_source: simulation_return_current_contact2,
+  return_sink: simulation_return_current_contact2,
+  source_port: simulation_terminal_port2.optional(),
+  load_port: simulation_terminal_port2.optional()
+}).describe("Excites a signal trace with signed current in amperes, peak for AC; return_source is near the load and return_sink near the driver for positive current");
+expectTypesMatch2(true);
+var simulation_pcb_return_current_result2 = exports_external2.object({
+  type: exports_external2.literal("simulation_pcb_return_current_result"),
+  simulation_pcb_return_current_result_id: getZodPrefixedIdWithDefault2("simulation_pcb_return_current_result"),
+  simulation_experiment_id: exports_external2.string().min(1),
+  pcb_board_id: exports_external2.string().min(1),
+  simulation_return_current_excitation_ids: exports_external2.array(exports_external2.string().min(1)).min(1).refine((ids) => new Set(ids).size === ids.length, "Excitation IDs must be unique"),
+  frequency_hz: exports_external2.number().finite().positive().optional()
+}).describe("A PCB return-current result at one frequency, or a frequency-independent result when frequency_hz is absent");
+expectTypesMatch2(true);
+function createSimulationReturnCurrentAssetSchema2(mimetypes) {
+  return asset2.extend({
+    project_relative_path: exports_external2.string().min(1),
+    url: exports_external2.string().url()
+  }).superRefine((value, context) => {
+    if (!mimetypes.includes(value.mimetype)) {
+      context.addIssue({
+        code: exports_external2.ZodIssueCode.custom,
+        path: ["mimetype"],
+        message: `Expected one of: ${mimetypes.join(", ")}`
+      });
+    }
+    if (value.url.startsWith("data:")) {
+      const mediaType = /^data:([^;,]*)(?:;[^,]*)?,/i.exec(value.url)?.[1];
+      if (mediaType?.toLowerCase() !== value.mimetype) {
+        context.addIssue({
+          code: exports_external2.ZodIssueCode.custom,
+          path: ["url"],
+          message: "Data URL media type must match asset.mimetype"
+        });
+      }
+    }
+  });
+}
+var simulation_return_current_field_asset2 = createSimulationReturnCurrentAssetSchema2([
+  "application/json",
+  "application/gzip"
+]);
+var simulation_return_current_image_asset2 = createSimulationReturnCurrentAssetSchema2(["image/png", "image/webp"]);
+var simulation_pcb_return_current_field2 = exports_external2.object({
+  type: exports_external2.literal("simulation_pcb_return_current_field"),
+  simulation_pcb_return_current_field_id: getZodPrefixedIdWithDefault2("simulation_pcb_return_current_field"),
+  simulation_pcb_return_current_result_id: exports_external2.string().min(1),
+  layer: layer_ref2,
+  source_net_id: exports_external2.string().min(1),
+  field_type: exports_external2.enum(["real", "complex_phasor"]),
+  min_x: exports_external2.number().finite(),
+  min_y: exports_external2.number().finite(),
+  columns: exports_external2.number().int().positive().safe(),
+  rows: exports_external2.number().int().positive().safe(),
+  cell_width: exports_external2.number().finite().positive(),
+  cell_height: exports_external2.number().finite().positive(),
+  copper_thickness: exports_external2.number().finite().positive(),
+  data_format: exports_external2.literal("simulation_return_current_grid_json_v1"),
+  field_asset: simulation_return_current_field_asset2
+}).superRefine((field, context) => {
+  if (!Number.isSafeInteger(field.columns * field.rows)) {
+    context.addIssue({
+      code: exports_external2.ZodIssueCode.custom,
+      path: ["columns"],
+      message: "The grid cell count must be a safe integer"
+    });
+  }
+}).describe("A sampled sheet-current field in A/mm, using plain or gzipped JSON Asset URLs; dimensions are PCB millimeters");
+expectTypesMatch2(true);
+var channel2 = exports_external2.array(exports_external2.number().finite().nullable()).min(1);
+var simulation_return_current_grid_json2 = exports_external2.discriminatedUnion("field_type", [
+  exports_external2.object({
+    field_type: exports_external2.literal("real"),
+    sheet_current_x: channel2,
+    sheet_current_y: channel2
+  }),
+  exports_external2.object({
+    field_type: exports_external2.literal("complex_phasor"),
+    sheet_current_x_real: channel2,
+    sheet_current_x_imag: channel2,
+    sheet_current_y_real: channel2,
+    sheet_current_y_imag: channel2
+  })
+]).superRefine((grid3, context) => {
+  const channels = grid3.field_type === "real" ? [grid3.sheet_current_x, grid3.sheet_current_y] : [
+    grid3.sheet_current_x_real,
+    grid3.sheet_current_x_imag,
+    grid3.sheet_current_y_real,
+    grid3.sheet_current_y_imag
+  ];
+  const first = channels[0];
+  if (channels.some((values) => values.length !== first.length)) {
+    context.addIssue({
+      code: exports_external2.ZodIssueCode.custom,
+      message: "Current channels must have equal lengths"
+    });
+    return;
+  }
+  for (let index = 0;index < first.length; index++) {
+    const masked = first[index] === null;
+    if (channels.some((values) => values[index] === null !== masked)) {
+      context.addIssue({
+        code: exports_external2.ZodIssueCode.custom,
+        message: `Cell ${index} must be null in every channel or finite in every channel`
+      });
+      return;
+    }
+  }
+}).describe("Decoded real or complex sheet-current arrays with a shared conductor mask");
+expectTypesMatch2(true);
+var simulation_pcb_return_current_heatmap2 = exports_external2.object({
+  type: exports_external2.literal("simulation_pcb_return_current_heatmap"),
+  simulation_pcb_return_current_heatmap_id: getZodPrefixedIdWithDefault2("simulation_pcb_return_current_heatmap"),
+  simulation_pcb_return_current_result_id: exports_external2.string().min(1),
+  layer: layer_ref2,
+  source_net_id: exports_external2.string().min(1),
+  min_x: exports_external2.number().finite(),
+  min_y: exports_external2.number().finite(),
+  max_x: exports_external2.number().finite(),
+  max_y: exports_external2.number().finite(),
+  image_asset: simulation_return_current_image_asset2
+}).superRefine((heatmap, context) => {
+  for (const axis of ["x", "y"]) {
+    if (heatmap[`max_${axis}`] <= heatmap[`min_${axis}`]) {
+      context.addIssue({
+        code: exports_external2.ZodIssueCode.custom,
+        path: [`max_${axis}`],
+        message: "Heatmap bounds must have positive width and height"
+      });
+    }
+  }
+}).describe("A transparent PNG/WebP current-density overlay in A/mm²; the top-left pixel maps to (min_x, max_y)");
+expectTypesMatch2(true);
+var marker_base2 = exports_external2.object({
+  type: exports_external2.literal("simulation_pcb_return_current_marker"),
+  simulation_pcb_return_current_marker_id: getZodPrefixedIdWithDefault2("simulation_pcb_return_current_marker"),
+  simulation_pcb_return_current_result_id: exports_external2.string().min(1),
+  role: exports_external2.enum([
+    "signal_source",
+    "signal_load",
+    "return_source",
+    "return_sink",
+    "signal_transition",
+    "return_transition"
+  ]),
+  label: exports_external2.string().optional(),
+  label_x: exports_external2.number().finite().optional(),
+  label_y: exports_external2.number().finite().optional()
+});
+var simulation_pcb_return_current_marker2 = exports_external2.discriminatedUnion("target_type", [
+  marker_base2.extend({
+    target_type: exports_external2.literal("pcb_port"),
+    pcb_port_id: exports_external2.string().min(1),
+    layer: layer_ref2
+  }),
+  marker_base2.extend({
+    target_type: exports_external2.literal("pcb_via"),
+    pcb_via_id: exports_external2.string().min(1),
+    from_layer: layer_ref2,
+    to_layer: layer_ref2
+  })
+]).superRefine((marker, context) => {
+  if (marker.label_x === undefined !== (marker.label_y === undefined)) {
+    context.addIssue({
+      code: exports_external2.ZodIssueCode.custom,
+      path: ["label_x"],
+      message: "label_x and label_y must be provided together"
+    });
+  }
+  if (marker.target_type === "pcb_via" && marker.from_layer === marker.to_layer) {
+    context.addIssue({
+      code: exports_external2.ZodIssueCode.custom,
+      path: ["to_layer"],
+      message: "A via transition must connect distinct layers"
+    });
+  }
+}).describe("A signal/return port or via highlight; markers do not assert measured via-transfer currents");
+expectTypesMatch2(true);
+var any_circuit_element2 = exports_external2.union([
+  source_runtime_error2,
+  source_datasheet2,
+  source_trace2,
+  source_bus2,
+  source_port2,
+  source_component_internal_connection2,
+  any_source_component2,
+  source_net2,
+  source_group2,
+  source_simple_chip2,
+  source_simple_capacitor2,
+  source_simple_diode2,
+  source_simple_led2,
+  source_simple_resistor2,
+  source_simple_power_source2,
+  source_simple_battery2,
+  source_simple_inductor2,
+  source_simple_pin_header2,
+  source_simple_pinout2,
+  source_simple_resonator2,
+  source_simple_switch2,
+  source_simple_transistor2,
+  source_simple_test_point2,
+  source_simple_mosfet2,
+  source_simple_op_amp2,
+  source_simple_potentiometer2,
+  source_simple_push_button2,
+  source_pcb_ground_plane2,
+  source_manually_placed_via2,
+  source_board2,
+  source_project_metadata2,
+  source_invalid_component_property_error2,
+  source_trace_not_connected_error2,
+  source_pin_missing_trace_warning2,
+  source_unnamed_trace_warning2,
+  source_confusing_net_name_warning2,
+  source_missing_manufacturer_part_number_warning2,
+  source_component_availability_warning2,
+  source_refdes_convention_warning2,
+  source_no_power_pin_defined_warning2,
+  source_no_ground_pin_defined_warning2,
+  source_component_pins_underspecified_warning2,
+  source_pin_must_be_connected_error2,
+  unknown_error_finding_part2,
+  source_part_not_found_warning2,
+  source_i2c_misconfigured_error2,
+  source_component_misconfigured_error2,
+  source_ambiguous_port_reference2,
+  pcb_component2,
+  pcb_debug_object2,
+  pcb_hole2,
+  pcb_missing_footprint_error2,
+  external_footprint_load_error2,
+  circuit_json_footprint_load_error2,
+  pcb_manual_edit_conflict_warning2,
+  pcb_connector_not_in_accessible_orientation_warning2,
+  pcb_component_missing_courtyard_warning2,
+  supplier_footprint_mismatch_warning2,
+  pcb_fabricator_extra_charge_warning2,
+  pcb_plated_hole2,
+  pcb_keepout2,
+  pcb_keepout_overlap_warning2,
+  pcb_port2,
+  pcb_net2,
+  pcb_text2,
+  pcb_trace2,
+  pcb_trace_warning2,
+  pcb_trace_style_warning2,
+  pcb_trace_too_long_warning2,
+  pcb_trace_too_long_error2,
+  pcb_bus_length_skew_error2,
+  pcb_trace_too_many_vias_warning2,
+  pcb_via2,
+  pcb_smtpad2,
+  pcb_solder_paste2,
+  pcb_soldermask_opening2,
+  pcb_board2,
+  pcb_bend2,
+  pcb_stiffener2,
+  pcb_panel2,
+  pcb_group2,
+  pcb_trace_hint2,
+  pcb_silkscreen_line2,
+  pcb_silkscreen_path2,
+  pcb_silkscreen_text2,
+  pcb_silkscreen_pill2,
+  pcb_copper_text2,
+  pcb_silkscreen_rect2,
+  pcb_silkscreen_circle2,
+  pcb_silkscreen_oval2,
+  pcb_silkscreen_graphic2,
+  pcb_bus_routing_constraint_error2,
+  pcb_bus_routing_constraint_warning2,
+  pcb_trace_error2,
+  pcb_trace_missing_error2,
+  pcb_placement_error2,
+  pcb_packing_error2,
+  pcb_panelization_placement_error2,
+  pcb_port_not_matched_error2,
+  pcb_port_not_connected_error2,
+  pcb_via_clearance_error2,
+  pcb_via_trace_clearance_error2,
+  pcb_pad_pad_clearance_error2,
+  pcb_pad_trace_clearance_error2,
+  pcb_fabrication_note_path2,
+  pcb_fabrication_note_text2,
+  pcb_fabrication_note_rect2,
+  pcb_fabrication_note_dimension2,
+  pcb_note_text2,
+  pcb_note_rect2,
+  pcb_note_path2,
+  pcb_note_line2,
+  pcb_note_dimension2,
+  pcb_autorouting_error2,
+  pcb_preflight_routing_error2,
+  pcb_footprint_overlap_error2,
+  pcb_courtyard_overlap_error2,
+  pcb_breakout_point2,
+  pcb_cutout2,
+  pcb_ground_plane2,
+  pcb_ground_plane_region2,
+  pcb_thermal_spoke2,
+  pcb_copper_pour2,
+  pcb_component_outside_board_error2,
+  pcb_component_not_on_board_edge_error2,
+  pcb_component_invalid_layer_error2,
+  pcb_courtyard_rect2,
+  pcb_courtyard_outline2,
+  pcb_courtyard_polygon2,
+  pcb_courtyard_circle2,
+  pcb_courtyard_pill2,
+  schematic_box2,
+  schematic_text2,
+  schematic_line2,
+  schematic_rect2,
+  schematic_circle2,
+  schematic_arc2,
+  schematic_component2,
+  schematic_symbol2,
+  schematic_port2,
+  schematic_trace2,
+  schematic_path2,
+  schematic_error2,
+  schematic_layout_error2,
+  schematic_net_label2,
+  schematic_debug_object2,
+  schematic_voltage_probe2,
+  schematic_manual_edit_conflict_warning2,
+  schematic_component_overlap_warning2,
+  schematic_component_styling_warning2,
+  schematic_sheet_styling_warning2,
+  schematic_missing_sheet_warning2,
+  schematic_element_outside_sheet_warning2,
+  schematic_graphic2,
+  schematic_group2,
+  schematic_sheet2,
+  schematic_table2,
+  schematic_table_cell2,
+  cad_component2,
+  cad_cable2,
+  cad_reference_surface2,
+  cad_collision_error2,
+  simulation_voltage_source2,
+  simulation_current_source2,
+  simulation_experiment2,
+  simulation_ibis_model2,
+  simulation_ibis_pin_state2,
+  simulation_digital_stimulus2,
+  simulation_eye_diagram2,
+  simulation_return_current_excitation2,
+  simulation_pcb_return_current_result2,
+  simulation_pcb_return_current_field2,
+  simulation_pcb_return_current_heatmap2,
+  simulation_pcb_return_current_marker2,
+  simulation_transient_voltage_graph2,
+  simulation_transient_current_graph2,
+  simulation_dc_operating_point_voltage2,
+  simulation_dc_operating_point_current2,
+  simulation_dc_sweep_voltage_graph2,
+  simulation_dc_sweep_current_graph2,
+  simulation_ac_sweep_voltage_graph2,
+  simulation_ac_sweep_current_graph2,
+  simulation_parameter_sweep2,
+  simulation_switch2,
+  simulation_voltage_probe2,
+  simulation_current_probe2,
+  simulation_oscilloscope_trace2,
+  simulation_unknown_experiment_error2,
+  simulation_op_amp2,
+  simulation_spice_subcircuit2
+]);
+expectTypesMatch2(true);
+expectStringUnionsMatch2(true);
+
+// dogbone-pr6-paired-validation/lib/get-via-board-layers.ts
+function getViaBoardLayers(layerCount) {
+  if (layerCount <= 1)
+    return ["top"];
+  return [
+    "top",
+    ...Array.from({ length: layerCount - 2 }, (_2, index) => `inner${index + 1}`),
+    "bottom"
+  ];
+}
+
+// dogbone-pr6-paired-validation/lib/dogbone-fanout-solver.ts
+class DogboneFanoutSolver extends BaseSolver3 {
+  params;
+  phase = "preparing";
+  sources = [];
+  sites = new Map;
+  traces = [];
+  steps;
+  constructor(params) {
+    super();
+    this.params = params;
+    this.MAX_ITERATIONS = params.input.connections.length * 2 + 10;
+    this.steps = this.solveSteps();
+  }
+  getConstructorParams() {
+    return [this.params];
+  }
+  _step() {
+    try {
+      if (this.steps.next().done) {
+        this.phase = "complete";
+        this.progress = 1;
+        this.solved = true;
+      }
+    } catch (error) {
+      this.error = error instanceof Error ? error.message : String(error);
+      this.failed = true;
+    }
+  }
+  getOutput() {
+    if (!this.solved)
+      throw new Error(this.error ?? "Dogbone fanout is not solved");
+    return this.traces;
+  }
+  visualize() {
+    return {
+      rects: this.params.input.obstacles.filter((pad) => pad.shape !== "circle").map((pad) => ({
+        center: pad.center,
+        width: pad.width,
+        height: pad.height,
+        fill: "rgba(200,40,40,0.3)"
+      })),
+      circles: [
+        ...this.params.input.obstacles.filter((pad) => pad.shape === "circle").map((pad) => ({
+          center: pad.center,
+          radius: pad.width / 2,
+          fill: "rgba(200,40,40,0.3)"
+        })),
+        ...[...this.sites.values()].map((center) => ({
+          center,
+          radius: (this.params.input.minViaPadDiameter ?? this.params.input.minViaDiameter ?? 0.6) / 2,
+          fill: "orange"
+        }))
+      ],
+      lines: [...this.sites].map(([index, via]) => ({
+        points: [this.sources[index].port, via],
+        strokeColor: "orange",
+        strokeWidth: this.params.input.minTraceWidth
+      }))
+    };
+  }
+  *solveSteps() {
+    const { input, fanoutRoutingLayers } = this.params;
+    const traceWidth = input.minTraceWidth;
+    const clearance = input.minTraceToPadEdgeClearance ?? 0.1;
+    const viaDiameter = input.minViaPadDiameter ?? input.minViaDiameter ?? 0.6;
+    const holeDiameter = input.minViaHoleDiameter ?? 0.3;
+    const viaClearance = input.minViaEdgeToPadEdgeClearance ?? clearance;
+    const boardEdgeClearance = input.minBoardEdgeClearance ?? clearance;
+    const holeClearance = input.minViaHoleEdgeToViaHoleEdgeClearance ?? clearance;
+    this.sources = input.connections.map((connection) => {
+      const point5 = connection.pointsToConnect.find((point6) => point6.pcb_port_id && input.obstacles.some((pad2) => pad2.componentId && Math.hypot(pad2.center.x - point6.x, pad2.center.y - point6.y) < 0.000001));
+      if (!point5?.pcb_port_id)
+        throw new Error(`Dogbone connection ${connection.name} has no source pad`);
+      const pad = input.obstacles.find((pad2) => pad2.componentId && Math.hypot(pad2.center.x - point5.x, pad2.center.y - point5.y) < 0.000001);
+      return {
+        port: {
+          pcb_port_id: point5.pcb_port_id,
+          pcb_component_id: pad.componentId,
+          x: point5.x,
+          y: point5.y,
+          layers: [layer_ref2.parse(point5.layer)]
+        },
+        sourceTraceId: connection.source_trace_id
+      };
+    });
+    const sources = this.sources;
+    const layers = getViaBoardLayers(input.layerCount);
+    const allowedLayers = fanoutRoutingLayers ?? layers;
+    if (allowedLayers.some((layer) => !layers.some((boardLayer) => boardLayer === layer)))
+      throw new Error("Dogbone fanout targets an unavailable board layer");
+    const buses = [];
+    const targets = sources.map(({ port, sourceTraceId }, connectionIndex) => {
+      const sourceObstacle = input.obstacles.find((obstacle) => obstacle.componentId === port.pcb_component_id && Math.hypot(obstacle.center.x - port.x, obstacle.center.y - port.y) < 0.000001);
+      if (!sourceObstacle)
+        throw new Error("Dogbone fanout requires a component pad at each source port");
+      if (port.layers.length !== 1 || !layers.includes(port.layers[0])) {
+        throw new Error("Dogbone fanout requires a single-layer SMT source pad");
+      }
+      const sourceLayer = port.layers[0];
+      const targetLayer = allowedLayers.find((layer) => layer !== sourceLayer);
+      if (!targetLayer)
+        throw new Error("Dogbone fanout requires a legal layer distinct from the source pad");
+      let bus = buses.find((bus2) => bus2.componentId === sourceObstacle.componentId);
+      if (!bus) {
+        const pads = input.obstacles.filter((obstacle) => obstacle.componentId === sourceObstacle.componentId);
+        const xs = [
+          ...new Set(pads.map((pad) => Math.round(pad.center.x * 1e6) / 1e6))
+        ].sort((a2, b2) => a2 - b2);
+        const ys = [
+          ...new Set(pads.map((pad) => Math.round(pad.center.y * 1e6) / 1e6))
+        ].sort((a2, b2) => a2 - b2);
+        if (xs.length < 2 || ys.length < 2)
+          throw new Error("Dogbone fanout requires a two-dimensional pad grid");
+        const pitch = (coordinates) => Math.min(...coordinates.slice(1).map((v2, i2) => v2 - coordinates[i2]));
+        bus = {
+          busId: sourceObstacle.componentId,
+          componentId: sourceObstacle.componentId,
+          componentObstacles: pads,
+          connections: [],
+          direction: "down",
+          termination: { type: "plane", layer: targetLayer },
+          componentBounds: {
+            minX: xs[0],
+            maxX: xs.at(-1),
+            minY: ys[0],
+            maxY: ys.at(-1)
+          },
+          sharedBoundary: input.bounds,
+          xCoordinates: xs,
+          yCoordinates: ys,
+          pitchX: pitch(xs),
+          pitchY: pitch(ys)
+        };
+        buses.push(bus);
+      }
+      const sourcePoint = {
+        x: port.x,
+        y: port.y,
+        layer: sourceLayer,
+        pcb_port_id: port.pcb_port_id
+      };
+      bus.connections.push({
+        connectionIndex,
+        connection: { name: port.pcb_port_id, pointsToConnect: [sourcePoint] },
+        sourcePoint,
+        sourcePointIndex: 0,
+        sourceLayer,
+        sourceObstacle,
+        targetPoint: sourcePoint
+      });
+      return { sourceTraceId, port, sourceLayer, targetLayer };
+    });
+    const sites = this.sites;
+    const blockingSegments = [];
+    const blockingVias = [];
+    for (const [traceIndex, trace] of (input.traces ?? []).entries()) {
+      const aliases = [trace.connection_name, trace.source_trace_id].filter(Boolean);
+      const owner = input.connections.findIndex((connection) => [connection.name, connection.source_trace_id].some((id) => id && aliases.includes(id)));
+      const connectionIndex = owner >= 0 ? owner : -traceIndex - 1;
+      for (const [index, point5] of trace.route.entries()) {
+        const prior = trace.route[index - 1];
+        if (point5.route_type === "wire" && prior?.route_type === "wire" && point5.layer === prior.layer) {
+          blockingSegments.push({
+            connectionIndex,
+            segment: {
+              start: prior,
+              end: point5,
+              width: Math.max(prior.width, point5.width),
+              layer: point5.layer
+            }
+          });
+        } else if (point5.route_type === "via" && prior?.route_type === "wire") {
+          blockingSegments.push({
+            connectionIndex,
+            segment: {
+              start: prior,
+              end: point5,
+              width: prior.width,
+              layer: prior.layer
+            }
+          });
+        } else if (point5.route_type === "wire" && prior?.route_type === "via") {
+          blockingSegments.push({
+            connectionIndex,
+            segment: {
+              start: prior,
+              end: point5,
+              width: point5.width,
+              layer: point5.layer
+            }
+          });
+        }
+        if (point5.route_type === "via") {
+          const from = layers.indexOf(point5.from_layer);
+          const to = layers.indexOf(point5.to_layer);
+          blockingVias.push({
+            connectionIndex,
+            center: point5,
+            diameter: point5.via_diameter ?? viaDiameter,
+            spanLayers: point5.layers ?? (from >= 0 && to >= 0 ? layers.slice(Math.min(from, to), Math.max(from, to) + 1) : layers)
+          });
+        }
+      }
+    }
+    for (const bus of buses) {
+      this.phase = "assigning_sites";
+      yield;
+      const pairSites = new Map;
+      for (const pair of input.differentialPairs ?? []) {
+        const members = pair.connectionNames.map((name) => bus.connections.find((c2) => input.connections[c2.connectionIndex]?.name === name));
+        if (members.some((m2) => !m2))
+          continue;
+        const [a2, b2] = members;
+        const dx2 = b2.sourcePoint.x - a2.sourcePoint.x, dy2 = b2.sourcePoint.y - a2.sourcePoint.y;
+        const center = { x: (a2.sourcePoint.x + b2.sourcePoint.x) / 2, y: (a2.sourcePoint.y + b2.sourcePoint.y) / 2 };
+        const sign = (this.params.pairedSiteMask ?? 0) & 1 << input.differentialPairs.indexOf(pair) ? -1 : 1;
+        if (Math.abs(dx2) < 0.000001 && Math.abs(Math.abs(dy2) - bus.pitchY) < 0.000001) {
+          pairSites.set(a2.connectionIndex, { x: center.x - sign * bus.pitchX / 2, y: center.y });
+          pairSites.set(b2.connectionIndex, { x: center.x + sign * bus.pitchX / 2, y: center.y });
+        } else if (Math.abs(dy2) < 0.000001 && Math.abs(Math.abs(dx2) - bus.pitchX) < 0.000001) {
+          pairSites.set(a2.connectionIndex, { x: center.x, y: center.y - sign * bus.pitchY / 2 });
+          pairSites.set(b2.connectionIndex, { x: center.x, y: center.y + sign * bus.pitchY / 2 });
+        }
+      }
+      const assignment = matchComponentDogboneViaSites([bus], {
+        traceWidth,
+        fixedViaPointsByConnectionIndex: pairSites,
+        clearance: Math.max(clearance, viaClearance),
+        viaDiameter,
+        viaHoleDiameter: holeDiameter,
+        holeToHoleClearance: holeClearance,
+        additionalObstacles: input.obstacles,
+        blockingSegments,
+        blockingVias
+      });
+      if (!assignment || assignment.size !== bus.connections.length)
+        throw new Error("No complete local dogbone assignment within clearance/search limits");
+      for (const connection of bus.connections) {
+        const connectionIndex = connection.connectionIndex;
+        const via = assignment.get(connectionIndex);
+        sites.set(connectionIndex, via);
+        blockingSegments.push({
+          connectionIndex,
+          segment: {
+            start: connection.sourcePoint,
+            end: via,
+            width: traceWidth,
+            layer: connection.sourceLayer
+          }
+        });
+        blockingVias.push({
+          connectionIndex,
+          center: via,
+          diameter: viaDiameter,
+          spanLayers: layers
+        });
+      }
+    }
+    this.phase = "creating_traces";
+    for (const [
+      index,
+      { sourceTraceId, port, sourceLayer, targetLayer }
+    ] of targets.entries()) {
+      const via = sites.get(index);
+      const dx2 = Math.abs(via.x - port.x), dy2 = Math.abs(via.y - port.y);
+      if (dx2 > 0.000001 && dy2 > 0.000001 && Math.abs(dx2 - dy2) > 0.000001)
+        throw new Error("Dogbone fanout requires straight or 45-degree local escapes");
+      const margin = viaDiameter / 2 + boardEdgeClearance;
+      if (via.x < input.bounds.minX + margin || via.x > input.bounds.maxX - margin || via.y < input.bounds.minY + margin || via.y > input.bounds.maxY - margin)
+        throw new Error("Dogbone via violates board-edge clearance");
+      this.traces.push({
+        type: "pcb_trace",
+        pcb_trace_id: `dogbone_${port.pcb_port_id}`,
+        source_trace_id: sourceTraceId,
+        connectsTo: [port.pcb_port_id],
+        route: [
+          {
+            route_type: "wire",
+            x: port.x,
+            y: port.y,
+            layer: sourceLayer,
+            width: traceWidth
+          },
+          { route_type: "wire", ...via, layer: sourceLayer, width: traceWidth },
+          {
+            route_type: "via",
+            ...via,
+            from_layer: sourceLayer,
+            to_layer: targetLayer,
+            via_diameter: viaDiameter,
+            via_hole_diameter: holeDiameter,
+            layers
+          },
+          { route_type: "wire", ...via, layer: targetLayer, width: traceWidth },
+          { route_type: "wire", ...via, layer: targetLayer, width: traceWidth }
+        ]
+      });
+      this.progress = (index + 1) / targets.length;
+      yield;
+    }
+  }
+}
+// dogbone-pr6-paired-validation/lib/dogbone-autorouter.ts
+class DogboneAutorouter {
+  params;
+  callbacks;
+  get input() {
+    return this.params.input;
+  }
+  isRouting = false;
+  solver;
+  timer;
+  listeners = [];
+  constructor(params, callbacks = {}) {
+    this.params = params;
+    this.callbacks = callbacks;
+    this.solver = new DogboneFanoutSolver(params);
+  }
+  finishSolver() {
+    this.callbacks.onSolverEnded?.({
+      solverName: "DogboneFanoutSolver",
+      solved: this.solver.solved,
+      failed: this.solver.failed,
+      iterations: this.solver.iterations,
+      error: this.solver.error
+    });
+  }
+  getTraces() {
+    return this.solver.getOutput().map((trace) => {
+      const connection = this.params.input.connections.find((connection2) => connection2.pointsToConnect.some((point5) => point5.pcb_port_id && trace.connectsTo?.includes(point5.pcb_port_id)));
+      if (!connection)
+        throw new Error("Dogbone fanout lost its source connection");
+      return {
+        ...trace,
+        connection_name: connection.name,
+        source_trace_id: connection.source_trace_id,
+        connectsTo: [
+          ...new Set([
+            ...trace.connectsTo ?? [],
+            ...connection.routingPcbGroupId ? connection.pointsToConnect.flatMap((point5) => !point5.pcb_port_id && point5.pointId ? [point5.pointId] : []) : [`${trace.pcb_trace_id}_exit`]
+          ])
+        ]
+      };
+    });
+  }
+  getOutputSimpleRouteJson() {
+    const traces = this.getTraces();
+    return {
+      ...this.params.input,
+      traces,
+      connections: this.params.input.connections.map((connection) => {
+        const trace = traces.find((trace2) => trace2.connection_name === connection.name);
+        if (!trace)
+          return connection;
+        const exit = trace.route.at(-1);
+        if (exit.route_type !== "wire")
+          throw new Error("Dogbone fanout lost its exit");
+        return {
+          ...connection,
+          pointsToConnect: connection.pointsToConnect.map((point5) => {
+            const isHandoff = !point5.pcb_port_id;
+            const relocate = connection.routingPcbGroupId ? isHandoff : Boolean(point5.pcb_port_id && trace.connectsTo?.includes(point5.pcb_port_id));
+            if (!relocate)
+              return point5;
+            if (connection.routingPcbGroupId)
+              return { ...point5, x: exit.x, y: exit.y, layer: exit.layer };
+            const { pcb_port_id: _port, ...handoff } = point5;
+            return {
+              ...handoff,
+              pointId: `${trace.pcb_trace_id}_exit`,
+              x: exit.x,
+              y: exit.y,
+              layer: exit.layer
+            };
+          })
+        };
+      })
+    };
+  }
+  on(event, callback) {
+    this.listeners.push({
+      event,
+      callback
+    });
+  }
+  emit(event) {
+    for (const listener of this.listeners)
+      if (listener.event === event.type)
+        listener.callback(event);
+  }
+  start() {
+    if (this.isRouting)
+      return;
+    this.isRouting = true;
+    this.callbacks.onSolverStarted?.({
+      solverName: "DogboneFanoutSolver",
+      solverParams: this.params,
+      solverConstructorArgs: this.solver.getConstructorParams()
+    });
+    const tick = () => {
+      if (!this.isRouting)
+        return;
+      try {
+        for (let i2 = 0;i2 < 16 && !this.solver.solved && !this.solver.failed; i2++)
+          this.solver.step();
+        this.emit({
+          type: "progress",
+          steps: this.solver.iterations,
+          progress: this.solver.progress,
+          phase: this.solver.phase,
+          debugGraphics: this.solver.visualize()
+        });
+        if (!this.isRouting)
+          return;
+        if (this.solver.failed) {
+          this.finishSolver();
+          this.isRouting = false;
+          this.emit({
+            type: "error",
+            error: new Error(this.solver.error ?? "Dogbone routing failed")
+          });
+          return;
+        }
+        if (this.solver.solved) {
+          this.finishSolver();
+          this.isRouting = false;
+          this.emit({ type: "complete", traces: this.getTraces() });
+          return;
+        }
+        this.timer = setTimeout(tick, 0);
+      } catch (error) {
+        this.isRouting = false;
+        this.emit({
+          type: "error",
+          error: error instanceof Error ? error : new Error(String(error))
+        });
+      }
+    };
+    this.timer = setTimeout(tick, 0);
+  }
+  stop() {
+    this.isRouting = false;
+    if (this.timer)
+      clearTimeout(this.timer);
+  }
+  solveSync() {
+    this.solver.solve();
+    if (this.solver.failed)
+      throw new Error(this.solver.error ?? "Dogbone routing failed");
+    return this.getTraces();
+  }
+}
+// controllers/feasible-support-fanouts.ts
+function generateFeasibleSupportFanouts(input) {
+  const counts = new Map;
+  for (const o2 of input.obstacles)
+    if (o2.componentId && o2.shape === "circle")
+      counts.set(o2.componentId, (counts.get(o2.componentId) ?? 0) + 1);
+  const tasks = [], owners = new Map, seen = new Set;
+  for (const c2 of [...input.connections].sort((a2, b2) => b2.pointsToConnect.length - a2.pointsToConnect.length))
+    for (const p2 of c2.pointsToConnect) {
+      const pad = input.obstacles.find((o2) => o2.circuitJsonMetadata?.pcb_port_id === p2.pcb_port_id);
+      if (!pad || (counts.get(pad.componentId) ?? 0) < 60 || seen.has(p2.pcb_port_id))
+        continue;
+      seen.add(p2.pcb_port_id);
+      const other = c2.pointsToConnect.find((q2) => q2.pcb_port_id !== p2.pcb_port_id);
+      if (!other)
+        throw Error("Support fanout lacks another net endpoint");
+      const direct = input.connections.find((d2) => d2.source_trace_id && d2.pointsToConnect.every((q2) => c2.pointsToConnect.some((p3) => p3.pcb_port_id === q2.pcb_port_id))), sourceId = direct?.source_trace_id ?? c2.source_trace_id ?? c2.name, name = c2.name + "__escape_" + p2.pcb_port_id;
+      tasks.push({ ...c2, name, source_trace_id: sourceId, pointsToConnect: [p2, other] });
+      owners.set(name, { connection_name: c2.name, source_trace_id: sourceId });
+    }
+  const feasible = tasks.filter((task) => {
+    const f3 = new DogboneAutorouter({ input: { ...input, connections: [task] }, fanoutRoutingLayers: ["bottom"] });
+    try {
+      f3.solveSync();
+      return true;
+    } catch (error) {
+      if (!String(error).includes("No complete local dogbone assignment"))
+        throw error;
+      console.log("GLOBAL_SUPPORT_ESCAPE_REQUIRED", task.name);
+      return false;
+    }
+  });
+  if (!feasible.length)
+    throw Error("No local support fanouts found");
+  const f2 = new DogboneAutorouter({ input: { ...input, connections: feasible }, fanoutRoutingLayers: ["bottom"] }), traces = f2.solveSync().map((t48) => ({ ...t48, ...owners.get(t48.connection_name) }));
+  console.log("JOINT_SUPPORT_FANOUTS", traces.length);
+  return traces;
+}
 
 // controllers/support-four-layer.ts
 var layers = ["top", "inner1", "inner2", "bottom"];
@@ -35725,10 +45514,10 @@ function* routeFourLayers(input, connection, step = 0.05) {
   const g2 = grids[0], N2 = g2.cellCount, total = N2 * layers.length;
   const costs = new Float64Array(total).fill(Infinity), parents = new Int32Array(total).fill(-1), closed = new Uint8Array(total), viaClear = new Int8Array(N2);
   const queue = new GridHeap(total), starts = new Map, ends = new Map;
-  const ownedViaLayers = (point4) => {
+  const ownedViaLayers = (point5) => {
     const aliases = [connection.name, connection.source_trace_id].filter(Boolean);
-    const via = input.traces.filter((t48) => aliases.includes(t48.connection_name) || aliases.includes(t48.source_trace_id)).flatMap((t48) => t48.route).find((v2) => v2.route_type === "via" && Math.hypot(v2.x - point4.x, v2.y - point4.y) < 0.0000001);
-    return via ? via.layers ?? layers : [point4.layer];
+    const via = input.traces.filter((t48) => aliases.includes(t48.connection_name) || aliases.includes(t48.source_trace_id)).flatMap((t48) => t48.route).find((v2) => v2.route_type === "via" && Math.hypot(v2.x - point5.x, v2.y - point5.y) < 0.0000001);
+    return via ? via.layers ?? layers : [point5.layer];
   };
   for (const layer of ownedViaLayers(p2[1]))
     for (const a2 of grids[layers.indexOf(layer)].ends)
@@ -35757,7 +45546,7 @@ function* routeFourLayers(input, connection, step = 0.05) {
       goal = id;
       break;
     }
-    const z2 = Math.floor(id / N2), cell = id % N2, x2 = cell % g2.nx, y2 = Math.floor(cell / g2.nx), point4 = g2.point(cell);
+    const z2 = Math.floor(id / N2), cell = id % N2, x2 = cell % g2.nx, y2 = Math.floor(cell / g2.nx), point5 = g2.point(cell);
     const relax = (next, cost) => {
       if (!closed[next] && cost < costs[next] - 0.000000001) {
         costs[next] = cost;
@@ -35774,7 +45563,7 @@ function* routeFourLayers(input, connection, step = 0.05) {
     }
     const margin = input.minViaPadDiameter / 2 + (input.minBoardEdgeClearance ?? 0);
     if (!viaClear[cell])
-      viaClear[cell] = point4.x >= bounds.minX + margin && point4.x <= bounds.maxX - margin && point4.y >= bounds.minY + margin && point4.y <= bounds.maxY - margin && vias.every((v2) => !v2.isBlocked(cell)) ? 1 : -1;
+      viaClear[cell] = point5.x >= bounds.minX + margin && point5.x <= bounds.maxX - margin && point5.y >= bounds.minY + margin && point5.y <= bounds.maxY - margin && vias.every((v2) => !v2.isBlocked(cell)) ? 1 : -1;
     if (viaClear[cell] > 0) {
       for (let target = 0;target < layers.length; target++)
         if (target !== z2)
@@ -35823,7 +45612,7 @@ function* routeFourLayers(input, connection, step = 0.05) {
 }
 async function createSupportNetTreeAutorouter(native) {
   const original = withFixedConnectionDefinitions(native), listeners = new Map;
-  let result, timer, current2 = "", stopped = false;
+  let result, timer, current3 = "", stopped = false;
   function* solve() {
     const fresh = [];
     for (const selected of [...native.connections].sort((a2, b2) => b2.pointsToConnect.length - a2.pointsToConnect.length)) {
@@ -35839,7 +45628,7 @@ async function createSupportNetTreeAutorouter(native) {
       });
       const connected = [points[0]], targets = points.slice(1);
       while (targets.length) {
-        current2 = selected.name;
+        current3 = selected.name;
         const choices = targets.flatMap((target, i2) => connected.map((peer) => ({ target, peer, i: i2, d: Math.hypot(target.x - peer.x, target.y - peer.y) }))).sort((a2, b2) => a2.d - b2.d);
         let accepted, chosen;
         for (const choice of choices) {
@@ -35879,7 +45668,7 @@ async function createSupportNetTreeAutorouter(native) {
           if (n2.done)
             break;
         }
-        emit("progress", { solverName: "NativeFourLayerSupport", phase: current2 });
+        emit("progress", { solverName: "NativeFourLayerSupport", phase: current3 });
         if (n2.done) {
           router.isRouting = false;
           emit("complete", { traces: result });
@@ -35903,7 +45692,12 @@ async function createSupportNetTreeAutorouter(native) {
   } };
   return router;
 }
+async function createPreDdrSupportAutorouter(native) {
+  const fans = generateFeasibleSupportFanouts({ ...withFixedConnectionDefinitions(native), connections: native.connections });
+  return createSupportNetTreeAutorouter({ ...native, traces: [...native.traces, ...fans] });
+}
 export {
+  createPreDdrSupportAutorouter,
   createSupportNetTreeAutorouter,
   routeFourLayers
 };
