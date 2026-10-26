@@ -1,0 +1,52 @@
+import {FanoutSolver,validateRoutedCopperDrc} from '@tscircuit/fanout-solver'
+import {connectionsShareElectricalNet} from '../native-compact-streaming-sdk/node_modules/@tscircuit/fanout-solver/lib/net-identity'
+import {routeFourLayers} from './support-four-layer-plane-access'
+import {viaChecks} from '../routing-audit-helpers'
+import {withFixedConnectionDefinitions} from '../infer-fixed-connections'
+
+// Direction selection follows Core's native plane-bus inference. Coordinates
+// are read from the current source pads; no sites or signal paths are authored.
+function planeDirection(input:any,bus:any){
+ const selected=input.connections.filter((c:any)=>bus.connectionNames.includes(c.name)),points=selected.flatMap((c:any)=>c.pointsToConnect),pad=input.obstacles.find((o:any)=>o.circuitJsonMetadata?.pcb_port_id===points[0]?.pcb_port_id)
+ if(!pad)throw Error('Plane connection has no native source pad')
+ const pads=input.obstacles.filter((o:any)=>o.componentId===pad.componentId),xs=pads.map((o:any)=>o.center.x),ys=pads.map((o:any)=>o.center.y),cx=(Math.min(...xs)+Math.max(...xs))/2,cy=(Math.min(...ys)+Math.max(...ys))/2,dx=(points.reduce((v:number,p:any)=>v+p.x,0)/points.length-cx)/Math.max((Math.max(...xs)-Math.min(...xs))/2,1e-6),dy=(points.reduce((v:number,p:any)=>v+p.y,0)/points.length-cy)/Math.max((Math.max(...ys)-Math.min(...ys))/2,1e-6)
+ return Math.abs(dx)>Math.abs(dy)?(dx>=0?'right':'left'):Math.abs(dy)>1e-9?(dy>=0?'up':'down'):'right'
+}
+export function* generateGroundPlaneTraces(native:any):Generator<void,any[]>{
+ const original=withFixedConnectionDefinitions(native),connections=native.connections,buses=native.buses??[],names=new Set(connections.map((c:any)=>c.name)),fixed=native.traces??[],fixedIds=new Set(fixed.map((t:any)=>t.pcb_trace_id))
+ if(!connections.length)return fixed
+ if(buses.some((b:any)=>b.termination?.type!=='plane')||connections.some((c:any)=>c.pointsToConnect.length!==1||!connectionsShareElectricalNet(native,connections[0].name,c.name)))throw Error('Plane access router requires single-terminal drops of one declared electrical net')
+ const input={...original,planeElectricalAliases:[...names]},solver:any=new FanoutSolver(native,{buses,busDirections:Object.fromEntries(buses.map((b:any)=>[b.busId,planeDirection(native,b)])),borderDistribution:'even',compactBusTracks:true,escapeLayers:['top','bottom'],allowBlindAndBuriedVias:false,allowSameNetMerges:true})
+ while(!solver.solved&&!solver.failed){solver.step();yield}
+ const proposal=solver.solved?solver.getOutputSimpleRouteJson():solver.bestAttempt?.outputSrj
+ if(!proposal)throw Error('Native plane solver generated no candidate drops')
+ const fresh:any[]=[],vias=fixed.flatMap((t:any)=>t.route.filter((p:any)=>p.route_type==='via')),targets:any[]=[],served=new Set<string>()
+ function holeClear(trace:any){const added=trace.route.filter((p:any)=>p.route_type==='via');return added.every((v:any,i:number)=>[...vias,...added.slice(0,i)].every(w=>Math.hypot(v.x-w.x,v.y-w.y)>=((v.via_hole_diameter??.3)+(w.via_hole_diameter??.3))/2+(input.minViaHoleEdgeToViaHoleEdgeClearance??.1)-1e-7))}
+ function keep(trace:any,c:any){fresh.push({...trace,source_trace_id:c.source_trace_id??c.name});vias.push(...trace.route.filter((p:any)=>p.route_type==='via'));served.add(c.name);targets.push(...c.pointsToConnect.map((p:any)=>({...p,owner:c.name})));for(const v of trace.route.filter((p:any)=>p.route_type==='via'))targets.push({x:v.x,y:v.y,layer:'top',owner:c.name})}
+ for(const trace of proposal.traces??[]){
+  if(fixedIds.has(trace.pcb_trace_id))continue
+  const c=connections.find((c:any)=>c.name===trace.connection_name);if(!c||!viaChecks(input,[trace]).valid||!holeClear(trace))continue
+  const drc=validateRoutedCopperDrc({inputSrj:original,routedSrj:{...original,traces:[...fixed,...fresh,trace]},clearance:input.minTraceToPadEdgeClearance,allowBlindAndBuriedVias:false});if(drc.valid)keep(trace,c);yield
+ }
+ if(!targets.length)throw Error('No physically legal native ground-plane seed')
+ console.log('NATIVE_PHYSICAL_PLANE_SEEDS',served.size,'pending',connections.length-served.size)
+ for(const c of connections){
+  if(served.has(c.name))continue
+  const source=c.pointsToConnect[0],choices=targets.map(q=>({q,d:Math.hypot(q.x-source.x,q.y-source.y)})).sort((a,b)=>a.d-b.d).slice(0,24);let accepted:any=null
+  for(const {q} of choices){
+   const branch={...c,pointsToConnect:[source,q]},g=routeFourLayers({...input,traces:[...fixed,...fresh]},branch),deadline=performance.now()+20000;let n=g.next()
+   while(!n.done&&performance.now()<deadline){yield;n=g.next()}
+   if(!n.done){g.return(null);continue}
+   if(n.value&&holeClear(n.value)){accepted=n.value;break}
+  }
+  if(!accepted)throw Error('No physical native plane access for '+c.name)
+  keep(accepted,c);console.log('NATIVE_PLANE_BRANCH_ACCEPTED',c.name,'served',served.size,'of',connections.length);yield
+ }
+ const traces=[...fixed,...fresh],audit=validateRoutedCopperDrc({inputSrj:original,routedSrj:{...original,traces},clearance:input.minTraceToPadEdgeClearance,allowBlindAndBuriedVias:false})
+ if(!audit.valid||!viaChecks(input,fresh).valid||served.size!==connections.length)throw Error('Native plane access failed final independent audit')
+ return traces
+}
+export async function createGroundPlaneAutorouter(input:any){
+ const listeners=new Map<string,any[]>();let result:any,timer:any,stopped=false,steps=0;const iterator=generateGroundPlaneTraces(input),emit=(type:string,event:any)=>{for(const callback of listeners.get(type)??[])callback({type,...event})}
+ const router={input,isRouting:false,on(type:string,callback:any){listeners.set(type,[...listeners.get(type)??[],callback])},start(){router.isRouting=true;const tick=()=>{if(stopped)return;try{let n:any;for(let i=0;i<10;i++){n=iterator.next();steps++;if(n.done)break}emit('progress',{solverName:'NativeGroundPlaneAccess',phase:'physical_plane_access',steps});if(n.done){result=n.value;router.isRouting=false;emit('complete',{traces:result})}else timer=setTimeout(tick,0)}catch(error){router.isRouting=false;emit('error',{error})}};timer=setTimeout(tick,0)},stop(){stopped=true;router.isRouting=false;clearTimeout(timer);iterator.return()},getOutputSimpleRouteJson(){if(!result)throw Error('Native ground-plane access incomplete');return{...input,connections:[],buses:[],traces:result}}};return router
+}

@@ -500,11 +500,25 @@
     "passed": true
   },
   "strictDdrMatchingPreserved": true,
-  "wholeBoardProof": "Pending native171",
+  "wholeBoardProof": "Pending complete native output; placement-only ground proof is not full-board validation.",
   "groupOrder": [
     "controls",
     "data"
   ],
   "experiment": "Same native board, pads, timing/layer/via rules and fanout planning; test controls before data to avoid expensive cross-group repairs. Whole-board proof pending.",
-  "symmetricBacktracking": "Incremental acceptance for both data and CA cohorts. A blocked data path reopens earlier CA paths using the same original-constraint CBS used for blocked CA. No imported routes or relaxed timing."
+  "symmetricBacktracking": "Incremental acceptance for both data and CA cohorts. A blocked data path reopens earlier CA paths using the same original-constraint CBS used for blocked CA. No imported routes or relaxed timing.",
+  "nativeGroundPlaneBundleSha256": "7bc418d4e228c5ff1c04b0b381569d739fbb0f20c4648f7227a2e7767ce65acc",
+  "nativeGroundPlaneProof": {
+    "scope": "Native production ground phase engine, fresh current input only, no imported candidates",
+    "solved": true,
+    "connections": 316,
+    "traces": 316,
+    "viaAudit": {
+      "total": 278,
+      "valid": true,
+      "errors": []
+    },
+    "elapsedSeconds": 77.821794664
+  },
+  "groundPolicy": "Fresh native solver candidates independently checked for .30/.50 full-stack vias, no via-in-pad, physical hole separation. Blocked drops use native geometric A* to actual existing same-net pads/barrels. No imported geometry or CJSON rewriting."
 }

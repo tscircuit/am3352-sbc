@@ -1,7 +1,7 @@
 name: Full native SBC proof
 on:
   push:
-    branches: [validation/am3352-controls-first-20261026]
+    branches: [validation/am3352-physical-plane-20261026]
   workflow_dispatch:
 permissions:
   contents: read
@@ -19,7 +19,7 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            for (const run_id of [40301897985, 40305498392]) {
+            for (const run_id of [40301897985, 40305498392, 40310430485]) {
               const { data: run } = await github.rest.actions.getWorkflowRun({ ...context.repo, run_id })
               if (run.head_branch !== "validation/full-native-am3352-20261026") throw new Error("Unexpected validation branch")
               if (["queued", "in_progress"].includes(run.status)) {

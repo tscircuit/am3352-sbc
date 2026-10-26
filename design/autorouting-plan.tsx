@@ -1,3 +1,4 @@
+import {createGroundPlaneAutorouter} from '../routing/ground-plane-autorouter'
 import { withAutorouterCache } from "@tscircuit/core"
 import {createSupportNetTreeAutorouter, createPreDdrSupportAutorouter} from "../routing/support-net-tree"
 import {createEarlyLcdEscapes} from "../routing/early-lcd-escapes"
@@ -86,6 +87,8 @@ const cachedEarlyLcdEscapes=withAutorouterCache(createEarlyLcdEscapes,"am3352-ea
 
 const cachedLateLcdEscapes=withAutorouterCache(createEarlyLcdEscapes,"am3352-late-lcd-dogbone-pr6-v1",{followUpAutorouter:"default"})
 
+const cachedGroundPlaneRouter=withAutorouterCache(createGroundPlaneAutorouter,"am3352-physical-plane-7bc418d4e228c5ff-v1")
+
 export function AutoroutingPlan() {
   return <>
     <autoroutingphase name="PRESERVE_VTP_ZQ_ACCESS" phaseIndex={0.75} connections={["net.DDR_VTP", "net.DDR_ZQ"]} autorouter="bus_lanes" algorithmFn={cachedPreDdrSupportRouter} />
@@ -98,7 +101,7 @@ export function AutoroutingPlan() {
     <autoroutingphase name="LCD_AND_BOOT" phaseIndex={4} />
     <autoroutingphase name="CONTROLS_AND_PROGRAMMING" phaseIndex={5} />
     <autoroutingphase name="POWER_DISTRIBUTION" phaseIndex={6} />
-    <autoroutingphase name="GROUND" phaseIndex={7} autorouter="fanout"
+    <autoroutingphase name="GROUND" phaseIndex={7} autorouter="fanout" algorithmFn={cachedGroundPlaneRouter}
       fanoutRoutingLayers={["top", "bottom"]} fanoutPourNetMap={{ inner1: ["GND"] }} />
   </>
 }

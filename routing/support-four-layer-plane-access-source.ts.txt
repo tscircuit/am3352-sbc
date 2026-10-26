@@ -1,0 +1,124 @@
+import { GridVisibilitySearch } from '../solver-reachable-handoff-layers/lib/grid-visibility'
+import { GridHeap } from '../solver-reachable-handoff-layers/lib/grid-heap'
+import { VectorScene, fixedCopper } from '../solver-reachable-handoff-layers/lib/vector-scene'
+import { simplify } from '../solver-reachable-handoff-layers/lib/geometry'
+import { validateRoutedCopperDrc } from '../core-single/node_modules/@tscircuit/fanout-solver'
+import { withFixedConnectionDefinitions } from '../infer-fixed-connections'
+import { connectivity, viaChecks } from '../routing-audit-helpers'
+import { routeHasSelfShort } from '../route-self-short-check'
+import { generateFeasibleSupportFanouts } from './feasible-support-fanouts'
+
+const layers = ['top', 'inner1', 'inner2', 'bottom']
+
+// Native geometric A*: all coordinates come from the current phase input.
+// Every transition needs space for a physical through-via on every layer.
+export function* routeFourLayers(input: any, connection: any, step = .05): Generator<void, any> {
+  const p = connection.pointsToConnect, slack = 7
+  const bounds = {
+    minX: Math.max(input.bounds.minX, Math.floor(Math.min(p[0].x,p[1].x)-slack)),
+    maxX: Math.min(input.bounds.maxX, Math.ceil(Math.max(p[0].x,p[1].x)+slack)),
+    minY: Math.max(input.bounds.minY, Math.floor(Math.min(p[0].y,p[1].y)-slack)),
+    maxY: Math.min(input.bounds.maxY, Math.ceil(Math.max(p[0].y,p[1].y)+slack)),
+  }
+  const local = {...input,bounds}, copper = fixedCopper(local)
+  const grid = (layer: string, diameter: number, via = false) => {
+    const c = via ? {name:'__new_through_via__',pointsToConnect:p.map((q:any)=>({x:q.x,y:q.y,layer}))}
+      : {...connection,pointsToConnect:p.map((q:any)=>({...q,layer}))}
+    const scene=new VectorScene(local,c,diameter,copper)
+    // Plane wires can join actual same-net copper. New drilled vias still
+    // see every pad and barrel, including electrically identical ground.
+    if(!via && input.planeElectricalAliases?.includes(connection.name)){
+      for(const alias of input.planeElectricalAliases)scene.owners.add(alias)
+      const eligible=copper.filter(q=>q.layer===layer&&!q.owners.some(owner=>scene.owners.has(owner)))
+      scene.copper.splice(0,scene.copper.length,...eligible)
+    }
+    const search = new GridVisibilitySearch(scene,c.pointsToConnect[0],c.pointsToConnect[1],[],0,undefined,{bounds,step})
+    const access=search.getRoutingAccess(); search.cancel(); return access
+  }
+  const grids=layers.map(layer=>grid(layer,input.minTraceWidth)), vias=layers.map(layer=>grid(layer,input.minViaPadDiameter,true))
+  const g=grids[0],N=g.cellCount, total=N*layers.length
+  const aliases=new Set([connection.name,connection.source_trace_id].filter(Boolean))
+  const constrainedBuses=(input.buses??[]).filter((b:any)=>b.connectionNames?.some((name:string)=>aliases.has(name)))
+  const routingLayers=layers.filter(layer=>(!input.allowedLayers||input.allowedLayers.includes(layer))&&constrainedBuses.every((b:any)=>!b.allowedLayers||b.allowedLayers.includes(layer)))
+  const costs=new Float64Array(total).fill(Infinity),parents=new Int32Array(total).fill(-1),closed=new Uint8Array(total),viaClear=new Int8Array(N)
+  const queue=new GridHeap(total),starts=new Map<number,any>(),ends=new Map<number,any>()
+  const ownedViaLayers=(point:any)=>{
+    const aliases=[connection.name,connection.source_trace_id].filter(Boolean)
+    const via=input.traces.filter((t:any)=>aliases.includes(t.connection_name)||aliases.includes(t.source_trace_id)).flatMap((t:any)=>t.route).find((v:any)=>v.route_type==='via'&&Math.hypot(v.x-point.x,v.y-point.y)<1e-7)
+    return via ? via.layers??layers : [point.layer]
+  }
+  for(const layer of ownedViaLayers(p[1]).filter((layer:string)=>routingLayers.includes(layer)))for(const a of grids[layers.indexOf(layer)].ends)ends.set(layers.indexOf(layer)*N+a.id,a.path.toReversed())
+  const heuristic=(id:number)=>{const q=g.point(id%N);return Math.hypot(q.x-p[1].x,q.y-p[1].y)/step}
+  for(const layer of ownedViaLayers(p[0]).filter((layer:string)=>routingLayers.includes(layer)))for(const a of grids[layers.indexOf(layer)].starts){const id=layers.indexOf(layer)*N+a.id, cost=a.path.slice(1).reduce((sum:number,q:any,i:number)=>sum+Math.hypot(q.x-a.path[i].x,q.y-a.path[i].y),0)/step;costs[id]=cost;queue.push(id,cost,cost+heuristic(id));starts.set(id,a.path)}
+  let goal=-1,expanded=0
+  while(queue.length&&expanded++<3000000){
+    if(expanded%2048===0)yield
+    queue.pop();const id=queue.id;if(closed[id])continue;closed[id]=1
+    if(ends.has(id)){goal=id;break}
+    const z=Math.floor(id/N),cell=id%N,x=cell%g.nx,y=Math.floor(cell/g.nx),point=g.point(cell)
+    const relax=(next:number,cost:number)=>{if(!closed[next]&&cost<costs[next]-1e-9){costs[next]=cost;parents[next]=id;queue.push(next,cost,cost+heuristic(next))}}
+    for(const n of g.neighbors){
+      if(x+n.dx<0||x+n.dx>=g.nx||y+n.dy<0||y+n.dy>=g.ny)continue
+      const next=cell+n.offset
+      if(!grids[z].isBlocked(next)&&grids[z].hardEdgeIsClear(cell,n))relax(z*N+next,costs[id]+n.cost)
+    }
+    const margin=input.minViaPadDiameter/2+(input.minBoardEdgeClearance??0)
+    if(!viaClear[cell])viaClear[cell]=point.x>=bounds.minX+margin&&point.x<=bounds.maxX-margin&&point.y>=bounds.minY+margin&&point.y<=bounds.maxY-margin&&vias.every(v=>!v.isBlocked(cell))?1:-1
+    if(viaClear[cell]>0)for(let target=0;target<layers.length;target++)if(target!==z&&routingLayers.includes(layers[target]))relax(target*N+cell,costs[id]+100)
+  }
+  console.log('Native four-layer search',connection.name,{expanded,goal:goal>=0,step})
+  if(goal<0)return null
+  const path=[];for(let id=goal;id>=0;id=parents[id])path.push(id);path.reverse()
+  const route:any[]=starts.get(path[0]).map((q:any)=>({...q,route_type:'wire',layer:layers[Math.floor(path[0]/N)],width:input.minTraceWidth}))
+  for(let i=1;i<path.length;i++){
+    const from=Math.floor(path[i-1]/N),to=Math.floor(path[i]/N),q=g.point(path[i]%N)
+    if(from!==to)route.push({...q,route_type:'via',from_layer:layers[from],to_layer:layers[to],layers,via_diameter:input.minViaPadDiameter,via_hole_diameter:input.minViaHoleDiameter})
+    route.push({...q,route_type:'wire',layer:layers[to],width:input.minTraceWidth})
+  }
+  route.push(...ends.get(goal).slice(1).map((q:any)=>({...q,route_type:'wire',layer:layers[Math.floor(goal/N)],width:input.minTraceWidth})))
+  const normalized:any[]=[];let run:any[]=[]
+  const flush=()=>{if(run.length)normalized.push(...simplify(run).map(q=>({...q,route_type:'wire',layer:run[0].layer,width:input.minTraceWidth})));run=[]}
+  for(const q of route){if(q.route_type==='via'){flush();normalized.push(q)}else run.push(q)}flush()
+  const trace={type:'pcb_trace',pcb_trace_id:'native_four_layer_'+connection.name,connection_name:connection.name,source_trace_id:connection.source_trace_id,route:normalized}
+  if(routeHasSelfShort(trace,input.layerCount)){console.log('Native four-layer self-short rejected',connection.name);return null}
+  const viaAudit=viaChecks(input,[trace]);if(!viaAudit.valid){console.log('Native four-layer via rejected',connection.name,JSON.stringify(viaAudit.errors.slice(0,2)));return null}
+  const audit=validateRoutedCopperDrc({inputSrj:input,routedSrj:{...input,traces:[...input.traces,trace]},clearance:input.minTraceToPadEdgeClearance,allowBlindAndBuriedVias:false})
+  if(!audit.valid){console.log('Native four-layer strict DRC rejected',JSON.stringify(audit.issues.slice(0,3)));return null}
+  return trace
+}
+
+export function* generateFourLayerSupportTraces(native:any):Generator<void,any[]>{
+  const original=withFixedConnectionDefinitions(native)
+    const fresh:any[]=[]
+    for(const selected of [...native.connections].sort((a:any,b:any)=>b.pointsToConnect.length-a.pointsToConnect.length)){
+      if(connectivity(selected,[...native.traces,...fresh]))continue
+      const ids=selected.pointsToConnect.map((p:any)=>p.pcb_port_id)
+      const fans=native.traces.filter((t:any)=>t.connectsTo?.some((id:string)=>ids.includes(id)))
+      const owner= fans.find((t:any)=>t.source_trace_id)?.source_trace_id??selected.source_trace_id??selected.name
+      const physical={...selected,name:selected.name,source_trace_id:owner}
+      const points=selected.pointsToConnect.map((p:any)=>{const f=fans.find((t:any)=>t.connectsTo?.includes(p.pcb_port_id)),v=f?.route.find((q:any)=>q.route_type==='via');return v?{x:v.x,y:v.y,layer:f.route.at(-1).layer??v.to_layer,pointId:f.connectsTo.find((id:string)=>id!==p.pcb_port_id)}:p})
+      const connected=[points[0]],targets=points.slice(1)
+      while(targets.length){
+        const choices=targets.flatMap((target:any,i:number)=>connected.map(peer=>({target,peer,i,d:Math.hypot(target.x-peer.x,target.y-peer.y)}))).sort((a:any,b:any)=>a.d-b.d)
+        let accepted:any,chosen:any
+        for(const choice of choices){const c={...physical,pointsToConnect:[choice.peer,choice.target]};accepted=yield* routeFourLayers({...original,traces:[...native.traces,...fresh]},c);if(accepted){chosen=choice;break}}
+        if(!accepted)throw Error('No legal four-layer native route for '+selected.name)
+        fresh.push({...accepted,pcb_trace_id:accepted.pcb_trace_id+'_'+fresh.length});connected.push(chosen.target);targets.splice(chosen.i,1)
+      }
+      if(!connectivity(selected,[...native.traces,...fresh]))throw Error('Native four-layer tree failed original pad connectivity for '+selected.name)
+    }
+    return [...native.traces,...fresh]
+}
+
+export async function createSupportNetTreeAutorouter(native:any){
+  const listeners=new Map<string,any[]>();let result:any,timer:any,current='native_support',stopped=false
+  function* solve():Generator<void>{result=yield* generateFourLayerSupportTraces(native)}
+  const iterator=solve(),emit=(type:string,e:any)=>{for(const fn of listeners.get(type)??[])fn({type,...e})}
+  const router={input:native,isRouting:false,on(type:string,fn:any){listeners.set(type,[...listeners.get(type)??[],fn])},start(){router.isRouting=true;const tick=()=>{if(stopped)return;try{let n:any;for(let i=0;i<10;i++){n=iterator.next();if(n.done)break}emit('progress',{solverName:'NativeFourLayerSupport',phase:current});if(n.done){router.isRouting=false;emit('complete',{traces:result})}else timer=setTimeout(tick,0)}catch(error){router.isRouting=false;emit('error',{error})}};timer=setTimeout(tick,0)},stop(){stopped=true;router.isRouting=false;clearTimeout(timer);iterator.return()},getOutputSimpleRouteJson(){if(!result)throw Error('Native support tree incomplete');return{...native,traces:result}}}
+  return router
+}
+
+export async function createPreDdrSupportAutorouter(native:any){
+  const fans=generateFeasibleSupportFanouts({...withFixedConnectionDefinitions(native),connections:native.connections})
+  return createSupportNetTreeAutorouter({...native,traces:[...native.traces,...fans]})
+}
