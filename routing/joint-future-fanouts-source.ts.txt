@@ -1,0 +1,40 @@
+import {DogboneAutorouter} from '../dogbone-pr6-paired-validation/lib/index'
+
+/** Assign current DDR and deferred signal fanouts in one component matching
+ * problem. Future copper is solver-generated, never a list of authored sites. */
+export function generateJointFutureFanouts(input:any, activeNames:Set<string>, completedNames:Set<string>){
+  const counts=new Map<string,number>()
+  for(const o of input.obstacles)if(o.componentId&&o.shape==='circle')counts.set(o.componentId,(counts.get(o.componentId)??0)+1)
+  const tasks:any[]=[],owners=new Map<string,any>(),seen=new Set<string>((input.traces??[]).flatMap((t:any)=>t.connectsTo??[])),byPair=new Map<string,string>()
+  for(const c of [...input.connections].sort((a:any,b:any)=>b.pointsToConnect.length-a.pointsToConnect.length)){
+    if(completedNames.has(c.name))continue
+    for(const p of c.pointsToConnect){
+      const pad=input.obstacles.find((o:any)=>o.circuitJsonMetadata?.pcb_port_id===p.pcb_port_id)
+      if(!pad||(counts.get(pad.componentId)??0)<60||seen.has(p.pcb_port_id))continue
+      const other=c.pointsToConnect.find((q:any)=>q.pcb_port_id!==p.pcb_port_id);if(!other)continue
+      const name=c.name+'__joint_'+p.pcb_port_id
+      const direct=input.connections.find((d:any)=>d.source_trace_id&&d.pointsToConnect.every((q:any)=>c.pointsToConnect.some((v:any)=>v.pcb_port_id===q.pcb_port_id)))
+      const source=direct?.source_trace_id??c.source_trace_id??c.name,task={...c,name,source_trace_id:source,pointsToConnect:[p,other]}
+      if(!activeNames.has(c.name)){
+        try{new DogboneAutorouter({input:{...input,connections:[task],differentialPairs:[]},fanoutRoutingLayers:['bottom']}).solveSync()}
+        catch(error){console.log('JOINT_GLOBAL_ESCAPE_REQUIRED',name);continue}
+      }
+      seen.add(p.pcb_port_id);tasks.push(task);owners.set(name,{connection_name:c.name,source_trace_id:source});byPair.set(c.name+':'+pad.componentId,name)
+    }
+  }
+  const pairs:any[]=[]
+  for(const pair of input.differentialPairs??[])for(const component of counts.keys()){
+    const names=pair.connectionNames.map((name:string)=>byPair.get(name+':'+component))
+    if(names.every(Boolean))pairs.push({...pair,connectionNames:names})
+  }
+  let lastError:any
+  for(let mask=0;mask<=2**pairs.length;mask++){
+    try{
+      const router=new DogboneAutorouter({input:{...input,connections:tasks,differentialPairs:mask===2**pairs.length?[]:pairs},fanoutRoutingLayers:['bottom'],pairedSiteMask:mask} as any)
+      const traces=router.solveSync().map((t:any)=>({...t,...owners.get(t.connection_name)}))
+      console.log('JOINT_CURRENT_AND_FUTURE_FANOUTS',tasks.length,traces.length,'pairMask',mask)
+      return traces
+    }catch(error){lastError=error;console.log('JOINT_PAIR_SITE_ORIENTATION_REJECTED',mask)}
+  }
+  throw lastError
+}

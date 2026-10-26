@@ -1,0 +1,33 @@
+{
+  "description": "Native joint DDR/future-signal fanout assignment before paired routing. Release provisional ordinary fanouts before the pairs; route reset with original outer-layer restriction before ordinary DDR; preserve deferred support buses. All signal copper generated from native input, no replay or CircuitJSON rewriting.",
+  "ddrBundleSha256": "9ad206f969baeb53fc5e21dd4e256a1e1af74e9cea046115691ed846ad980fbc",
+  "supportBundleSha256": "3996eaa9649468add36786ca25f0c549acd7984ebf09f0ff8d19be40e3f26c80",
+  "placementChangesMm": {
+    "C_U1_L5": [
+      0.4,
+      0
+    ],
+    "C_U1_L6": [
+      0,
+      -1.3
+    ],
+    "C_U1_L7": [
+      0.8,
+      0
+    ],
+    "C_U1_L9": [
+      -1.8,
+      4.39
+    ],
+    "C_U1_P5": [
+      -3.4,
+      0.91
+    ],
+    "C_U1_P6": [
+      -2.71,
+      0.6
+    ]
+  },
+  "originalDdrTimingCouplingAndViaRulesPreserved": true,
+  "preflight": "124 fanouts assigned; all3 original differential coupling checks passed; reset strict copper/vias and outer-layer routing passed in diagnostic only; whole-board proof pending."
+}

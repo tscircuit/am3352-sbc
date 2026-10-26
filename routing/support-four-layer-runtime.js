@@ -45512,21 +45512,24 @@ function* routeFourLayers(input, connection, step = 0.05) {
   };
   const grids = layers.map((layer) => grid3(layer, input.minTraceWidth)), vias = layers.map((layer) => grid3(layer, input.minViaPadDiameter, true));
   const g2 = grids[0], N2 = g2.cellCount, total = N2 * layers.length;
+  const aliases = new Set([connection.name, connection.source_trace_id].filter(Boolean));
+  const constrainedBuses = (input.buses ?? []).filter((b2) => b2.connectionNames?.some((name) => aliases.has(name)));
+  const routingLayers = layers.filter((layer) => (!input.allowedLayers || input.allowedLayers.includes(layer)) && constrainedBuses.every((b2) => !b2.allowedLayers || b2.allowedLayers.includes(layer)));
   const costs = new Float64Array(total).fill(Infinity), parents = new Int32Array(total).fill(-1), closed = new Uint8Array(total), viaClear = new Int8Array(N2);
   const queue = new GridHeap(total), starts = new Map, ends = new Map;
   const ownedViaLayers = (point5) => {
-    const aliases = [connection.name, connection.source_trace_id].filter(Boolean);
-    const via = input.traces.filter((t48) => aliases.includes(t48.connection_name) || aliases.includes(t48.source_trace_id)).flatMap((t48) => t48.route).find((v2) => v2.route_type === "via" && Math.hypot(v2.x - point5.x, v2.y - point5.y) < 0.0000001);
+    const aliases2 = [connection.name, connection.source_trace_id].filter(Boolean);
+    const via = input.traces.filter((t48) => aliases2.includes(t48.connection_name) || aliases2.includes(t48.source_trace_id)).flatMap((t48) => t48.route).find((v2) => v2.route_type === "via" && Math.hypot(v2.x - point5.x, v2.y - point5.y) < 0.0000001);
     return via ? via.layers ?? layers : [point5.layer];
   };
-  for (const layer of ownedViaLayers(p2[1]))
+  for (const layer of ownedViaLayers(p2[1]).filter((layer2) => routingLayers.includes(layer2)))
     for (const a2 of grids[layers.indexOf(layer)].ends)
       ends.set(layers.indexOf(layer) * N2 + a2.id, a2.path.toReversed());
   const heuristic = (id) => {
     const q2 = g2.point(id % N2);
     return Math.hypot(q2.x - p2[1].x, q2.y - p2[1].y) / step;
   };
-  for (const layer of ownedViaLayers(p2[0]))
+  for (const layer of ownedViaLayers(p2[0]).filter((layer2) => routingLayers.includes(layer2)))
     for (const a2 of grids[layers.indexOf(layer)].starts) {
       const id = layers.indexOf(layer) * N2 + a2.id, cost = a2.path.slice(1).reduce((sum, q2, i2) => sum + Math.hypot(q2.x - a2.path[i2].x, q2.y - a2.path[i2].y), 0) / step;
       costs[id] = cost;
@@ -45566,7 +45569,7 @@ function* routeFourLayers(input, connection, step = 0.05) {
       viaClear[cell] = point5.x >= bounds.minX + margin && point5.x <= bounds.maxX - margin && point5.y >= bounds.minY + margin && point5.y <= bounds.maxY - margin && vias.every((v2) => !v2.isBlocked(cell)) ? 1 : -1;
     if (viaClear[cell] > 0) {
       for (let target = 0;target < layers.length; target++)
-        if (target !== z2)
+        if (target !== z2 && routingLayers.includes(layers[target]))
           relax(target * N2 + cell, costs[id] + 100);
     }
   }
@@ -45601,8 +45604,15 @@ function* routeFourLayers(input, connection, step = 0.05) {
   }
   flush();
   const trace = { type: "pcb_trace", pcb_trace_id: "native_four_layer_" + connection.name, connection_name: connection.name, source_trace_id: connection.source_trace_id, route: normalized };
-  if (routeHasSelfShort(trace, input.layerCount) || !viaChecks(input, [trace]).valid)
+  if (routeHasSelfShort(trace, input.layerCount)) {
+    console.log("Native four-layer self-short rejected", connection.name);
     return null;
+  }
+  const viaAudit = viaChecks(input, [trace]);
+  if (!viaAudit.valid) {
+    console.log("Native four-layer via rejected", connection.name, JSON.stringify(viaAudit.errors.slice(0, 2)));
+    return null;
+  }
   const audit = validateRoutedCopperDrc({ inputSrj: input, routedSrj: { ...input, traces: [...input.traces, trace] }, clearance: input.minTraceToPadEdgeClearance, allowBlindAndBuriedVias: false });
   if (!audit.valid) {
     console.log("Native four-layer strict DRC rejected", JSON.stringify(audit.issues.slice(0, 3)));
@@ -45610,45 +45620,48 @@ function* routeFourLayers(input, connection, step = 0.05) {
   }
   return trace;
 }
-async function createSupportNetTreeAutorouter(native) {
-  const original = withFixedConnectionDefinitions(native), listeners = new Map;
-  let result, timer, current3 = "", stopped = false;
-  function* solve() {
-    const fresh = [];
-    for (const selected of [...native.connections].sort((a2, b2) => b2.pointsToConnect.length - a2.pointsToConnect.length)) {
-      if (connectivity(selected, [...native.traces, ...fresh]))
-        continue;
-      const ids = selected.pointsToConnect.map((p2) => p2.pcb_port_id);
-      const fans = native.traces.filter((t48) => t48.connectsTo?.some((id) => ids.includes(id)));
-      const owner = fans.find((t48) => t48.source_trace_id)?.source_trace_id ?? selected.source_trace_id ?? selected.name;
-      const physical = { ...selected, name: selected.name, source_trace_id: owner };
-      const points = selected.pointsToConnect.map((p2) => {
-        const f2 = fans.find((t48) => t48.connectsTo?.includes(p2.pcb_port_id)), v2 = f2?.route.find((q2) => q2.route_type === "via");
-        return v2 ? { x: v2.x, y: v2.y, layer: f2.route.at(-1).layer ?? v2.to_layer, pointId: f2.connectsTo.find((id) => id !== p2.pcb_port_id) } : p2;
-      });
-      const connected = [points[0]], targets = points.slice(1);
-      while (targets.length) {
-        current3 = selected.name;
-        const choices = targets.flatMap((target, i2) => connected.map((peer) => ({ target, peer, i: i2, d: Math.hypot(target.x - peer.x, target.y - peer.y) }))).sort((a2, b2) => a2.d - b2.d);
-        let accepted, chosen;
-        for (const choice of choices) {
-          const c2 = { ...physical, pointsToConnect: [choice.peer, choice.target] };
-          accepted = yield* routeFourLayers({ ...original, traces: [...native.traces, ...fresh] }, c2);
-          if (accepted) {
-            chosen = choice;
-            break;
-          }
+function* generateFourLayerSupportTraces(native) {
+  const original = withFixedConnectionDefinitions(native);
+  const fresh = [];
+  for (const selected of [...native.connections].sort((a2, b2) => b2.pointsToConnect.length - a2.pointsToConnect.length)) {
+    if (connectivity(selected, [...native.traces, ...fresh]))
+      continue;
+    const ids = selected.pointsToConnect.map((p2) => p2.pcb_port_id);
+    const fans = native.traces.filter((t48) => t48.connectsTo?.some((id) => ids.includes(id)));
+    const owner = fans.find((t48) => t48.source_trace_id)?.source_trace_id ?? selected.source_trace_id ?? selected.name;
+    const physical = { ...selected, name: selected.name, source_trace_id: owner };
+    const points = selected.pointsToConnect.map((p2) => {
+      const f2 = fans.find((t48) => t48.connectsTo?.includes(p2.pcb_port_id)), v2 = f2?.route.find((q2) => q2.route_type === "via");
+      return v2 ? { x: v2.x, y: v2.y, layer: f2.route.at(-1).layer ?? v2.to_layer, pointId: f2.connectsTo.find((id) => id !== p2.pcb_port_id) } : p2;
+    });
+    const connected = [points[0]], targets = points.slice(1);
+    while (targets.length) {
+      const choices = targets.flatMap((target, i2) => connected.map((peer) => ({ target, peer, i: i2, d: Math.hypot(target.x - peer.x, target.y - peer.y) }))).sort((a2, b2) => a2.d - b2.d);
+      let accepted, chosen;
+      for (const choice of choices) {
+        const c2 = { ...physical, pointsToConnect: [choice.peer, choice.target] };
+        accepted = yield* routeFourLayers({ ...original, traces: [...native.traces, ...fresh] }, c2);
+        if (accepted) {
+          chosen = choice;
+          break;
         }
-        if (!accepted)
-          throw Error("No legal four-layer native route for " + selected.name);
-        fresh.push({ ...accepted, pcb_trace_id: accepted.pcb_trace_id + "_" + fresh.length });
-        connected.push(chosen.target);
-        targets.splice(chosen.i, 1);
       }
-      if (!connectivity(selected, [...native.traces, ...fresh]))
-        throw Error("Native four-layer tree failed original pad connectivity for " + selected.name);
+      if (!accepted)
+        throw Error("No legal four-layer native route for " + selected.name);
+      fresh.push({ ...accepted, pcb_trace_id: accepted.pcb_trace_id + "_" + fresh.length });
+      connected.push(chosen.target);
+      targets.splice(chosen.i, 1);
     }
-    result = [...native.traces, ...fresh];
+    if (!connectivity(selected, [...native.traces, ...fresh]))
+      throw Error("Native four-layer tree failed original pad connectivity for " + selected.name);
+  }
+  return [...native.traces, ...fresh];
+}
+async function createSupportNetTreeAutorouter(native) {
+  const listeners = new Map;
+  let result, timer, current3 = "native_support", stopped = false;
+  function* solve() {
+    result = yield* generateFourLayerSupportTraces(native);
   }
   const iterator = solve(), emit = (type, e2) => {
     for (const fn of listeners.get(type) ?? [])
@@ -45699,5 +45712,6 @@ async function createPreDdrSupportAutorouter(native) {
 export {
   createPreDdrSupportAutorouter,
   createSupportNetTreeAutorouter,
+  generateFourLayerSupportTraces,
   routeFourLayers
 };
