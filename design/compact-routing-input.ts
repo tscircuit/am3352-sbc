@@ -4,13 +4,13 @@ import type {SimpleRouteJson} from './vendor/bus-lanes-outer.js';
  * own identifiers, and explicit net identifiers. Geometry is never changed.
  * Ground pads otherwise repeat thousands of unrelated ports in each obstacle.
  */
-export function compactRoutingInput<T extends Omit<SimpleRouteJson, 'traces'> & {traces?: {connection_name?:string;source_trace_id?:string}[]}>(input:T):T {
+export function compactRoutingInput<T extends Omit<SimpleRouteJson, 'traces'> & {traces?: {connection_name?:string;source_trace_id?:string;connectsTo?:string[]}[]}>(input:T):T {
  const used=new Set<string>();
  for(const c of input.connections){
   used.add(c.name);if(c.source_trace_id)used.add(c.source_trace_id);
   for(const p of c.pointsToConnect){if(p.pointId)used.add(p.pointId);if(p.pcb_port_id)used.add(p.pcb_port_id);}
  }
- for(const t of input.traces??[]){if(t.connection_name)used.add(t.connection_name);if(t.source_trace_id)used.add(t.source_trace_id);}
+ for(const t of input.traces??[]){if(t.connection_name)used.add(t.connection_name);if(t.source_trace_id)used.add(t.source_trace_id);for(const id of t.connectsTo??[])used.add(id);}
  return {...input,obstacles:input.obstacles.map(o=>{
   const metadata=(o as any).circuitJsonMetadata??{};
   const own=new Set([metadata.pcb_port_id,metadata.pcb_smtpad_id,metadata.pcb_plated_hole_id,metadata.pcb_via_id]);
